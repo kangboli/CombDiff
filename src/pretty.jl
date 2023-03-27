@@ -12,11 +12,15 @@ verbose(v::VecType) = "$(join(verbose.(content(v)), "×"))"
 
 verbose(::UndeterminedPCTType) = "?"
 
-verbose(::I) = "I"
+verbose(::T) where T <: ElementType = string(T)
 
-verbose(::R) = "R"
+verbose(d::Domain) = "$(meta(d)[:name])"
 
-verbose(::C) = "C"
+# pretty(d::Domain) = "$(meta(d)[:name])"
+#= function verbose(d::Domain)
+    "$(pretty(d))::$(verbose(d.base))($(pretty(d.lower)), $(pretty(d.upper)))"
+end =#
+
 
 pretty(m::Map) = "($(pretty(ff(m)))) -> \n$(indent(pretty(fc(m))))"
 
@@ -145,4 +149,5 @@ function Base.show(io::IO, ::MIME"text/plain", m::APN)
     print(io, pretty(m))
 end
 
+pretty(n::Negate) = "-$(pretty(fc(n)))"
 

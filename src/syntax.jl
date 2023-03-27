@@ -25,13 +25,17 @@ end
 
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
-    n.head == :macrocall && return parse_node(MapType, n)
+    if n.head == :macrocall
+        n.args[1] == Symbol("@space") && return parse_node(MapType, n)
+        n.args[1] == Symbol("@range") && return parse_node(Domain, n)
+    end
     n.head == Symbol("->") && return parse_node(Map, n)
-    if n.head == :call 
+    if n.head == :call
         func = n.args[1]
         (func == :ctr || func == :sum) && return parse_node(Sum, n)
         func == :delta && return parse_node(Delta, n)
         func == :+ && return parse_node(Add, n)
+        func == :- && return parse_node(Negate, n)
         func == :* && return parse_node(Mul, n)
         func == :pullback && return parse_node(Pullback, n)
         return parse_node(AbstractCall, n)
@@ -65,11 +69,29 @@ function parse_node(::Type{MapType}, s::Expr)
             $(pairs[:type]...),
             $(
                 if haskey(pairs, :symmetries)
-                    :(Dict(:symmetries => $(pairs[:symmetries])))
+                    :(Dict(
+                        :symmetries => $(pairs[:symmetries]),
+                        :name=>$(QuoteNode(pairs[:name]))
+                        ))
                 else
                     :(Dict())
                 end
             ),
+        )
+    )
+end
+
+function parse_node(::Type{Domain}, n::Expr)
+    block = n.args[2]
+
+    pairs = Dict(a.args[1] => a.args[2] for a in block.args)
+
+    return :(
+        $(pairs[:name]) = Domain(
+            $(pairs[:base])(),
+            $(parse_node(pairs[:lower])),
+            $(parse_node(pairs[:upper])),
+            Dict(:name=>$(QuoteNode(pairs[:name])))
         )
     )
 end
@@ -82,7 +104,11 @@ function parse_node(::Type{Map}, f::Expr)
     params = f.args[1].head == :tuple ? f.args[1].args : Vector{Expr}([f.args[1]])
     body = f.args[2]
 
-    return :(make_node!(Map, make_node!(PCTVector, $(map(p -> parse_node(Param, p), params)...)), $(parse_node(body))))
+    return :(make_node!(
+        Map,
+        make_node!(PCTVector, $(map(p -> parse_node(Param, p), params)...)),
+        $(parse_node(body)),
+    ))
 
 end
 
@@ -94,11 +120,11 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 
     if p.head == Symbol("::")
         name, type = p.args
-        type in [:I, :R, :C] && (type = :($(type)()))
-        isa(name, Symbol) && return :(make_node!(Var, $(QuoteNode(name)), type=$(type)))
+        type = type in [:I, :R, :C] ? :($(type)()) : :($(type))
+        isa(name, Symbol) && return :(make_node!(Var, $(QuoteNode(name)), type = $(type)))
         return :(make_node!(
             PrimitiveCall,
-            make_node!(Var, $(QuoteNode(name.args[1])), type=$(type)),
+            make_node!(Var, $(QuoteNode(name.args[1])), type = $(type)),
             make_node!(PCTVector, $(parse_node(name.args[2]))),
         ))
     end
@@ -116,7 +142,7 @@ parse_node(p::Symbol) = :(make_node!(Var, $(QuoteNode(p))))
 #= function parse_node(::Type{Var}, p::Symbol)
     make_node(Var, p)
 end =#
-parse_node(i::Number) = :(Constant($(i), $(pct_type(Constant, i))()))
+parse_node(i::Number) = :(make_node!(Constant, $(i)))
 
 function parse_node(::Type{AbstractCall}, c::Expr)
     @assert c.head == :call
@@ -142,6 +168,11 @@ function parse_node(::Type{Add}, a::Expr)
     return :(make_node!(Add, make_node!(PCTVector, $(parse_node.(a.args[2:end])...))))
 end
 
+function parse_node(::Type{Negate}, n::Expr)
+    @assert n.args[1] == :-
+    return :(make_node!(Negate, $(parse_node(n.args[2]))))
+end
+
 function parse_node(::Type{Mul}, m::Expr)
     @assert m.args[1] == :*
     return :(make_node!(Mul, make_node!(PCTVector, $(parse_node.(m.args[2:end])...))))
@@ -150,10 +181,13 @@ end
 
 function parse_node(::Type{Sum}, s::Expr)
     @assert s.args[1] == :sum || s.args[1] == :ctr
-    #= default_type = s.args[1] == :sum ? I() : R() =#
     params = isa(s.args[2], Symbol) ? [s.args[2]] : s.args[2].args
     param_nodes = (n -> parse_node(Param, n)).(params)
-    return :(make_node!(Sum, make_node!(PCTVector, $(param_nodes...)), $(parse_node(s.args[3]))))
+    return :(make_node!(
+        Sum,
+        make_node!(PCTVector, $(param_nodes...)),
+        $(parse_node(s.args[3])),
+    ))
 end
 
 function parse_node(::Type{Let}, l::Expr)
@@ -167,7 +201,11 @@ function parse_node(::Type{Let}, l::Expr)
     end
 
     content = parse_node(l.args[2])
-    return :(make_node!(Let, make_node!(PCTVector, $(parse_subst.(substitutions)...)), $(content)))
+    return :(make_node!(
+        Let,
+        make_node!(PCTVector, $(parse_subst.(substitutions)...)),
+        $(content),
+    ))
 
 end
 

@@ -1,10 +1,5 @@
-export Var, Map, AbstractCall, PrimitiveCall, Sum, Call, Let, Delta, make_node!, Conjugate, Mul, Pullback, Constant, Add, terms, set_content!, set_terms!, PCTVector, fc, ff
+export Var, Map, AbstractCall, PrimitiveCall, Sum, Call, Let, Delta, make_node!, Conjugate, Mul, Pullback, Constant, Add, terms, set_content!, set_terms!, PCTVector, fc, ff, Negate
 
-"""
-The most general and abstract node that represents anything in the theory.
-"""
-abstract type AbstractPCTNode end
-const APN = AbstractPCTNode
 
 """
 The root of the AST. Serves as the default parent node.

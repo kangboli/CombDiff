@@ -103,3 +103,5 @@ function partial_inference(::Type{T}, terms...) where T <: AbstractDelta
     get_type(last(terms))
 end
 
+partial_inference(::Type{Negate}, term) = get_type(term)
+

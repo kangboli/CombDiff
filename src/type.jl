@@ -1,6 +1,12 @@
-export AbstractPCTType, MapType, VecType, I, R, C
+export AbstractPCTType, MapType, VecType, I, R, C, Domain
 
 abstract type AbstractPCTType end
+
+"""
+The most general and abstract node that represents anything in the theory.
+"""
+abstract type AbstractPCTNode end
+const APN = AbstractPCTNode
 
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
@@ -11,11 +17,19 @@ struct I <: ElementType end
 struct R <: ElementType end
 struct C <: ElementType end
 
-struct Domain{T} <: ElementType
-    upper::Number
-    lower::Number
+struct Domain <: ElementType
+    base::ElementType
+    lower::APN
+    upper::APN
+    meta::Dict
 end
 
+Domain(base::ElementType, lower::APN, upper::APN) = 
+    Domain(base, lower, upper, Dict()) 
+
+name(d::Domain) = meta(d)[:name]
+
+meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
 
 struct VecType <: AbstractPCTType
@@ -51,10 +65,13 @@ content(m::MapType) = m.content
 
 MapType(from, content) = MapType(from, content, Dict())
 
+type_based(a::Domain, b::ElementType) = a.base == b
+type_based(a::ElementType, b::ElementType) = a == b
+
 function escalate(element_types::Vararg) 
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()
-    C() in element_types && return C()
-    R() in element_types && return R()
-    I() in element_types && return I()
+    any(t->type_based(t, C()), element_types) && return C()
+    any(t->type_based(t, R()), element_types) && return R()
+    any(t->type_based(t, I()), element_types) && return I()
 end
 
