@@ -7,7 +7,8 @@ evaluate_pullback(n::TerminalNode) = n
 function evaluate_pullback(p::Pullback)
     mapp = fc(p)
     is_univariate(mapp) || return evaluate_pullback(p, MapType)
-    pullback(fc(ff(mapp)), fc(mapp), make_node!(Var, :𝒦; type = get_type(fc(mapp))))
+    pullback(fc(ff(mapp)), fc(mapp))
+    # , make_node!(Var, :𝒦; type = get_type(fc(mapp)))
 end
 
 function evaluate_pullback(p::Pullback, ::Type{MapType})
@@ -20,7 +21,7 @@ function evaluate_pullback(p::Pullback, ::Type{MapType})
     z_index_symbols = new_symbol(p, z, k; num = length(z_types))
     z_vars = map((s, t) -> make_node!(Var, s; type = t), z_index_symbols, content(z_types))
 
-    if isa(get_type(fc(mapp)), MapType) 
+    if isa(get_type(fc(mapp)), MapType)
         return multi_map(p, z, k, z_vars)
     else
         return single_map(z, k, z_vars, mapp)
@@ -28,15 +29,17 @@ function evaluate_pullback(p::Pullback, ::Type{MapType})
 end
 
 function single_map(z, k, z_vars, mapp)
-        z_vars = make_node!(PCTVector, z_vars...)
+    z_vars = make_node!(PCTVector, z_vars...)
 
-        return make_node!(
+    return make_node!(
+        Map,
+        make_node!(PCTVector, z, k),
+        make_node!(
             Map,
-            make_node!(PCTVector, z, k),
-            make_node!(Map, z_vars,
+            z_vars,
             make_node!(
                 Call,
-                pullback(make_node!(PrimitiveCall, z, z_vars), fc(mapp), k),
+                pullback(make_node!(PrimitiveCall, z, z_vars), fc(mapp)),
                 #= make_node!(
                     Pullback,
                     make_node!(
@@ -47,52 +50,49 @@ function single_map(z, k, z_vars, mapp)
                 ), =#
                 make_node!(PCTVector, make_node!(PrimitiveCall, z, z_vars), k),
             ),
-         ),
-        )
+        ),
+    )
 end
 
 
 
 function multi_map(p, z, k, z_vars)
 
-        result_map_type = get_type(fc(mapp))
-        sum_types = content(from(result_map_type))
-        sum_index_symbols = new_symbol(p, z, k, z_vars...; num = length(sum_types))
+    result_map_type = get_type(fc(mapp))
+    sum_types = content(from(result_map_type))
+    sum_index_symbols = new_symbol(p, z, k, z_vars...; num = length(sum_types))
 
-        sum_vars = map(
-            (s, t) -> make_node!(Var, s; type = t),
-            sum_index_symbols,
-            content(sum_types),
-        )
+    sum_vars =
+        map((s, t) -> make_node!(Var, s; type = t), sum_index_symbols, content(sum_types))
 
-        z_vars = make_node!(PCTVector, z_vars...)
-        sum_vars = make_node!(PCTVector, sum_vars...)
+    z_vars = make_node!(PCTVector, z_vars...)
+    sum_vars = make_node!(PCTVector, sum_vars...)
 
-        return make_node!(
-            Map,
-            make_node!(PCTVector, z, k),
-            make_node!(Map, z_vars),
+    return make_node!(
+        Map,
+        make_node!(PCTVector, z, k),
+        make_node!(Map, z_vars),
+        make_node!(
+            Sum,
+            sum_vars,
             make_node!(
-                Sum,
-                sum_vars,
+                Call,
                 make_node!(
-                    Call,
+                    Pullback,
                     make_node!(
-                        Pullback,
-                        make_node!(
-                            Map,
-                            make_node!(PCTVector, make_node!(PrimitiveCall, z, z_vars)),
-                            make_node!(Call, fc(mapp), sum_vars),
-                        ),
-                    ),
-                    make_node!(
-                        PCTVector,
-                        make_node!(PrimitiveCall, z, z_vars),
-                        make_node!(PrimitiveCall, k, sum_vars),
+                        Map,
+                        make_node!(PCTVector, make_node!(PrimitiveCall, z, z_vars)),
+                        make_node!(Call, fc(mapp), sum_vars),
                     ),
                 ),
+                make_node!(
+                    PCTVector,
+                    make_node!(PrimitiveCall, z, z_vars),
+                    make_node!(PrimitiveCall, k, sum_vars),
+                ),
             ),
-        )
+        ),
+    )
 
 end
 
@@ -101,7 +101,8 @@ struct ElementWise end
 
 # Univariate pullbacks
 
-function pullback(iv::Var, ov::Var, k::Var)
+function pullback(iv::Var, ov::Var)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
     if name(iv) == name(ov)
         get_type(iv) == get_type(ov) ||
             error("type mismatch: $(get_type(iv)) vs $(get_type(ov))")
@@ -112,15 +113,17 @@ end
 
 
 
-function pullback(iv::Var, ov::Conjugate, k::Var)
-    new_map = pullback(iv, fc(ov), k)
+function pullback(iv::Var, ov::Conjugate)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
+    new_map = pullback(iv, fc(ov))
     set_content!(new_map, content(new_map)...)
 end
 
 
-function pullback(iv::APN, ov::Add, k::Var)
+function pullback(iv::APN, ov::Add)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
     terms = map(
-        c -> make_node!(Call, pullback(iv, c, k), make_node!(PCTVector, iv, k)),
+        c -> make_node!(Call, pullback(iv, c), make_node!(PCTVector, iv, k)),
         content(fc(ov)),
     )
     make_node!(
@@ -131,7 +134,8 @@ function pullback(iv::APN, ov::Add, k::Var)
 end
 
 
-function pullback(iv::APN, ov::Mul, k::Var)
+function pullback(iv::APN, ov::Mul)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
     terms::PCTVector = fc(ov)
     t1 = fc(terms)
 
@@ -139,8 +143,8 @@ function pullback(iv::APN, ov::Mul, k::Var)
 
     arg_1 = make_node!(Mul, make_node!(PCTVector, make_node!(Conjugate, rest), k))
     arg_2 = make_node!(Mul, make_node!(PCTVector, make_node!(Conjugate, t1), k))
-    term_1 = make_node!(Call, pullback(iv, t1, k), make_node!(PCTVector, iv, arg_1))
-    term_2 = make_node!(Call, pullback(iv, rest, k), make_node!(PCTVector, iv, arg_2))
+    term_1 = make_node!(Call, pullback(iv, t1), make_node!(PCTVector, iv, arg_1))
+    term_2 = make_node!(Call, pullback(iv, rest), make_node!(PCTVector, iv, arg_2))
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
@@ -148,25 +152,47 @@ function pullback(iv::APN, ov::Mul, k::Var)
     )
 end
 
-function pullback(iv::APN, ov::Call, k::Var)
+"""
+
+pullback(iv->(ff->fc)(y(a...))) = (iv, k) -> ∑(a, pullback(iv->a)(iv, pullback(ff->fc)(a..., k))
+"""
+function pullback(iv::APN, ov::Call)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
     g = mapp(ov)
     inner_pullback =
-        make_node!(Call, pullback(ff(g), fc(g), k), make_node!(PCTVector, args(ov)..., k))
+        make_node!(Call, pullback(ff(g), fc(g)), make_node!(PCTVector, args(ov)..., k))
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
-        map(
-            a -> make_node!(
-                Call,
-                pullback(iv, a, k),
-                make_node!(PCTVector, iv, inner_pullback),
+        make_node!(
+            Add,
+            map(
+                a -> make_node!(
+                    Call,
+                    pullback(iv, a),
+                    make_node!(PCTVector, iv, inner_pullback),
+                ),
+                args(ov),
             ),
-            args(ov),
         ),
     )
 end
 
-function pullback(iv::PrimitiveCall, ov::PrimitiveCall, k::APN)
+"""
+    pullback(iv, ov)
+
+The pullback between two primitive calls.
+
+pullback(x(i)->x(j)) = (iv, k) -> δ(i, j, k)
+
+pullback(x(i)->y(j)) = (iv, k) -> 0
+
+Not working/tested.
+pullback(x(i)->y(a(x))) = (iv, k) -> ∑(a, P(x->a(x))(iv, P(y)(x(j), k))
+"""
+function pullback(iv::PrimitiveCall, ov::PrimitiveCall)
+    k = make_node!(Var, :𝒦; type = get_type(ov))
+
     if name(mapp(iv)) == name(mapp(ov))
         for (a_1, a_2) in zip(get_type.(content(args(iv))), get_type.(content(args(ov))))
             a_1 == a_2 || error("type mismatch: $(a_1) vs $(a_2)")
@@ -193,7 +219,7 @@ function pullback(iv::PrimitiveCall, ov::PrimitiveCall, k::APN)
         map(
             a -> make_node!(
                 Call,
-                pullback(iv, a, k),
+                pullback(iv, a),
                 make_node!(PCTVector, iv, inner_pullback),
             ),
             args(ov),
@@ -202,12 +228,24 @@ function pullback(iv::PrimitiveCall, ov::PrimitiveCall, k::APN)
 end
 
 """
-pullback(iv->sum(ff, fc)) = 
-    (iv, k) -> sum(ff, pullback(iv->fc)(iv, k))
+    pullback(iv, ov)
+
+Univariate pullback of a contraction.
+
+pullback(iv->∑(ff, fc)) =
+    (iv, k) -> ∑(ff, pullback(iv->fc)(iv, k))
 """
-function pullback(iv::APN, ov::T, k::APN) where T <: Contraction
-    make_node!(Map, make_node!(PCTVector, iv, k),
-    make_node!(T, ff(ov), make_node!(Call, pullback(iv, fc(ov), k), make_node!(PCTVector, iv, k))))
+function pullback(iv::APN, ov::T) where {T<:Contraction}
+    k = make_node!(Var, :𝒦; type = get_type(ov))
+    make_node!(
+        Map,
+        make_node!(PCTVector, iv, k),
+        make_node!(
+            T,
+            ff(ov),
+            make_node!(Call, pullback(iv, fc(ov)), make_node!(PCTVector, iv, k)),
+        ),
+    )
 end
 
 

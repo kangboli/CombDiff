@@ -11,5 +11,6 @@ include("pullback.jl")
 include("inference.jl")
 include("pretty.jl")
 include("syntax.jl")
+include("equivalent_set.jl")
 
 end

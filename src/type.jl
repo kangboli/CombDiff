@@ -18,7 +18,6 @@ end
 
 meta(m::AbstractPCTType) = m.meta
 
-
 struct VecType <: AbstractPCTType
     content::Vector{AbstractPCTType}
 end
