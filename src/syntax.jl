@@ -4,13 +4,25 @@ macro pct(expr)
     #= space_nodes = filter(a->a.head == :macrocall, expr.args)
     spaces = map(parse_node, space_nodes) =#
     expr = purge_line_numbers(expr)
-    top_level_nodes = map(parse_node, expr.args)
+    if isa(expr, Symbol) || isa(expr, Number) || expr.head != :block
+        top_level_nodes = [parse_node(expr)]
+    else
+        top_level_nodes = map(parse_node, expr.args)
+    end
+
     return esc(:(
         begin
             $(top_level_nodes...)
         end
     ))
+
 end
+
+macro pct(f, expr)
+    f == :_ && return :(inference(@pct $(expr)))
+    return esc(:(inference(set_content!($(f), @pct $(expr)))))
+end
+
 
 purge_line_numbers(e::Any) = e
 function purge_line_numbers(expr::Expr)
@@ -25,14 +37,16 @@ end
 
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
+    n.head == Symbol(:quote) && return n.args[1]
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_node(MapType, n)
-        n.args[1] == Symbol("@range") && return parse_node(Domain, n)
+        n.args[1] == Symbol("@domain") && return parse_node(Domain, n)
     end
     n.head == Symbol("->") && return parse_node(Map, n)
     if n.head == :call
         func = n.args[1]
         (func == :ctr || func == :sum) && return parse_node(Sum, n)
+        func == :prod && return parse_node(Prod, n)
         func == :delta && return parse_node(Delta, n)
         func == :+ && return parse_node(Add, n)
         func == :- && return parse_node(Negate, n)
@@ -43,7 +57,6 @@ function parse_node(n::Expr)
     n.head == :block && return parse_node(n.args[1])
     n.head == :let && return parse_node(Let, n)
     n.head == Symbol("'") && return parse_node(Conjugate, n)
-    n.head == Symbol(:quote) && return n.args[1]
     return :()
     #= n.head == :tuple && return parse_tuple_node(n) =#
 end
@@ -87,13 +100,12 @@ function parse_node(::Type{Domain}, n::Expr)
     pairs = Dict(a.args[1] => a.args[2] for a in block.args)
 
     return :(
-        $(pairs[:name]) = Domain(
+        $(pairs[:name]) = inference(Domain(
             $(pairs[:base])(),
             $(parse_node(pairs[:lower])),
             $(parse_node(pairs[:upper])),
             Dict(:name=>$(QuoteNode(pairs[:name])))
-        )
-    )
+        )))
 end
 
 struct Param <: APN end
@@ -139,9 +151,7 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 end
 
 parse_node(p::Symbol) = :(make_node!(Var, $(QuoteNode(p))))
-#= function parse_node(::Type{Var}, p::Symbol)
-    make_node(Var, p)
-end =#
+
 parse_node(i::Number) = :(make_node!(Constant, $(i)))
 
 function parse_node(::Type{AbstractCall}, c::Expr)
@@ -165,17 +175,19 @@ end
 
 function parse_node(::Type{Add}, a::Expr)
     @assert a.args[1] == :+
-    return :(make_node!(Add, make_node!(PCTVector, $(parse_node.(a.args[2:end])...))))
+    return :(add($(parse_node.(a.args[2:end])...)))
 end
 
 function parse_node(::Type{Negate}, n::Expr)
     @assert n.args[1] == :-
-    return :(make_node!(Negate, $(parse_node(n.args[2]))))
+    length(n.args) == 2 && return :(mul(make_node!(Constant, -1), $(parse_node(n.args[2]))))
+
+    return :(add($(parse_node(n.args[2])), mul(make_node!(Constant, -1), $(parse_node(n.args[3])))))
 end
 
 function parse_node(::Type{Mul}, m::Expr)
     @assert m.args[1] == :*
-    return :(make_node!(Mul, make_node!(PCTVector, $(parse_node.(m.args[2:end])...))))
+    return :(mul($(parse_node.(m.args[2:end])...)))
 end
 
 
@@ -185,10 +197,23 @@ function parse_node(::Type{Sum}, s::Expr)
     param_nodes = (n -> parse_node(Param, n)).(params)
     return :(make_node!(
         Sum,
-        make_node!(PCTVector, $(param_nodes...)),
+        $(param_nodes...),
         $(parse_node(s.args[3])),
     ))
 end
+
+function parse_node(::Type{Prod}, s::Expr)
+    @assert s.args[1] == :prod
+    params = isa(s.args[2], Symbol) ? [s.args[2]] : s.args[2].args
+    param_nodes = (n -> parse_node(Param, n)).(params)
+    return :(make_node!(
+        Prod,
+        $(param_nodes...),
+        $(parse_node(s.args[3])),
+    ))
+end
+
+
 
 function parse_node(::Type{Let}, l::Expr)
     @assert l.head == Symbol("let")
@@ -221,10 +246,9 @@ function parse_node(::Type{Delta}, d::Expr)
     lower_params = isa(d.args[3], Symbol) ? [d.args[3]] : d.args[3].args
     upper_nodes = (n -> parse_node(Param, n)).(upper_params)
     lower_nodes = (n -> parse_node(Param, n)).(lower_params)
-    return :(make_node!(
-        Delta,
-        make_node!(PCTVector, $(upper_nodes...)),
-        make_node!(PCTVector, $(lower_nodes...)),
+    return :(delta(
+        $(upper_nodes...),
+        $(lower_nodes...),
         $(parse_node(d.args[4])),
     ))
 end

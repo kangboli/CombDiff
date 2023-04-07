@@ -16,7 +16,7 @@ function evaluate_pullback(p::Pullback, ::Type{MapType})
     length(ff(mapp)) > 1 && error("Multivariate tensor pullbacks are not supported.")
 
     z = fc(ff(mapp))
-    k = make_node!(Var, :𝒦; type = get_type(fc(mapp)))
+    k = make_node!(Var, :_K; type = get_type(fc(mapp)))
     z_types = from(get_type(z))
     z_index_symbols = new_symbol(p, z, k; num = length(z_types))
     z_vars = map((s, t) -> make_node!(Var, s; type = t), z_index_symbols, content(z_types))
@@ -40,14 +40,6 @@ function single_map(z, k, z_vars, mapp)
             make_node!(
                 Call,
                 pullback(make_node!(PrimitiveCall, z, z_vars), fc(mapp)),
-                #= make_node!(
-                    Pullback,
-                    make_node!(
-                        Map,
-                        make_node!(PCTVector, make_node!(PrimitiveCall, z, z_vars)),
-                        fc(mapp),
-                    ),
-                ), =#
                 make_node!(PCTVector, make_node!(PrimitiveCall, z, z_vars), k),
             ),
         ),
@@ -102,9 +94,9 @@ struct ElementWise end
 # Univariate pullbacks
 
 function pullback(iv::Var, ov::Var)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
     if name(iv) == name(ov)
-        get_type(iv) == get_type(ov) ||
+        base(get_type(iv)) == base(get_type(ov)) ||
             error("type mismatch: $(get_type(iv)) vs $(get_type(ov))")
         return make_node!(Map, make_node!(PCTVector, iv, k), k)
     end
@@ -114,14 +106,14 @@ end
 
 
 function pullback(iv::Var, ov::Conjugate)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    #= k = make_node!(Var, :𝒦; type = get_type(ov)) =#
     new_map = pullback(iv, fc(ov))
     set_content!(new_map, content(new_map)...)
 end
 
 
 function pullback(iv::APN, ov::Add)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
     terms = map(
         c -> make_node!(Call, pullback(iv, c), make_node!(PCTVector, iv, k)),
         content(fc(ov)),
@@ -129,26 +121,26 @@ function pullback(iv::APN, ov::Add)
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
-        make_node!(Add, make_node!(PCTVector, terms...)),
+        add(terms...),
     )
 end
 
 
 function pullback(iv::APN, ov::Mul)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
     terms::PCTVector = fc(ov)
     t1 = fc(terms)
 
-    rest = length(terms) > 2 ? make_node!(Mul, terms[2:end]) : last(terms)
+    rest = length(terms) > 2 ? mul(content(terms)[2:end]...) : last(terms)
 
-    arg_1 = make_node!(Mul, make_node!(PCTVector, make_node!(Conjugate, rest), k))
-    arg_2 = make_node!(Mul, make_node!(PCTVector, make_node!(Conjugate, t1), k))
+    arg_1 = mul(make_node!(Conjugate, rest), k)
+    arg_2 = mul(make_node!(Conjugate, t1), k)
     term_1 = make_node!(Call, pullback(iv, t1), make_node!(PCTVector, iv, arg_1))
     term_2 = make_node!(Call, pullback(iv, rest), make_node!(PCTVector, iv, arg_2))
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
-        make_node!(Add, make_node!(PCTVector, term_1, term_2)),
+        add(term_1, term_2),
     )
 end
 
@@ -157,7 +149,7 @@ end
 pullback(iv->(ff->fc)(y(a...))) = (iv, k) -> ∑(a, pullback(iv->a)(iv, pullback(ff->fc)(a..., k))
 """
 function pullback(iv::APN, ov::Call)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
     g = mapp(ov)
     inner_pullback =
         make_node!(Call, pullback(ff(g), fc(g)), make_node!(PCTVector, args(ov)..., k))
@@ -166,14 +158,7 @@ function pullback(iv::APN, ov::Call)
         make_node!(PCTVector, iv, k),
         make_node!(
             Add,
-            map(
-                a -> make_node!(
-                    Call,
-                    pullback(iv, a),
-                    make_node!(PCTVector, iv, inner_pullback),
-                ),
-                args(ov),
-            ),
+            map(a -> call(pullback(iv, a), iv, inner_pullback), args(ov)),
         ),
     )
 end
@@ -191,16 +176,16 @@ Not working/tested.
 pullback(x(i)->y(a(x))) = (iv, k) -> ∑(a, P(x->a(x))(iv, P(y)(x(j), k))
 """
 function pullback(iv::PrimitiveCall, ov::PrimitiveCall)
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
 
     if name(mapp(iv)) == name(mapp(ov))
         for (a_1, a_2) in zip(get_type.(content(args(iv))), get_type.(content(args(ov))))
-            a_1 == a_2 || error("type mismatch: $(a_1) vs $(a_2)")
+            base(a_1) == base(a_2) || error("type mismatch: $(a_1) vs $(a_2)")
         end
         return make_node!(
             Map,
             make_node!(PCTVector, iv, k),
-            make_node!(Delta, args(iv), args(ov), k),
+            delta(content(args(iv))..., content(args(ov))..., k),
         )
     end
 
@@ -216,12 +201,7 @@ function pullback(iv::PrimitiveCall, ov::PrimitiveCall)
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
-        map(
-            a -> make_node!(
-                Call,
-                pullback(iv, a),
-                make_node!(PCTVector, iv, inner_pullback),
-            ),
+        map(a -> call(pullback(iv, a), iv, inner_pullback),
             args(ov),
         ),
     )
@@ -236,15 +216,11 @@ pullback(iv->∑(ff, fc)) =
     (iv, k) -> ∑(ff, pullback(iv->fc)(iv, k))
 """
 function pullback(iv::APN, ov::T) where {T<:Contraction}
-    k = make_node!(Var, :𝒦; type = get_type(ov))
+    k = make_node!(Var, :_K; type = get_type(ov))
     make_node!(
         Map,
         make_node!(PCTVector, iv, k),
-        make_node!(
-            T,
-            ff(ov),
-            make_node!(Call, pullback(iv, fc(ov)), make_node!(PCTVector, iv, k)),
-        ),
+        make_node!(T, ff(ov), call(pullback(iv, fc(ov)), iv, k)),
     )
 end
 

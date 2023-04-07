@@ -1,6 +1,8 @@
 module PCT
 
 using Accessors
+using Graphs
+using GraphPlot
 
 include("type.jl")
 include("element.jl")
@@ -12,5 +14,6 @@ include("inference.jl")
 include("pretty.jl")
 include("syntax.jl")
 include("equivalent_set.jl")
+include("graph.jl")
 
 end

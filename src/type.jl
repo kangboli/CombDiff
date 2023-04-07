@@ -1,4 +1,4 @@
-export AbstractPCTType, MapType, VecType, I, R, C, Domain
+export AbstractPCTType, MapType, VecType, I, R, C, Domain, symmetries, VecType, lower, upper
 
 abstract type AbstractPCTType end
 
@@ -17,6 +17,8 @@ struct I <: ElementType end
 struct R <: ElementType end
 struct C <: ElementType end
 
+base(::T) where T <: ElementType = T()
+
 struct Domain <: ElementType
     base::ElementType
     lower::APN
@@ -27,7 +29,22 @@ end
 Domain(base::ElementType, lower::APN, upper::APN) = 
     Domain(base, lower, upper, Dict()) 
 
+function symmetric(d::Domain)
+    #TODO: Use equivalence instead of equality.
+    if isa(d.lower, Negate)
+        return fc(d.lower) == d.upper
+    else
+        return d.lower == fc(d.upper)
+    end
+end
+
+symmetric(::ElementType) = false
+
+
 name(d::Domain) = meta(d)[:name]
+base(d::Domain) = d.base
+lower(d::Domain) = d.lower
+upper(d::Domain) = d.upper
 
 meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
@@ -67,6 +84,12 @@ MapType(from, content) = MapType(from, content, Dict())
 
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b
+
+function symmetries(c::MapType)
+    haskey(c.meta, :symmetries) || return []
+    return c.meta[:symmetries]
+end
+
 
 function escalate(element_types::Vararg) 
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()

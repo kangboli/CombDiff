@@ -1,4 +1,4 @@
-export @cascade, combine_add, minimize_node!
+export @cascade, combine_add,  delta_reduce, delta_reducible
 
 macro cascade(f)
     esc(:(begin
@@ -18,8 +18,8 @@ function combine_add(s::Add)
     map(process_term!, content(s))
     filter!(((k, v),)->abs(v) > 1e-7, d)
 
-    mul_term(k, v) = v == 1 ? k : make_node!(Mul, make_node!(PCTVector, make_node!(Constant, v), k))
-    make_node!(Add, make_node!(PCTVector, [combine_add(mul_term(k, v)) for (k, v) in d]...))
+    mul_term(k, v) = v == 1 ? k : mul(make_node!(Constant, v), k)
+    add([combine_add(mul_term(k, v)) for (k, v) in d]...)
 end
 
 @cascade combine_add
@@ -29,18 +29,18 @@ minimize_node!(n::Var) = n
 delta_reducible(i::Var, n::APN) = any(t->delta_reducible(i, t), content(n))
 
 function delta_reducible(i::Var, n::Contraction) 
-    i in content(ff(n)) && return false
-    return invoke(delta_reducible, (Var, APN), i, n)
+    i  == ff(n) && return false
+    return invoke(delta_reducible, Tuple{Var, APN}, i, n)
 end
 
 function delta_reducible(i::Var, d::Delta)
-    (i in content(upper(d)) || i in content(lower(d))) && return true
-    return invoke(delta_reducible, (Var, APN), i, d)
+    any(t->contains_name(t, name(i)), [lower(d), upper(d)]) && return true
+    return invoke(delta_reducible, Tuple{Var, APN}, i, d)
 end
 
 function delta_reducible(i::Var, m::Map)
-    i in content(ff(m)) && return false
-    return invoke(delta_reducible, (Var, APN), i, m)
+    (i  in content(ff(m))) && return false
+    return invoke(delta_reducible, Tuple{Var, APN}, i, m)
 end
 
 delta_reducible(::Var, ::AbstractCall) = false
@@ -50,8 +50,6 @@ delta_reducible(::Var, ::TerminalNode) = false
 delta_reducible(::Var, ::Pullback) = error("Pullbacks should be evaluated before minimization.")
 
 delta_reducible(::Var, ::PrimitivePullback) = false
-
-
 
 delta_reduce(i::Var, n::Union{PrimitiveCall, TerminalNode}, ::Type{T}) where T <: Contraction =
     make_node!(T,  make_node!(PCTVector, i), n)
@@ -74,40 +72,31 @@ end
 
 
 function delta_reduce(i::Var, d::Delta, ::Type{T}) where T <: Contraction
-    (i in content(upper(d)) || i in content(lower(d))) || 
+    (i == upper(d) || i == lower(d)) || 
     return make_node!(Delta, upper(d), lower(d), delta_reduce(i, last(content(d)), T))
 
-    index = findfirst(x->x==i, content(upper(d))) 
-    if index !== nothing
-        j = content(lower(d))[index]
-    else
-        index = findfirst(x->x==i, content(lower(d))) 
-        j = content(upper(d))[index]
-    end
+    j = i == upper(d) ? lower(d) : upper(d)
 
-    new_upper = deleteat!(content(upper(d)), index)
-    new_lower = deleteat!(content(lower(d)), index)
+    return  subst(last(content(d)), i, j)
+end
 
-    new_content = subst(last(content(d)), i, j)
-    length(new_upper) == 0 && return new_content
-    return make_node!(Delta, make_node!(PCTVector, new_upper), make_node!(PCTVector, new_lower), new_content)
+function delta_reduce(i::Var, n::APN, ::Type{T}) where T <: Contraction
+    set_content!(n, delta_reduce(i, fc(n), T))
 end
 
 
-function minimize_node!(c::T) where T <: Contraction
-    reducible = filter(t->delta_reducible(t, fc(c)), content(ff(c)))
-    irreducible = filter(t->!delta_reducible(t, fc(c)), content(ff(c)))
-
-    n = fc(c)
-    for i in reducible
-        n = delta_reduce(i, n, T)
-    end
-
-    length(irreducible) == 0 && return n
-    return make_node!(T, make_node!(PCTVector, delta_reducible), n)
+function delta_reduce(c::T) where T <: Contraction
+    reduced_content = delta_reduce(fc(c))
+    delta_reducible(ff(c), reduced_content) || return set_content!(c, reduced_content)
+    return delta_reduce(ff(c), reduced_content, T)
 end
 
-function minimize_node!(n::APN)
-    set_content!(n, minimize_node!(fc(n)))
+
+function delta_reduce(n::APN)
+    #= println.(pretty.(map(delta_reduce, content(n)))) =#
+    set_content!(n, map(delta_reduce, content(n))...)
 end
+
+delta_reduce(n::TerminalNode) = n
+    
 

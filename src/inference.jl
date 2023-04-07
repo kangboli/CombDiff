@@ -6,7 +6,11 @@ end
 
 content(context::TypeContext) = context.content
 
-TypeContext() = TypeContext(Dict{Symbol, AbstractPCTType}())
+function TypeContext() 
+    context = TypeContext(Dict{Symbol, AbstractPCTType}())
+    pct_push!(context, :_, UndeterminedPCTType())
+    return context
+end
 
 #= inference(f::APN) = inference(f::APN, TypeContext()) =#
 
@@ -28,19 +32,19 @@ function pct_pop!(c::TypeContext, key::Symbol, value=nothing)
     return popped
 end
 
-function op_context!(vec::PCTVector, op!::Function, context::TypeContext)
 
-    add_context!(v::Var) = op!(context, name(v), get_type(v)) 
-    function add_context!(v::PrimitiveCall) 
-        map_type = get_type(mapp(v))
-        op!(context, name(mapp(v)), map_type)
-        for (a, t) in zip(content(args(v)), content(from(map_type)))
-            a.type = t
-            op!(context, name(a), t)
-        end
+op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v)) 
+function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext) 
+    map_type = get_type(mapp(v))
+    op!(context, name(mapp(v)), map_type)
+    for (a, t) in zip(content(args(v)), content(from(map_type)))
+        a.type = t
+        op!(context, name(a), t)
     end
+end
 
-    map(add_context!, content(vec))
+function op_context!(vec::PCTVector, op!::Function, context::TypeContext)
+    map(t->op_context!(t, op!, context), content(vec))
 end
 
 function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
@@ -85,6 +89,10 @@ function partial_inference(::Type{T}, terms...)  where T <: Contraction
     return get_type(last(terms))
 end
 
+function partial_inference(::Type{Prod}, terms...)  
+    return get_type(last(terms))
+end
+
 partial_inference(::Type{Conjugate}, terms...) = get_type(last(terms))
 
 function partial_inference(::Type{Pullback}, mapp)
@@ -103,5 +111,20 @@ function partial_inference(::Type{T}, terms...) where T <: AbstractDelta
     get_type(last(terms))
 end
 
-partial_inference(::Type{Negate}, term) = get_type(term)
+#= partial_inference(::Type{Negate}, term) = get_type(term) =#
+
+partial_inference(::Type{Monomial}, base::APN, power::APN) = escalate(get_type(base), get_type(power))
+
+function inference(d::Domain)
+    context = TypeContext()
+    vars = vcat(variables(lower(d)), variables(upper(d)))
+    for v in vars
+        pct_push!(context, name(v), base(d))
+    end
+
+    return Domain(base(d), 
+           inference(lower(d), context),
+           inference(upper(d), context), 
+           meta(d))
+end
 

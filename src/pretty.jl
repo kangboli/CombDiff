@@ -16,12 +16,6 @@ verbose(::T) where T <: ElementType = string(T)
 
 verbose(d::Domain) = "$(meta(d)[:name])"
 
-# pretty(d::Domain) = "$(meta(d)[:name])"
-#= function verbose(d::Domain)
-    "$(pretty(d))::$(verbose(d.base))($(pretty(d.lower)), $(pretty(d.upper)))"
-end =#
-
-
 pretty(m::Map) = "($(pretty(ff(m)))) -> \n$(indent(pretty(fc(m))))"
 
 function latex(m::Map) 
@@ -39,7 +33,7 @@ end
 
 pretty(v::Var) = "$(name(v))"
 
-latex(v::Var) = "$(name(v))"
+latex(v::Var) = startswith(string(name(v)), "_") ? "\\$(name(v))" : "$(name(v))"
 
 verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
 
@@ -63,7 +57,14 @@ verbose(p::Pullback) = "Pullback($(verbose(fc(p))))::$(verbose(get_type(p)))"
 
 pretty(s::Sum) = "∑(($(pretty(ff(s)))), $(pretty(fc(s))))"
 
-latex(s::Sum) = "\\sum_{$(latex(ff(s)))}\\left($(latex(fc(s)))\\right)"
+function latex(s::Sum) 
+    indices = []
+    while isa(s, Sum) 
+        push!(indices, ff(s))
+        s = fc(s)
+    end
+    "\\sum_{$(join(latex.(indices),","))}\\left[$(latex(s))\\right]"
+end
 
 function verbose(s::Sum)
     "∑(($(verbose(ff(s)))),\n" *
@@ -72,9 +73,9 @@ function verbose(s::Sum)
 end
 
 
-pretty(s::Prod) = invoke(pretty, Sum, s)
+pretty(s::Prod) = "∏(($(pretty(ff(s)))), $(pretty(fc(s))))"
 
-latex(s::Prod) = invoke(latex, Sum, s)
+latex(s::Prod) = "\\prod_{$(latex(ff(s)))} $(latex(fc(s))))"
 
 verbose(s::Prod) = invoke(verbose, Sum, s)
 
@@ -95,9 +96,9 @@ function verbose(d::T) where T <: AbstractDelta
     indent("$(verbose(last(content(d)))))::$(verbose(get_type(d)))")
 end
 
-pretty(m::Mul) = "$(join(pretty.(content(fc(m))), "*"))"
+pretty(m::Mul) = "($(join(pretty.(content(fc(m))), "⋅")))"
 
-latex(m::Mul) = join(latex.(content(fc(m))), "\\cdot ")
+latex(m::Mul) = "($(join(latex.(content(fc(m))), "\\cdot ")))"
 
 function verbose(m::Mul)
     "(*\n"*
@@ -150,4 +151,8 @@ function Base.show(io::IO, ::MIME"text/plain", m::APN)
 end
 
 pretty(n::Negate) = "-$(pretty(fc(n)))"
+
+pretty(m::Monomial) = "$(pretty(base(m)))^$(pretty(power(m)))"
+verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
+latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
 
