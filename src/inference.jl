@@ -1,4 +1,4 @@
-export TypeContext, inference, partial_inference
+export TypeContext, inference, partial_inference, pct_push!, pct_pop!
 
 struct TypeContext
     content::Dict{Symbol, Vector{<:AbstractPCTType}}
@@ -17,16 +17,22 @@ end
 Base.haskey(c::TypeContext, k) = haskey(content(c), k)
 Base.getindex(c::TypeContext, k) = first(content(c)[k])
 
-function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType)
+function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=false)
     if haskey(content(c), key) 
-        return pushfirst!(content(c)[key], type)
+        if replace
+            content(c)[key][1] = type
+        else
+            pushfirst!(content(c)[key], type)
+        end
     else
         content(c)[key] = Vector{AbstractPCTType}()
         push!(content(c)[key], type)
     end
+    return type
 end
 
 function pct_pop!(c::TypeContext, key::Symbol, value=nothing)
+    haskey(content(c), key) || error("variable $(key) is undefined.")
     popped = popfirst!(content(c)[key])
     value !== nothing && @assert value == popped
     return popped
@@ -34,9 +40,11 @@ end
 
 
 op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v)) 
+
 function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext) 
-    map_type = get_type(mapp(v))
-    op!(context, name(mapp(v)), map_type)
+    #= map_type = get_type(mapp(v)) =#
+    map_type = context[name(mapp(v))]
+    #= op!(context, name(mapp(v)), map_type) =#
     for (a, t) in zip(content(args(v)), content(from(map_type)))
         a.type = t
         op!(context, name(a), t)
@@ -47,14 +55,16 @@ function op_context!(vec::PCTVector, op!::Function, context::TypeContext)
     map(t->op_context!(t, op!, context), content(vec))
 end
 
+inference(n::Any) = n
+
 function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
     has_from = any(f->hasfield(T, f), from_fields(T))
     if has_from
         op_context!(ff(n), pct_push!, context)
-        n = set_from!(n, map(t->inference(t, context), from(n))...)
+        n = set_from(n, map(t->inference(t, context), from(n))...)
     end
 
-    n = set_content!(n, map(t->inference(t, context), content(n))...)
+    n = set_content(n, map(t->inference(t, context), content(n))...)
     has_from && op_context!(ff(n), pct_pop!, context)
     return set_type(n, partial_inference(T, terms(n)...))
 end
@@ -77,7 +87,8 @@ end
 partial_inference(::Type{Var}, ::Symbol) = UndeterminedPCTType()
 
 function partial_inference(::Type{T}, terms...) where T <: AbstractCall
-    return content(get_type([terms...][end-1]))
+    #= return content(get_type([terms...][end-1])) =#
+    return content(get_type(first(terms)))
 end
 
 function partial_inference(::Type{T}, term) where T <: Union{Add, Mul}
@@ -100,6 +111,15 @@ function partial_inference(::Type{Pullback}, mapp)
     content_type = content(get_type(mapp))
     MapType(add_content(from_type, content_type), fc(from_type))
 end
+
+function partial_inference(::Type{PrimitivePullback}, v::Union{Var, Map})
+    get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
+    from_type = from(get_type(v))
+    content_type = content(get_type(v))
+    MapType(add_content(from_type, content_type), fc(from_type))
+end
+
+
 
 function partial_inference(::Type{Constant}, term)
     isa(term, Int) && return I()
@@ -127,4 +147,5 @@ function inference(d::Domain)
            inference(upper(d), context), 
            meta(d))
 end
+
 

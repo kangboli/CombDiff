@@ -1,4 +1,4 @@
-export AbstractPCTType, MapType, VecType, I, R, C, Domain, symmetries, VecType, lower, upper
+export AbstractPCTType, MapType, VecType, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric
 
 abstract type AbstractPCTType end
 
@@ -31,23 +31,33 @@ Domain(base::ElementType, lower::APN, upper::APN) =
 
 function symmetric(d::Domain)
     #TODO: Use equivalence instead of equality.
-    if isa(d.lower, Negate)
-        return fc(d.lower) == d.upper
+    if isa(d.lower, Mul)
+        return d.lower == mul(constant(-1), d.upper)
     else
-        return d.lower == fc(d.upper)
+        return mul(constant(-1), d.lower) == d.upper
     end
 end
 
 symmetric(::ElementType) = false
 
+"""
+    name(d)
 
+The name of the domain. Saved mainly for cosmetic purposes
+during printing.
+"""
 name(d::Domain) = meta(d)[:name]
+
 base(d::Domain) = d.base
 lower(d::Domain) = d.lower
 upper(d::Domain) = d.upper
 
 meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
+
+function Base.show(io::IO, ::MIME"text/plain", d::Domain)
+    print(io, "$(name(d))∈$(verbose(base(d))):[$(pretty(lower(d))), $(pretty(upper(d)))]")
+end
 
 struct VecType <: AbstractPCTType
     content::Vector{AbstractPCTType}
@@ -77,7 +87,6 @@ struct MapType <: AbstractPCTType
 end
 
 from(m::MapType) = m.from
-to(m::MapType) = m.content
 content(m::MapType) = m.content
 
 MapType(from, content) = MapType(from, content, Dict())

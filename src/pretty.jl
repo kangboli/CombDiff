@@ -6,7 +6,7 @@ function indent(s::AbstractString)
     join(indent.(split(s, "\n")), "\n")
 end
 
-verbose(t::MapType) = "[$(verbose(from(t)))->$(verbose(to(t)))]"
+verbose(t::MapType) = "[$(verbose(from(t)))->$(verbose(content(t)))]"
 
 verbose(v::VecType) = "$(join(verbose.(content(v)), "×"))"
 
@@ -20,9 +20,8 @@ pretty(m::Map) = "($(pretty(ff(m)))) -> \n$(indent(pretty(fc(m))))"
 
 function latex(m::Map) 
     params = latex(ff(m))
-    params = length(ff(m)) == 1 ? params :
-    "\\left($(params)\\right)"
-    "$(params) \\to $(latex(fc(m)))"
+    params = length(ff(m)) == 1 ? params : "\\left($(params)\\right)"
+    return "$(params) \\to $(latex(fc(m)))"
 end
 
 function verbose(m::Map)
@@ -55,6 +54,12 @@ latex(p::Pullback) = "\\mathcal{P}\\left($(latex(fc(p)))\\right)"
 
 verbose(p::Pullback) = "Pullback($(verbose(fc(p))))::$(verbose(get_type(p)))"
 
+pretty(p::PrimitivePullback) = "𝒫($(pretty(fc(p))))"
+
+latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(fc(p)))\\right)"
+
+verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(fc(p))))::$(verbose(get_type(p)))"
+
 pretty(s::Sum) = "∑(($(pretty(ff(s)))), $(pretty(fc(s))))"
 
 function latex(s::Sum) 
@@ -72,6 +77,22 @@ function verbose(s::Sum)
     "\n)::$(verbose(get_type(s)))"
 end
 
+pretty(i::Integral) = "∫ $(pretty(fc(i))) d$(pretty(ff(i)))"
+
+function latex(i::Integral)
+    indices = []
+    while isa(i, Integral) 
+        push!(indices, ff(i))
+        i = fc(i)
+    end
+    "\\int $(latex(i)) $(join((x->"\\mathrm{d}"*latex(x)).(indices), " "))"
+end
+
+function verbose(i::Integral)
+    "∫(($(verbose(ff(i)))),\n" * 
+    indent("$(verbose(fc(i)))") * 
+    "\n)::$(verbose(get_type(i)))"
+end
 
 pretty(s::Prod) = "∏(($(pretty(ff(s)))), $(pretty(fc(s))))"
 
@@ -109,7 +130,7 @@ end
 
 pretty(a::Add) = "($(join(pretty.(content(fc(a))), "+")))"
 
-latex(m::Add) = "($(join(latex.(content(fc(m))), "+")))"
+latex(m::Add) = "\\left($(join(latex.(content(fc(m))), "+"))\\right)"
 
 function verbose(a::Add)
     "(+\n"*
@@ -152,7 +173,7 @@ end
 
 pretty(n::Negate) = "-$(pretty(fc(n)))"
 
-pretty(m::Monomial) = "$(pretty(base(m)))^$(pretty(power(m)))"
+pretty(m::Monomial) = "$(pretty(base(m)))^($(pretty(power(m))))"
 verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
 latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
 

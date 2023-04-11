@@ -1,14 +1,16 @@
-using GraphPlot
+using GraphPlot, DataStructures
 
 export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify
 
 struct PCTGraph
-    nodes::Vector
-    edges::Vector
+    nodes::Vector{APN}
+    edges::Vector{Pair{Int, Int}}
+    hashset::RBTree{APN}
 end
 
 nodes(g::PCTGraph) = g.nodes
 edges(g::PCTGraph) = g.edges
+hashset(g::PCTGraph) = g.hashset
 
 function pretty(g::PCTGraph)
     join(pretty.(nodes(g)), ";\n")
@@ -18,12 +20,13 @@ function Base.show(io::IO, ::MIME"text/plain", g::PCTGraph)
     print(io, pretty(g))
 end
 
-PCTGraph() = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}())
+PCTGraph() = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}(), RBTree{APN}())
     
 
 function PCTGraph(n::APN) 
-    g = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}())
+    g = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}(), RBTree{APN}())
     push!(nodes(g), n)
+    push!(hashset(g), n)
     return g
 end
 
@@ -75,6 +78,8 @@ If there is no sink cluster: traverse the subgraph and
 """
 function spanning_tree!(n::APN, seen=PCTGraph())
     push!(nodes(seen), n)
+    #= println("pushing $(hashset(seen))") =#
+    push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
     neighbor_list = neighbors(n)
     #= for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
@@ -83,18 +88,23 @@ function spanning_tree!(n::APN, seen=PCTGraph())
     end
     println() =#
     node_and_dir = collect(zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list)))
-    neighbor_list = filter(((t, d, name), )->!(t in nodes(seen)), node_and_dir)
 
-    for (t, d, _) in neighbor_list
+    @time neighbor_list = filter(((t, d, name), )->!(t in hashset(seen)), node_and_dir)
+
+    for (t, d, name) in neighbor_list
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
+        println(name)
+        println(length(nodes(seen)))
+        #= d && println("directed!") =#
         sink, tree = spanning_tree!(t, seen)
         (d || sink) && return (true, tree)
     end
 
     new_nodes = nodes(seen)[node_start:end]
-    new_edges = edge_start == length(edges(seen)) ? Vector{Pair{Int, Int}}() : edges(seen)[edge_start:end]
-    return false, PCTGraph(new_nodes, new_edges)
+    new_edges = edge_start == length(edges(seen)) ? Vector{Pair{Int, Int}}() : edges(seen)[edge_start+1:end]
+    return false, PCTGraph(new_nodes, new_edges, hashset(seen))
+    #= return false, PCTGraph(new_nodes, new_edges, Set(new_nodes)) =#
 end
 
 
@@ -106,7 +116,7 @@ function simplify(n::APN)
 end
 
 function simplify(n::Map)
-    map(t->make_node!(Map, ff(n), t), simplify(fc(n)))
+    map(t->make_node(Map, ff(n), t), simplify(fc(n)))
 end
 
 

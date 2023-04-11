@@ -8,7 +8,7 @@ include("type.jl")
 include("element.jl")
 include("hash.jl")
 include("evaluation.jl")
-include("reduction.jl")
+#= include("reduction.jl") =#
 include("pullback.jl")
 include("inference.jl")
 include("pretty.jl")
