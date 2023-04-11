@@ -150,7 +150,7 @@ content(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, 
 
 Get the first field that is considered content.
 """
-fc(n::APN) = first(content(n))
+fc(n::APN)::Union{APN, Number}= first(content(n))
 
 function set_pct_fields(n::T, fields::Vector{Symbol}, values...) where {T<:APN}
     isempty(values) && return n
@@ -172,20 +172,29 @@ power(::APN) = make_node(Constant, 1)
 
 abstract type TerminalNode <: APN end
 
-mutable struct Var <: TerminalNode
-    type::AbstractPCTType
+mutable struct Var{T <: AbstractPCTType} <: TerminalNode
+    type::T
     content::Symbol
 end
+
+function set_type(n::Var{S}, new_type) where {S <: AbstractPCTType}
+    return make_node(Var, terms(n)..., type=new_type)
+end
+
 
 name(v::Var) = v.content
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
 
-struct PCTVector <: APN
-    type::AbstractPCTType
+struct PCTVector{T <: AbstractPCTType} <: APN
+    type::T
     content::Vector
-    function PCTVector(type::AbstractPCTType, content::Vararg)
-        new(type, [content...])
+    function PCTVector(type::T, content::Vararg) where T <: AbstractPCTType
+        new{T}(type, [content...])
     end
+end
+
+function set_type(n::PCTVector{S}, new_type) where {S <: AbstractPCTType}
+    return make_node(PCTVector, terms(n)..., type=new_type)
 end
 
 pct_vec(content::Vararg{APN}) = make_node(PCTVector, content...)

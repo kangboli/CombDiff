@@ -89,7 +89,8 @@ function spanning_tree!(n::APN, seen=PCTGraph())
     println() =#
     node_and_dir = collect(zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list)))
 
-    @time neighbor_list = filter(((t, d, name), )->!(t in hashset(seen)), node_and_dir)
+    println("num neighbors: $(length(neighbor_list))")
+    neighbor_list = filter(((t, d, name), )->!(t in hashset(seen)), node_and_dir)
 
     for (t, d, name) in neighbor_list
         push!(edges(seen), node_start=>1+length(nodes(seen)))

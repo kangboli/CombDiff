@@ -75,7 +75,7 @@ end
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
-function partial_inference(::Type{PCTVector}, terms...)
+function partial_inference(::Type{T}, terms...) where T <: PCTVector
     return VecType(get_type.([terms...]))
 end
 
@@ -84,7 +84,7 @@ function partial_inference(::Type{Map}, terms...)
     return MapType(get_type(from), get_type(content))
 end
 
-partial_inference(::Type{Var}, ::Symbol) = UndeterminedPCTType()
+partial_inference(::Type{T}, ::Symbol) where T <: Var = UndeterminedPCTType()
 
 function partial_inference(::Type{T}, terms...) where T <: AbstractCall
     #= return content(get_type([terms...][end-1])) =#

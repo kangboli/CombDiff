@@ -19,7 +19,7 @@ function Base.:(==)(d_1::Domain, d_2::Domain)
 end
 
 function Base.hash(d::Domain)
-    hash(d.base) * hash(d.lower) * hash(d.upper)
+    hash(d.base) + hash(d.lower) + hash(d.upper)
 end
 
 function Base.:(==)(n_1::Var, n_2::Var)
@@ -28,7 +28,7 @@ function Base.:(==)(n_1::Var, n_2::Var)
 end
 
 function Base.hash(v::Var)
-    return hash(name(v)) * hash(get_type(v))
+    return hash(name(v)) + hash(get_type(v))
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
@@ -42,7 +42,7 @@ end
 
 function Base.hash(n::T) where T <: Contraction
     d = make_node(Var, first(new_hash(n)); type=get_type(ff(n)))
-    return hash(subst(fc(n), ff(n), d)) * T.hash
+    return hash(subst(fc(n), ff(n), d)) + T.hash
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
@@ -51,9 +51,8 @@ end
 
 function Base.hash(n::T) where T <: Union{Mul, Add}
     sorted_v = sort(content(fc(n)), by=hash)
-    return prod(hash, sorted_v) * T.hash
+    return prod(hash, sorted_v) + T.hash
 end
-
 
 function Base.:(==)(v_1::VecType, v_2::VecType)
     length(v_1) == length(v_2) &&
