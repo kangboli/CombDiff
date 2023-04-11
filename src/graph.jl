@@ -87,17 +87,18 @@ function spanning_tree!(n::APN, seen=PCTGraph())
         println(d)
     end
     println() =#
-    node_and_dir = collect(zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list)))
 
-    println("num neighbors: $(length(neighbor_list))")
-    neighbor_list = filter(((t, d, name), )->!(t in hashset(seen)), node_and_dir)
+    #= println("num neighbors: $(length(neighbor_list))") =#
+    reduced_list = Vector{Tuple{APN, Bool, String}}()
+    @time for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        t in hashset(seen) || push!(reduced_list, (t, d, name))
+    end
 
-    for (t, d, name) in neighbor_list
+    for (t, d, name) in reduced_list
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        println(name)
-        println(length(nodes(seen)))
-        #= d && println("directed!") =#
+        println(length(nodes(seen)), " ", name, )
+        d && println("directed!")
         sink, tree = spanning_tree!(t, seen)
         (d || sink) && return (true, tree)
     end
@@ -113,7 +114,13 @@ end
 function simplify(n::APN)
     g = last(spanning_tree!(n))
     min_size = minimum(pct_size, nodes(g))
-    return filter(t->pct_size(t)==min_size, nodes(g))
+    smallest = Vector{APN}()
+
+    for n in nodes(g)
+        pct_size(n) == min_size && push!(smallest, n)
+    end
+    #= return filter(t->pct_size(t)==min_size, nodes(g)) =#
+    return smallest
 end
 
 function simplify(n::Map)

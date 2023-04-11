@@ -1,7 +1,13 @@
-function Base.:(==)(n_1::T, n_2::T) where T <: APN
+function Base.:(==)(n_1::R, n_2::S) where {R <: APN, S <: APN}
+    R == S || return false
+    objectid(n_1) == objectid(n_2) && return true
     t_1, t_2 = terms(n_1), terms(n_2)
-    return length(t_1) == length(t_2) && 
-    all(i->t_1[i] == t_2[i], 1:length(terms(n_1)))
+    length(t_1) == length(t_2) || return false
+
+    for i = 1:length(t_1)
+        t_1[i] == t_2[i] || return false
+    end
+    return true
 end
 
 function Base.hash(n::APN)
@@ -22,19 +28,22 @@ function Base.hash(d::Domain)
     hash(d.base) + hash(d.lower) + hash(d.upper)
 end
 
-function Base.:(==)(n_1::Var, n_2::Var)
-    name(n_1) == name(n_2) && 
-    get_type(n_1) == get_type(n_2)
+function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: AbstractPCTType}
+    R == S || return false
+    name(n_1) == name(n_2) && get_type(n_1) == get_type(n_2)
 end
 
-function Base.hash(v::Var)
-    return hash(name(v)) + hash(get_type(v))
+function Base.hash(v::Var{T}) where T <: AbstractPCTType
+    return hash(name(v)) + T.hash
+    # hash(get_type(v))
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
+    objectid(n_1) == objectid(n_2) && return true
     get_type(ff(n_1)) == get_type(ff(n_2)) || return false
-
     #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) && return true =#
+    ff(n_1) == ff(n_2) && return fc(n_1) == fc(n_2)
+
     d = make_node(Var, first(new_symbol(n_1, n_2)); type=get_type(ff(n_1)))
     #= d = make_node(Var, Symbol(rand()); type=get_type(ff(n_1))) =#
     return subst(fc(n_1), ff(n_1), d) == subst(fc(n_2), ff(n_2), d)
@@ -46,7 +55,14 @@ function Base.hash(n::T) where T <: Contraction
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
-    Set(content(fc(n_1))) == Set(content(fc(n_2)))
+    objectid(n_1) == objectid(n_2) && return true
+    c_1 = content(fc(n_1))
+    c_2 = content(fc(n_2))
+    length(c_1) == length(c_2) || return false
+    for t in c_1
+        t in c_2 || return false
+    end
+    return true
 end
 
 function Base.hash(n::T) where T <: Union{Mul, Add}
@@ -64,7 +80,16 @@ function Base.:(==)(m_1::MapType, m_2::MapType)
 end
 
 function Base.:(==)(d_1::T, d_2::T) where T <: AbstractDelta
-    Set([upper(d_1), lower(d_1)]) == Set([upper(d_2), lower(d_2)]) && fc(d_1) == fc(d_2)
+
+    if upper(d_1) == upper(d_2)
+        lower(d_1) == lower(d_2) || return false
+    elseif upper(d_1) == lower(d_2)
+        lower(d_1) == upper(d_2) || return false
+    else
+        return false
+    end
+
+    fc(d_1) == fc(d_2)
 end
 
 
@@ -74,5 +99,22 @@ end
 
 pct_size(v::TerminalNode) = 1
     
-Base.isless(n_1::APN, n_2::APN) = hash(n_1) < hash(n_2)
+function Base.isless(n_1::R, n_2::S) where {R <: APN, S <: APN}
+    R == S || return R.hash < S.hash
+    objectid(n_1) == objectid(n_2) && return false
+
+    t_1, t_2 = terms(n_1), terms(n_2)
+    length(t_1) == length(t_2) || return length(t_1) < length(t_2) 
+
+    for i = 1:length(t_1)
+        t_1[i] == t_2[i] || return t_1[i] < t_2[i]
+    end
+
+    return false
+end
+
+function Base.isless(v_1::Var{R}, v_2::Var{S}) where {R <: AbstractPCTType, S <: AbstractPCTType}
+    R == S || return R.hash < S.hash
+    return hash(name(v_1)) < hash(name(v_2))
+end
 

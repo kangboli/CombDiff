@@ -185,15 +185,15 @@ end
 name(v::Var) = v.content
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
 
-struct PCTVector{T <: AbstractPCTType} <: APN
-    type::T
+struct PCTVector <: APN
+    type::VecType
     content::Vector
-    function PCTVector(type::T, content::Vararg) where T <: AbstractPCTType
-        new{T}(type, [content...])
+    function PCTVector(type::VecType, content::Vararg) 
+        new(type, [content...])
     end
 end
 
-function set_type(n::PCTVector{S}, new_type) where {S <: AbstractPCTType}
+function set_type(n::PCTVector, new_type) 
     return make_node(PCTVector, terms(n)..., type=new_type)
 end
 
@@ -355,6 +355,7 @@ function flatten_add(a::Add)
 end
 
 flatten_add(a::APN) = [a]
+fc(a::Add)::PCTVector = a.content
 
 function e_class_reduction(::Type{Add}, term::PCTVector)
     args = vcat(flatten_add.(content(term))...)
@@ -375,6 +376,7 @@ function flatten_mul(a::Mul)
 end
 
 flatten_mul(a::APN) = [a]
+fc(a::Mul)::PCTVector = a.content
 
 function mul(args::Vararg{<:APN})
     return make_node(Mul, make_node(PCTVector, args...))

@@ -51,8 +51,13 @@ end
 
     f1 = @pct f ctx pullback((x::V) -> sum((i, j), x(i)' * A(i, j) * x(j)))
     f2 = eval_all(reduce_pullback(f1))
-    simplify(f2)
+
+    Profile.clear()
+    @time @profile simplify(f2) |> first
+    pprof()
     #= @pct f ctx x(::V) -> sum((i, j), x(i)' * A(i, j) * x(j)) =#
+    x = var(:x, I())
+    s, _ = @pct sum(i, i)
 end
 
 

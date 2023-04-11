@@ -404,14 +404,13 @@ end
 function neighbors(s::Sum)
     result = NeighborList()
 
+    append!(result, sub_neighbors(s))
     append!(result, sum_dist_neighbors(s))
     isa(fc(s), Delta) && ff(s) in [upper(fc(s)), lower(fc(s))] && append!(result, contract_delta_neighbors(s))
-    isa(fc(s), Sum) && append!(result, sum_ex_neighbors(s))
-    append!(result, sub_neighbors(s))
     symmetric(get_type(ff(s))) && append!(result, sum_sym_neighbors(s))
     !contains_name(fc(s), name(ff(s))) && append!(result, sum_mul_neighbors(s))
-
     append!(result, sum_out_neighbors(s))
+    isa(fc(s), Sum) && append!(result, sum_ex_neighbors(s))
 
     return result
 end
