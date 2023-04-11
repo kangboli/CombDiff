@@ -54,15 +54,12 @@ export Var,
     conjugate,
     APN
 
-"""
-The root of the AST. Serves as the default parent node.
-"""
-struct Origin <: APN end
+
+const term_start = 2
 
 """
     make_node(T, terms...,
-                type=UndeterminedPCTType(),
-                meta=Dict())
+                type=UndeterminedPCTType())
 
 This function is the gate way for creating all nodes.
 The purpose is to ensure at construction that
@@ -72,13 +69,12 @@ The purpose is to ensure at construction that
 """
 function make_node(::Type{T}, terms::Vararg;
     type=UndeterminedPCTType(),
-    meta=Dict{Symbol,APN}()
 ) where {T<:APN}
 
     S, terms, t = e_class_reduction(T, terms...)
     #= type == UndeterminedPCTType() && (type = partial_inference(S, terms...)) =#
     type == UndeterminedPCTType() && (type = t)
-    node = S(type, meta, terms...)
+    node = S(type, terms...)
     return node
 end
 
@@ -105,7 +101,7 @@ get_type(n::APN) = n.type
 Set the PCT type of `n` and return a new copy.
 """
 function set_type(n::T, new_type) where {T<:APN}
-    return make_node(T, terms(n)..., type=new_type, meta=meta(n))
+    return make_node(T, terms(n)..., type=new_type)
 end
 
 """
@@ -113,7 +109,7 @@ end
 
 Get the subterms of `n`.
 """
-terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[3:end])
+terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[term_start:end])
 
 """
     set_terms(n)
@@ -121,7 +117,7 @@ terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[3:end])
 Set the subterms of `n`.
 """
 function set_terms(n::T, new_terms...) where {T<:APN}
-    make_node(T, new_terms...; type=get_type(n), meta=meta(n))
+    make_node(T, new_terms...; type=get_type(n))
 end
 
 """
@@ -160,7 +156,7 @@ function set_pct_fields(n::T, fields::Vector{Symbol}, values...) where {T<:APN}
     isempty(values) && return n
     d = Dict(zip(fields, [values...]))
     take_field(f::Symbol) = get(d, f, getfield(n, f))
-    return set_terms(n, take_field.(fieldnames(T)[3:end])...)
+    return set_terms(n, take_field.(fieldnames(T)[term_start:end])...)
 end
 
 function set_content(n::T, new_content...) where {T<:APN}
@@ -171,7 +167,6 @@ function set_from(n::T, new_from...) where {T<:APN}
     set_pct_fields(n, from_fields(T), new_from...)
 end
 
-meta(n::APN) = n.meta
 base(n::APN) = n
 power(::APN) = make_node(Constant, 1)
 
@@ -179,7 +174,6 @@ abstract type TerminalNode <: APN end
 
 mutable struct Var <: TerminalNode
     type::AbstractPCTType
-    meta::Dict
     content::Symbol
 end
 
@@ -188,17 +182,16 @@ var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
 
 struct PCTVector <: APN
     type::AbstractPCTType
-    meta::Dict
     content::Vector
-    function PCTVector(type::AbstractPCTType, meta::Dict, content::Vararg)
-        new(type, meta, [content...])
+    function PCTVector(type::AbstractPCTType, content::Vararg)
+        new(type, [content...])
     end
 end
 
 pct_vec(content::Vararg{APN}) = make_node(PCTVector, content...)
 
 function Base.map(f::Function, v::PCTVector)
-    make_node(PCTVector, map(f, content(v))...; type=get_type(v), meta=meta(v))
+    make_node(PCTVector, map(f, content(v))...; type=get_type(v))
 end
 Base.setindex(v::PCTVector, indices::Any) = set_content(v, content(v)[indices]...)
 Base.getindex(v::PCTVector, indices::Integer) = content(v)[indices]
@@ -214,7 +207,7 @@ end
 
 
 function set_content(v::PCTVector, new_content...)
-    return make_node(PCTVector, new_content...; type=get_type(v), meta=meta(v))
+    return make_node(PCTVector, new_content...; type=get_type(v))
 end
 
 function set_terms(v::PCTVector, new_terms...)
@@ -228,7 +221,6 @@ abstract type AbstractMap <: APN end
 
 struct Map <: AbstractMap
     type::AbstractPCTType
-    meta::Dict
     from::PCTVector
     content::APN
 end
@@ -249,7 +241,6 @@ abstract type AbstractPullback <: AbstractMap end
 
 struct Pullback <: AbstractPullback
     type::AbstractPCTType
-    meta::Dict
     content::AbstractMap
 end
 
@@ -257,7 +248,6 @@ pullback(map::Map) = make_node(Pullback, map)
 
 struct PrimitivePullback <: AbstractPullback
     type::AbstractPCTType
-    meta::Dict
     content::APN
 end
 
@@ -273,7 +263,6 @@ content_fields(::Type{T}) where {T<:AbstractCall} = [:mapp, :args]
 
 struct Call <: AbstractCall
     type::AbstractPCTType
-    meta::Dict
     mapp::Union{Map,Pullback}
     args::PCTVector
 end
@@ -284,7 +273,6 @@ end
 
 struct PrimitiveCall <: AbstractCall
     type::AbstractPCTType
-    meta::Dict
     mapp::Union{Var,PrimitivePullback}
     args::PCTVector
 end
@@ -297,25 +285,21 @@ end
 
 struct Cos <: BuiltinFunction
     type::MapType
-    meta::Dict
     content::APN
 end
 
 struct Sin <: BuiltinFunction
     type::MapType
-    meta::Dict
     content::APN
 end
 
 struct Exp <: BuiltinFunction
     type::MapType
-    meta::Dict
     content::APN
 end =#
 
 struct Monomial <: APN
     type::AbstractPCTType
-    meta::Dict
     base::APN
     power::APN
 end
@@ -336,7 +320,6 @@ end
 
 struct Add <: APN
     type::AbstractPCTType
-    meta::Dict
     content::PCTVector
 end
 
@@ -375,7 +358,6 @@ end
 
 struct Mul <: APN
     type::AbstractPCTType
-    meta::Dict
     content::PCTVector
 end
 
@@ -441,14 +423,13 @@ end
 
 struct Sum <: Contraction
     type::AbstractPCTType
-    meta::Dict
     from::Var
     content::APN
-    function Sum(type, meta, from::Var, summand::APN)
+    function Sum(type, from::Var, summand::APN)
         if get_type(from) == UndeterminedPCTType()
             from = set_type(from, I())
         end
-        new(type, meta, from, summand)
+        new(type, from, summand)
     end
 end
 
@@ -460,27 +441,25 @@ end
 
 struct Integral <: Contraction
     type::AbstractPCTType
-    meta::Dict
     from::Var
     content::APN
-    function Integral(type, meta, from::Var, integrand::APN)
+    function Integral(type, from::Var, integrand::APN)
         if get_type(from) == UndeterminedPCTType()
             from = set_type(from, R())
         end
-        new(type, meta, from, integrand)
+        new(type, from, integrand)
     end
 end
 
 struct Prod <: APN
     type::AbstractPCTType
-    meta::Dict
     from::Var
     content::APN
-    function Prod(type, meta, from::Var, productant::APN)
+    function Prod(type, from::Var, productant::APN)
         if get_type(from) == UndeterminedPCTType()
             from = set_type(from, I())
         end
-        new(type, meta, from, productant)
+        new(type,  from, productant)
     end
 end
 
@@ -501,7 +480,6 @@ fc(d::AbstractDelta) = d.content
 
 struct Delta <: AbstractDelta
     type::AbstractPCTType
-    meta::Dict
     upper::APN
     lower::APN
     content::APN
@@ -523,7 +501,6 @@ end
 
 struct DeltaNot <: AbstractDelta
     type::AbstractPCTType
-    meta::Dict
     upper::APN
     lower::APN
     content::APN
@@ -546,7 +523,6 @@ end
 
 struct Conjugate <: APN
     type::AbstractPCTType
-    meta::Dict
     content::APN
 end
 
@@ -582,7 +558,6 @@ end =#
 
 struct Constant <: TerminalNode
     type::AbstractPCTType
-    meta::Dict
     content::Number
 end
 
@@ -590,7 +565,6 @@ constant(n::Number) = make_node(Constant, n)
 
 struct Let <: APN
     type::AbstractPCTType
-    meta::Dict
     substitutions::Vector{Pair{Var,<:APN}}
     content::APN
 end
@@ -600,7 +574,6 @@ substitutions(l::Let) = l.substitutions
 
 struct Negate <: APN
     type::AbstractPCTType
-    meta::Dict
     content::APN
 end
 
