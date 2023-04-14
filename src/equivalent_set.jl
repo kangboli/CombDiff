@@ -174,6 +174,10 @@ function add_sum_neighbors(terms::Vector)
     return result
 end
 
+"""
+delta((i, k), (j, l), A(i,j,k,l))  + delta((m, k), (n, l), A(m,n,k,l))
+-> delta(k, l, delta(i, j, A(i,j,k,l)) + delta(m, n, A(m,n,k,l)))
+"""
 function add_delta_neighbors(terms::Vector)
     result = NeighborList()
 
@@ -181,8 +185,34 @@ function add_delta_neighbors(terms::Vector)
         for (j, y) in enumerate(terms)
             i < j || continue
             isa(x, Delta) && isa(y, Delta) || continue
-            Set([upper(x), lower(x)]) == Set([upper(y), lower(y)]) || continue
-            new_delta = delta(lower(x), upper(x), add(last(content(x)), last(content(y))))
+
+            x_rem = Vector{Tuple{APN, APN}}()
+            y_rem = collect(zip(content(upper(y)), content(lower(y))))
+            common = Vector{Tuple{APN, APN}}()
+
+            for (ux, lx) in zip(content(upper(x)), content(lower(x)))
+                for (i, (uy, ly)) in enumerate(y_rem)
+                    if Set([ux, lx]) == Set([uy, ly])
+                        push!(common, (ux, lx))
+                        deleteat!(y_rem, i)
+                    else
+                        push!(x_rem, (ux, lx))
+                    end
+                end
+            end
+
+            isempty(common) && continue
+
+            x_inner = fc(x)
+            isempty(x_rem) || (x_inner = delta(pct_vec(first.(x_rem)...), pct_vec(last.(x_rem)...), fc(x)))
+
+            y_inner = fc(y)
+            isempty(y_rem) || (y_inner = delta(pct_vec(first.(y_rem)...), pct_vec(last.(y_rem)...), fc(y)))
+
+            new_delta = delta(pct_vec(first.(common)...), pct_vec(last.(common)...), add(x_inner, y_inner))
+            
+            #= Set([upper(x), lower(x)]) == Set([upper(y), lower(y)]) || continue =#
+            #= new_delta = delta(lower(x), upper(x), add(last(content(x)), last(content(y)))) =#
             new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
             push!(result, add(new_delta, new_terms...); dired=true, name="add_delta")
         end
@@ -221,7 +251,7 @@ function neighbors(a::Add)
     append!(result, sub_neighbors(a))
     append!(result, gcd_neighbors(terms))
     append!(result, add_sum_neighbors(terms))
-    append!(result, add_delta_neighbors(terms))
+    #= append!(result, add_delta_neighbors(terms)) =#
     append!(result, add_const_neighbors(terms))
 
     return result
@@ -405,12 +435,19 @@ function contract_delta_neighbors(s::Sum)
 
     for (i, v) in enumerate(content(ff(s)))
         indices = content(remove_i(ff(s), i))
-        if v == upper(d)
-            new_sum = pct_sum(indices..., subst(fc(d), v, lower(d)))
-            push!(result, new_sum; dired=true, name="contract_delta")
-        elseif v == lower(d)
-            new_sum = pct_sum(indices..., subst(fc(d), v, upper(d)))
-            push!(result, new_sum; dired=true, name="contract_delta")
+        for (j, (u, l)) in enumerate(zip(content(upper(d)), content(lower(d))))
+            new_upper = remove_i(upper(d), j)
+            new_lower = remove_i(lower(d), j)
+            #= println("v: ", typeof(v),", l: ", typeof(l),", u: ", typeof(u)) =#
+            #= println("v==l: ", v==l, ", v==u: ", v==u)
+            println("name(v)==name(l): ", name(v)==name(l)) =#
+            if v == u
+                new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, l)))
+                push!(result, new_sum; dired=true, name="contract_delta")
+            elseif v == l
+                new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, u)))
+                push!(result, new_sum; dired=true, name="contract_delta")
+            end
         end
     end
 
@@ -566,25 +603,29 @@ end
 
 function neighbors(d::Delta)
     result = NeighborList()
-    neighbor_list = neighbors(fc(d))
+    #= neighbor_list = neighbors(fc(d))
     for (t, s) in zip(nodes(neighbor_list), names(neighbor_list))
         push!(result, delta(upper(d), lower(d), t); name=s)
-    end
+    end =#
+    append!(result, sub_neighbors(d))
 
-    if isa(fc(d), Delta)
-        i, j = upper(d), lower(d)
-        p, q = upper(fc(d)), lower(fc(d))
-        # delta-ex
-        push!(result, delta(p, q, delta(i, j, fc(fc(d)))); name="delta_ex")
-        # double-delta
-        Set([i, j]) == Set([p, q]) && push!(result, fc(d); dired=true, name="double_delta")
-    end
-
+    append!(result, delta_merge_neighbors(d))
+    
     # TODO: use equivalence instead of equality
-    upper(d) == lower(d) && push!(result, fc(d); dired=true, name="delta_id")
+    #= upper(d) == lower(d) && push!(result, fc(d); dired=true, name="delta_id") =#
 
     return result
 end
+
+function delta_merge_neighbors(d::Delta)
+    result = NeighborList()
+    isa(fc(d), Delta) || return result
+    
+    new_upper = append!(upper(d), upper(fc(d)))
+    new_lower = append!(lower(d), lower(fc(d)))
+    push!(result, delta(new_upper, new_lower, fc(fc(d))); dired=true, name="delta_merge")
+end
+
 
 function neighbors(c::Conjugate)
     result = NeighborList()

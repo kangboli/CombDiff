@@ -208,6 +208,10 @@ Base.getindex(v::PCTVector, indices::Any) = make_node(PCTVector, content(v)[indi
 Base.first(v::PCTVector) = first(content(v))
 Base.last(v::PCTVector) = last(content(v))
 Base.length(v::PCTVector) = length(content(v))
+function Base.append!(v_1::PCTVector, v_2::PCTVector) 
+    append!(content(v_1), content(v_2))
+    return v_1
+end
 
 function set_i(v::PCTVector, i::Integer, new_item::APN)
     replace_item(j::Integer) = i == j ? new_item : v[j]
@@ -589,44 +593,64 @@ fc(d::AbstractDelta) = d.content
 
 struct Delta <: AbstractDelta
     type::AbstractPCTType
-    upper::APN
-    lower::APN
+    upper::PCTVector
+    lower::PCTVector
     content::APN
 end
 
-function delta(upper_lower::Vararg{APN})
+function e_class_reduction(::Type{T}, upper::PCTVector, lower::PCTVector, inner::R) where {T <: AbstractDelta, R <: APN}
+
+    new_upper = Vector{APN}()
+    new_lower = Vector{APN}()
+
+    for (u, l) in zip(content(upper), content(lower))
+        upper_indices = findall(t->t==u, new_upper)
+        lower_indices = findall(t->t==u, new_lower)
+        isempty(intersect(Set(upper_indices), Set(lower_indices))) || continue
+        push!(new_upper, u)
+        push!(new_lower, l)
+    end
+
+    isempty(new_upper) && return R, terms(inner), get_type(inner)
+     
+    new_upper = pct_vec(new_upper...)
+    new_lower = pct_vec(new_lower...)
+    #= println(typeof.(content(new_upper)))
+    println(typeof.(content(new_lower))) =#
+
+    return T, [new_upper, new_lower, inner], partial_inference(T, new_upper, new_lower, inner)
+end
+
+
+#= function delta_parse(upper_lower::Vararg{APN})
+    #= length(upper_lower) == 1 && return pct_vec(), pct_vec(), first(upper_lower) =#
     upper_lower = collect(upper_lower)
     content = last(upper_lower)
     upper_lower = upper_lower[1:end-1]
     n = length(upper_lower)
-    content = make_node(Delta, upper_lower[1], upper_lower[n÷2+1], content)
-    if n > 2
-        return delta(upper_lower[2:n÷2]..., upper_lower[n÷2+2:end]..., content)
-    else
-        return content
-    end
+    upper = pct_vec(upper_lower[1:n÷2]...)
+    lower = pct_vec(upper_lower[n÷2+1:end]...)
+    return upper, lower, content
+end =#
+
+function delta(upper_lower::Vararg{APN})
+    #= upper, lower, content = delta_parse(upper_lower...) =#
+
+    return make_node(Delta, upper_lower...)
 end
 
 
 struct DeltaNot <: AbstractDelta
     type::AbstractPCTType
-    upper::APN
-    lower::APN
+    upper::PCTVector
+    lower::PCTVector
     content::APN
 end
 
 
 function delta_not(upper_lower::Vararg{APN})
-    upper_lower = collect(upper_lower)
-    content = last(upper_lower)
-    upper_lower = upper_lower[1:end-1]
-    n = length(upper_lower)
-    content = make_node(DeltaNot, upper_lower[1], upper_lower[n÷2+1], content)
-    if n > 2
-        return delta_not(upper_lower[2:n÷2]..., upper_lower[n÷2+2:end]..., content)
-    else
-        return content
-    end
+    #= upper, lower, content = delta_parse(upper_lower...) =#
+    return make_node(DeltaNot, upper_lower...)
 end
 
 
