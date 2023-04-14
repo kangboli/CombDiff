@@ -27,4 +27,9 @@ A second reason is that we plan to use Julia vectors as "Static Vectors" in
 our theory so as to do symbolic linear algebra.
 
 
+## TODO
+
+- Algorithm for reducing the exponential graph.
+- Second quantization.
+- Better type system and performance optimization (type stability).
 

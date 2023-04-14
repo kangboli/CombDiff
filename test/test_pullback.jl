@@ -24,13 +24,13 @@
     # Monomials
     p = @pct f ctx pullback((m::C) -> m^2)
     p1 = reduce_pullback(fc(p)) |> first
-    @test fc(eval_all(p1)) == fc(fc(@pct f ctx (m::C)->(2 * (m^((2+(-1))))' * _K)))
+    @test fc(eval_all(p1)) == fc(fc(@pct f ctx (m::C) -> (2 * (m^((2 + (-1))))' * _K)))
 
 end
 
 @testset "call" begin
     #= f, ctx = @pct (x::C) -> _ =#
-    f, ctx = @pct pullback((x::C)->((y::C) -> y)(x))
+    f, ctx = @pct pullback((x::C) -> ((y::C) -> y)(x))
     p1 = eval_all(first(reduce_pullback(eval_all(f))))
     p2 = eval_all(first(reduce_pullback(f)))
     p1 == p2
@@ -39,25 +39,58 @@ end
 @testset "contraction" begin
     f, ctx = @pct begin
         @space H begin
-            type=(I, I) -> C
-            symmetries=(((2,1), :conj),)
+            type = (I, I) -> C
+            symmetries = (((2, 1), :conj),)
         end
         @space V begin
-            type=(I, ) -> C
+            type = (I,) -> C
         end
 
         (A::H) -> _
     end
 
     f1 = @pct f ctx pullback((x::V) -> sum((i, j), x(i)' * A(i, j) * x(j)))
+    f1 = @pct f ctx (x::V) -> sum((i, j), x(i)' * A(i, j) * x(j))
+    f1 = @pct f ctx (x::V) -> sum((i, j), x(i)' * A(i, j) * x(j))
     f2 = eval_all(reduce_pullback(f1))
 
+    simplify(f2) |> first
     Profile.clear()
     @time @profile simplify(f2) |> first
     pprof()
     #= @pct f ctx x(::V) -> sum((i, j), x(i)' * A(i, j) * x(j)) =#
     x = var(:x, I())
     s, _ = @pct sum(i, i)
+    f, ctx = @pct begin
+        @space H begin
+            type = (I, I) -> C
+            symmetries = (((2, 1), :conj),)
+        end
+
+        @space V begin
+            type = (I,) -> C
+        end
+
+        @space T begin
+            type = (I, I, I, I) -> C
+            symmetries = (((2, 1, 4, 3), :conj), ((3, 4, 1, 2), :id))
+        end
+
+        @space U begin
+            type = (I, I) -> C
+        end
+
+        (A::H, J::T) -> _
+    end
+
+    g = @pct f ctx pullback((C::U) -> sum((i,j,p,q,r,s), C(p,i)' * C(q,i) * C(r,j)' * C(s,j) * J(p,q,r,s)))
+
+    p = fc(eval_all(reduce_pullback(g)))
+
+    q = eval_all(call(p, first(ff(p)), constant(1)))
+
+    simplify(q) |> first
+
 end
 
 

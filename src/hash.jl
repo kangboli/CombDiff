@@ -30,7 +30,7 @@ end
 
 function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: AbstractPCTType}
     R == S || return false
-    name(n_1) == name(n_2) && get_type(n_1) == get_type(n_2)
+    name(n_1) == name(n_2) # && get_type(n_1) == get_type(n_2)
 end
 
 function Base.hash(v::Var{T}) where T <: AbstractPCTType
@@ -40,24 +40,64 @@ end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     objectid(n_1) == objectid(n_2) && return true
-    get_type(ff(n_1)) == get_type(ff(n_2)) || return false
-    #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) && return true =#
-    ff(n_1) == ff(n_2) && return fc(n_1) == fc(n_2)
 
-    d = make_node(Var, first(new_symbol(n_1, n_2)); type=get_type(ff(n_1)))
+    #= f_1, f_2 = ff(n_1), ff(n_1) =#
+    #= get_type(f_1) == get_type(f_2) || return false =#
+    #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) && return true =#
+    ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2)
+    #= f_1 == f_2 && return fc(n_1) == fc(n_2) =#
+    #= return false =#
+    #= num_1 = length(f_1) =#
+
+    #= ds = Vector{Var}(undef, num_1)
+    d_symbols = new_symbol(n_1, n_2, num=num_1)
+    for (i, s, t) in zip(1:num_1, d_symbols, get_type.(f_1))
+        ds[i] = make_node(Var, s; type=t)
+    end
+
+    s_1 = fc(n_1)
+    for (o, d) in zip(f_1, ds)
+        s_1 = subst(s_1, o, d)
+    end
+
+    s_2 = fc(n_2)
+    for (o, d) in zip(f_1, ds)
+        s_2 = subst(s_2, o, d)
+    end =#
+
+    #= return s_1 == s_2 =#
     #= d = make_node(Var, Symbol(rand()); type=get_type(ff(n_1))) =#
-    return subst(fc(n_1), ff(n_1), d) == subst(fc(n_2), ff(n_2), d)
 end
 
 function Base.hash(n::T) where T <: Contraction
-    d = make_node(Var, first(new_hash(n)); type=get_type(ff(n)))
-    return hash(subst(fc(n), ff(n), d)) + T.hash
+    #= l = length(content(ff(n)))
+
+    ds = Vector{Var}(undef, l)
+    for (i, t) in zip(1:l, get_type.(content(ff(n))))
+        ds[i] = make_node(Var, Symbol(string("_tmp_", i)); type=t)
+    end
+
+    tmp = fc(n)
+    for (o, d) in zip(content(ff(n)), ds)
+        tmp = subst(tmp, o, d)
+    end
+
+    es = Vector{Var}(undef, l)
+    for (i, s, t) in zip(1:l, new_symbol(tmp, num=length(ff(n))), get_type.(content(ff(n))))
+        es[i] = make_node(Var, s; type=t)
+    end
+
+    for (o, d) in zip(content(ff(n)), es)
+        tmp = subst(tmp, o, d)
+    end =#
+
+
+    return hash(ff(n)) + hash(fc(n)) + T.hash
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
     objectid(n_1) == objectid(n_2) && return true
-    c_1 = content(fc(n_1))
-    c_2 = content(fc(n_2))
+    c_1, c_2 = content(fc(n_1)), content(fc(n_2))
     length(c_1) == length(c_2) || return false
     for t in c_1
         t in c_2 || return false

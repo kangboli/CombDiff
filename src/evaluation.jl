@@ -7,7 +7,7 @@ Get the set of dummy variables that are in a node.
 """
 dummy_vars(::APN) = Vector{APN}()
 
-dummy_vars(c::Contraction) = from(c)
+dummy_vars(c::Contraction) = content(ff(c))
 
 function dummy_vars(m::Map)
     extract_var(n::Var) = [n]
