@@ -1,13 +1,23 @@
-export evaluate, subst, dummy_vars, variables, contains_name, eval_all, new_symbol, SymbolGenerator
+export evaluate, subst, dummy_vars, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_variables
 
 # Rule for evaluating the functions that can be evaluated
 
 """
 Get the set of dummy variables that are in a node.
 """
-dummy_vars(::APN) = Vector{APN}()
+#= function dummy_vars(n::APN) 
+    vcat(dummy_vars.(content(n))...)
+end
+dummy_vars(t::TerminalNode) = Vector{APN}() =#
 
-dummy_vars(c::Contraction) = content(ff(c))
+function dummy_vars(n::APN)
+    return Vector{APN}()
+end
+
+
+function dummy_vars(c::T) where T <: Union{Contraction, Prod}
+    content(ff(c))
+end
 
 function dummy_vars(m::Map)
     extract_var(n::Var) = [n]
@@ -15,10 +25,13 @@ function dummy_vars(m::Map)
     vcat(dummy_vars(fc(m)), map(extract_var, content(ff(m)))...)
 end
 
+
+
 variables(v::Var)::Vector{Var} = [v]
 variables(::Constant)::Vector{Var} = []
 variables(n::APN)::Vector{Var} = vcat(variables.(terms(n))...)
 
+free_variables(n::APN) = setdiff(Set(variables(n)), Set(dummy_vars(n)))
 
 """
 Check if a name is used in a node.
@@ -34,15 +47,17 @@ contains_name(v::Var, s::Symbol)::Bool = name(v) == s
 
 contains_name(c::Constant, ::Symbol)::Bool = false
 
-struct SymbolGenerator end
+struct SymbolGenerator
+    namespace::Symbol
+end
 
-Base.iterate(::SymbolGenerator)::Tuple{Symbol, Int} = (:i_0, 1)
+Base.iterate(g::SymbolGenerator)::Tuple{Symbol, Int} = (Symbol(string(g.namespace, "_0")), 1)
 
-Base.iterate(::SymbolGenerator, state)::Tuple{Symbol, Int} = (Symbol(string("i_", state)), state+1)
+Base.iterate(g::SymbolGenerator, state)::Tuple{Symbol, Int} = (Symbol(string(g.namespace, "_", state)), state+1)
 
-function new_symbol(nodes::Vararg{APN}; num = 1)::Vector{Symbol}
+function new_symbol(nodes::Vararg{APN}; num = 1, namespace=:i)::Vector{Symbol}
     symbols = Vector{Symbol}()
-    g = SymbolGenerator()
+    g = SymbolGenerator(namespace)
     #= name_used = (n::APN)->contains_name(n, s) =#
     for s in g
         flag::Bool = false
@@ -75,6 +90,17 @@ function new_hash(nodes...; num = 1)
 end
 
 
+"""
+Substituting a vector of variable is done by substituting them one by one.
+"""
+function subst(n::APN, old::PCTVector, new::PCTVector)
+    for (i, j) in zip(content(old), content(new))
+        n = subst(n, i, j)
+    end
+    return n
+end
+
+
 function subst(n::Var, old::Var, new::APN)
     name(n) == name(old) || return n
     #= get_type(n) == get_type(old) || error("type mismatch: $(get_type(n)) vs $(get_type(old))") =#
@@ -93,8 +119,8 @@ function subst(n::PrimitiveCall, old::PrimitiveCall, new::AbstractCall)::Union{A
     if name(mapp(n)) == name(mapp(old))
         args(n) == args(old) && return new
         return add(
-            delta(content(sub_args)..., content(args(old))..., new), 
-            delta_not(content(sub_args)..., content(args(old))..., old) 
+            delta(sub_args, args(old), new), 
+            delta_not(sub_args, args(old), old) 
         )
     end
 
@@ -129,21 +155,10 @@ we don't have to consider replacing the dummy variabless.
 """
 function subst(n::T, old::PrimitiveCall, new::APN) where T <: APN
     dummies = dummy_vars(n)
-
     name(mapp(old)) in name.(dummies) && return n
-
-    #= conflict = filter(d->contains_name(new, name(d)), dummies)
-
-    !isempty(conflict) || return set_terms!(n, map(t->subst(t, old, new), terms(n))...)
-
-    for c in conflict
-        tmp = set_content!(c, new_symbol(new, n, old))
-        n = subst(n, c, tmp, true)
-    end =#
     n = resolve_conflict(n ,old, new)
 
     return set_terms(n, [subst(t, old, new) for t in terms(n)]...)
-    #= return subst(n, old, new) =#
 end
 
 function resolve_conflict(n::APN, old::APN, new::APN)
@@ -170,9 +185,10 @@ evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
     n = evaluate(fc(mapp(c)))
-    for (old, new) in zip(content(ff(mapp(c))), content(args(c))) 
+    #= for (old, new) in zip(content(ff(mapp(c))), content(args(c))) 
         n = subst(n, old, new)
-    end
+    end =#
+    n = subst(n, ff(mapp(c)), args(c))
     return n
 end
 

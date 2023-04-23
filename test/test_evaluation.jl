@@ -14,14 +14,15 @@ using PCT, Test
 
     f1 = @pct f ctx sum(a, A(a, j))
     vars = variables(f1)
-    @test var(:a, I()) in vars
+    @test var(:j, I()) in vars
+    @test var(:i_0, I()) in vars
 
     # Dummy variables
     vars = dummy_vars(f1)
-    @test all(t -> t in vars, [var(:A, ctx[:S]), var(:i, I()), var(:j, I()), var(:a, I())])
+    @test all(t -> t in vars, [var(:A, ctx[:S]), var(:i, I()), var(:j, I()), var(:i_0, I())])
 
     # Contains name
-    @test all(t -> contains_name(f1, t), [:i, :j, :A, :a])
+    @test all(t -> contains_name(f1, t), [:i, :j, :A, :i_0])
 
 end
 
@@ -70,7 +71,7 @@ end
     f1 = @pct f ctx A(i, j)
     old = fc(@pct f ctx A(k, l))
     new = fc(@pct f ctx A(i, j))
-    result = fc(@pct f ctx delta(j, l, delta(i, k, A(i, j))) + delta_not(j, l, delta_not(i, k, A(k, l))))
+    result = fc(@pct f ctx delta((i, j), (k,l), A(i, j)) + delta_not((i, j), (k, l), A(k, l)))
     @test result == subst(fc(f1), old, new)
 
 end

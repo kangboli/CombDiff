@@ -52,7 +52,8 @@ export Var,
     delta,
     delta_not,
     conjugate,
-    APN
+    APN,
+    pullback
 
 
 const term_start = 2
@@ -187,7 +188,7 @@ var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
 
 struct PCTVector <: APN
     type::VecType
-    content::Vector
+    content::Vector{APN}
     function PCTVector(type::VecType, content::Vararg)
         new(type, [content...])
     end
@@ -301,6 +302,15 @@ struct PrimitiveCall <: AbstractCall
     args::PCTVector
 end
 
+
+function e_class_reduction(::Type{PrimitiveCall}, mapp::T, args::PCTVector) where T <: APN
+    if T == Map
+        return Call, [mapp, args], partial_inference(Call, mapp, args)
+    end
+    return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
+end
+
+
 function call(mapp::Union{Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:APN})
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
@@ -309,6 +319,9 @@ end
 function apply_symmetry(indices::Vector{Int}, op::Symbol, n::APN)
     return set_content(n, map(t->apply_symmetry(indices, op, t), content(n))...)
 end
+
+apply_symmetry(indices::Vector{Int}, op::Symbol, v::PCTVector) = map(t->apply_symmetry(indices, op, t), v)
+apply_symmetry(::Vector{Int}, ::Symbol, c::Constant) = c
 
 function apply_symmetry(indices::Vector{Int}, op::Symbol, n::PrimitiveCall)
     new_term = PrimitiveCall(get_type(n), mapp(n), args(n)[collect(indices)])
@@ -332,6 +345,12 @@ function dfs(n::APN, syms, sym_graph = Vector{APN}([n]))
     return sym_graph
 end
 
+function get_call(n::T) where T <: Union{Add, Mul}
+    i = findfirst(t->isa(t, PrimitiveCall), content(fc(n)))
+    return fc(n)[i]
+end
+
+
 function get_call(n::APN)
     ts = terms(n)
     i = findfirst(t->isa(t, PrimitiveCall), ts)
@@ -349,9 +368,8 @@ function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
 
     #= type = partial_inference(PrimitiveCall, mapp, args) =#
     graph = dfs(PrimitiveCall(UndeterminedPCTType(), mapp, args), syms)
-    #= println(join(pretty.(graph), "\n")) =#
     result = first(sort(graph, by=get_call))
-    return typeof(result), terms(result), partial_inference(PrimitiveCall, mapp, args)
+    return typeof(result), terms(result), partial_inference(typeof(result), terms(result)...)
 end
 
 
@@ -476,8 +494,8 @@ function renaming(original::Vector{Var}, n::APN)
     l = length(original)
 
     tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
+    for (s, t) in zip(new_symbol(n; num=l, namespace=:_tmp_), get_type.(original))
+        push!(tmp_vars, make_node(Var, s; type=t))
     end
 
     tmp = n
@@ -494,6 +512,10 @@ function renaming(original::Vector{Var}, n::APN)
         tmp = subst(tmp, o, d)
     end
 
+    #= println("original: ", pretty.(original))
+    println("new vars: ", pretty.(std_vars))
+    println("result: ", pretty(tmp))
+    println("-----------------") =#
     return std_vars, tmp
 end
 
@@ -501,8 +523,8 @@ function renaming(original::Vector{Var}, new::Vector{Var}, n::APN)
     l = length(original)
 
     tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
+    for (s, t) in zip(new_symbol(n; num=l, namespace=:_tmp_), get_type.(original))
+        push!(tmp_vars, make_node(Var, s; type=t))
     end
 
     tmp = n
@@ -525,7 +547,7 @@ struct Integral <: Contraction
     from::PCTVector
     content::APN
     function Integral(type, from::PCTVector, integrand::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
+        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(from)]...)
         #= if get_type(from) == UndeterminedPCTType()
             from = set_type(from, R())
         end =#
@@ -563,19 +585,19 @@ end
 
 function e_class_reduction(::Type{T}, from::PCTVector, summand::APN) where T <: Union{Contraction, Prod}
 
+    isempty(content(from)) && return typeof(summand), [terms(summand)...], get_type(summand)
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
-    new_from = Vector{Var}()
-    for v in variables(summand)
+    new_from = Vector{Var}(collect(Set(content(from))))
+    #= for v in free_variables(summand)
         name(v) in name.(new_from) && continue
         i = findfirst(t->name(t) == name(v), content(from))
         i === nothing && continue
         push!(new_from, from[i])
-    end
+    end =#
     #= new_from = filter(v -> v in content(from), variables(summand)) =#
 
     new_from, summand = renaming(new_from, summand)
-
     new_from = pct_vec(new_from...)
     T, [new_from, summand], partial_inference(Sum, new_from, summand)
 end
@@ -600,23 +622,21 @@ end
 
 function e_class_reduction(::Type{T}, upper::PCTVector, lower::PCTVector, inner::R) where {T <: AbstractDelta, R <: APN}
 
-    new_upper = Vector{APN}()
-    new_lower = Vector{APN}()
+    new_pairs = Vector{Set{APN}}()
 
     for (u, l) in zip(content(upper), content(lower))
-        upper_indices = findall(t->t==u, new_upper)
-        lower_indices = findall(t->t==u, new_lower)
-        isempty(intersect(Set(upper_indices), Set(lower_indices))) || continue
-        push!(new_upper, u)
-        push!(new_lower, l)
+        u == l && continue
+        next_pair = Set([u, l])
+        next_pair in new_pairs && continue
+        push!(new_pairs, next_pair)
     end
 
+    new_pairs = [collect(s) for s in new_pairs]
+    new_upper, new_lower = first.(new_pairs), last.(new_pairs)
     isempty(new_upper) && return R, terms(inner), get_type(inner)
      
     new_upper = pct_vec(new_upper...)
     new_lower = pct_vec(new_lower...)
-    #= println(typeof.(content(new_upper)))
-    println(typeof.(content(new_lower))) =#
 
     return T, [new_upper, new_lower, inner], partial_inference(T, new_upper, new_lower, inner)
 end

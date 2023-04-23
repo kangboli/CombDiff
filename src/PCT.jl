@@ -10,6 +10,7 @@ include("hash.jl")
 include("evaluation.jl")
 #= include("reduction.jl") =#
 include("pullback.jl")
+include("pbev.jl")
 include("inference.jl")
 include("pretty.jl")
 include("syntax.jl")

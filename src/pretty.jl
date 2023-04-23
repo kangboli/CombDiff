@@ -16,11 +16,11 @@ verbose(::T) where T <: ElementType = string(T)
 
 verbose(d::Domain) = "$(meta(d)[:name])"
 
-pretty(m::Map) = "($(pretty(ff(m)))) -> \n$(indent(pretty(fc(m))))"
+pretty(m::Map) = "$(pretty(ff(m))) -> \n$(indent(pretty(fc(m))))"
 
 function latex(m::Map) 
     params = latex(ff(m))
-    params = length(ff(m)) == 1 ? params : "\\left($(params)\\right)"
+    params = length(ff(m)) == 1 ? params : "$(params)"
     return "$(params) \\to $(latex(fc(m)))"
 end
 
@@ -36,11 +36,11 @@ latex(v::Var) = startswith(string(name(v)), "_") ? "\\$(name(v))" : "$(name(v))"
 
 verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
 
-pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c))))"
+pretty(c::Call) = "($(pretty(mapp(c))))$(pretty(args(c)))"
 
-latex(c::Call) = "\\left($(latex(mapp(c)))\\right)\\left($(latex(args(c)))\\right)"
+latex(c::Call) = "\\left($(latex(mapp(c)))\\right)$(latex(args(c)))"
 
-verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_type(c)))"
+verbose(c::Call) = "($(verbose(mapp(c))))$(verbose(args(c)))::$(verbose(get_type(c)))"
 
 pretty(c::Conjugate) = "$(pretty(fc(c)))'"
 
@@ -60,7 +60,7 @@ latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(fc(p)))\\right)"
 
 verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(fc(p))))::$(verbose(get_type(p)))"
 
-pretty(s::Sum) = "∑(($(pretty(ff(s)))), $(pretty(fc(s))))"
+pretty(s::Sum) = "∑($(pretty(ff(s))), $(pretty(fc(s))))"
 
 function latex(s::Sum) 
     indices = []
@@ -72,7 +72,7 @@ function latex(s::Sum)
 end
 
 function verbose(s::Sum)
-    "∑(($(verbose(ff(s)))),\n" *
+    "∑($(verbose(ff(s))),\n" *
     indent("$(verbose(fc(s)))") * 
     "\n)::$(verbose(get_type(s)))"
 end
@@ -94,11 +94,15 @@ function verbose(i::Integral)
     "\n)::$(verbose(get_type(i)))"
 end
 
-pretty(s::Prod) = "∏(($(pretty(ff(s)))), $(pretty(fc(s))))"
+pretty(s::Prod) = "∏($(pretty(ff(s))), $(pretty(fc(s))))"
 
 latex(s::Prod) = "\\prod_{$(latex(ff(s)))} $(latex(fc(s))))"
 
-verbose(s::Prod) = invoke(verbose, Sum, s)
+function verbose(s::Prod)
+    "∏($(verbose(ff(s))),\n" *
+    indent("$(verbose(fc(s)))") * 
+    "\n)::$(verbose(get_type(s)))"
+end
 
 delta_symbol(::Type{Delta}, latex=false) = latex ? "\\delta" : "δ"
 delta_symbol(::Type{DeltaNot}, latex=false) = latex ? "\\top" : "δ̸"
@@ -138,18 +142,17 @@ function verbose(a::Add)
     "\n)::$(verbose(get_type(a)))"
 end
 
-pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
+pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))$(pretty(args(p)))"
 
 function latex(p::PrimitiveCall) 
     if all(a->a==I(), content(from(get_type(mapp(p)))))
         "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
-        "$(latex(mapp(p)))($(latex(args(p))))"
+        "$(latex(mapp(p)))$(latex(args(p)))"
     end
 end
 
-verbose(p::PrimitiveCall) = "$(verbose(mapp(p)))($(verbose(args(p))))::$(verbose(get_type(p)))"
-
+verbose(p::PrimitiveCall) = "$(verbose(mapp(p)))$(verbose(args(p)))::$(verbose(get_type(p)))"
 
 pretty(c::Constant) = "$(fc(c))"
 
@@ -157,11 +160,11 @@ latex(c::Constant) = "$(fc(c))"
 
 verbose(c::Constant) = "$(fc(c))::$(verbose(get_type(c)))"
 
-pretty(v::PCTVector) = join(pretty.(content(v)), ", ")
+pretty(v::PCTVector) = string("(", join(pretty.(content(v)), ", "), ")")
 
-latex(v::PCTVector) = join(latex.(content(v)), ", ")
+latex(v::PCTVector) = string("\\left(", join(latex.(content(v)), ", "), "\\right)")
 
-verbose(v::PCTVector) = join(verbose.(content(v)), ", ") 
+verbose(v::PCTVector) = string("(", join(verbose.(content(v)), ", "), ")")
 
 function Base.show(io::IO, ::MIME"text/latex", m::APN) 
     print(io, latexstring(latex(m)))

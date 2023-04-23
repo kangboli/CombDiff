@@ -45,8 +45,8 @@ function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext)
     #= map_type = get_type(mapp(v)) =#
     map_type = context[name(mapp(v))]
     #= op!(context, name(mapp(v)), map_type) =#
-    for (a, t) in zip(content(args(v)), content(from(map_type)))
-        a.type = t
+    for (i, (a, t)) in enumerate( zip(content(args(v)), content(from(map_type))))
+        content(args(v))[i] = set_type(a, t)
         op!(context, name(a), t)
     end
 end
@@ -66,7 +66,7 @@ function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
 
     n = set_content(n, map(t->inference(t, context), content(n))...)
     has_from && op_context!(ff(n), pct_pop!, context)
-    return set_type(n, partial_inference(T, terms(n)...))
+    return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
 
 function inference(v::Var, context::TypeContext)

@@ -137,38 +137,36 @@ function add_sum_neighbors(terms::Vector)
             i < j || continue
             isa(x, Sum) && isa(y, Sum) || continue
 
-            common_x, common_y = Vector{Var}(), Vector{Var}()
+            #= common_x, common_y = Vector{Var}(), Vector{Var}() =#
 
-            y_rem = Vector{APN}(content(ff(y)))
 
-            for v in content(ff(x))
-                for (i, u) in enumerate(y_rem)
+            for (n, v) in enumerate(content(ff(x)))
+                for (m, u) in enumerate(content(ff(y)))
+                    #= n < m && continue =#
                     get_type(v) == get_type(u) || continue
-                    push!(common_x, v)
-                    push!(common_y, u)
-                    deleteat!(y_rem, i)
-                    break
+                    #= push!(common_x, v)
+                    push!(common_y, u) =#
+                    common_x = v
+                    common_y = u
+                    y_rem = remove_i(ff(y), m)
+                    x_rem = remove_i(ff(x), n)
+                    #= break =#
+                    new_name = first(new_symbol(x, y))
+                    new_var = var(new_name, get_type(v))
+                    new_x = subst(fc(x), v, new_var)
+                    new_y = subst(fc(y), u, new_var)
+                    isempty(content(x_rem)) || (new_x = pct_sum(content(x_rem)..., new_x))
+                    isempty(content(x_rem)) || (new_y = pct_sum(content(y_rem)..., new_y))
+                    new_sum = pct_sum(new_var, add(new_x, new_y))
+                    new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
+                    push!(result, add(new_sum, new_terms...); name="add_sum")
                 end
             end
+            #= isempty(common_x) && continue =#
 
-            isempty(common_x) && continue
+            #= x_rem = filter(t -> !(t in common_x), content(ff(x)))
+            y_rem = filter(t -> !(t in common_y), content(ff(y))) =#
 
-            x_rem = filter(t -> !(t in common_x), content(ff(x)))
-            y_rem = filter(t -> !(t in common_y), content(ff(y)))
-
-            new_names = new_symbol(x, y, num=length(common_x))
-            new_vars = Vector{Var}([var(s, d) for (s, d) in zip(new_names, get_type.(common_x))])
-
-            new_x = renaming(common_x, new_vars, fc(x))
-            isempty(x_rem) || (new_x = pct_sum(x_rem..., new_x))
-
-            new_y = renaming(common_y, new_vars, fc(y))
-            isempty(x_rem) || (new_y = pct_sum(y_rem..., new_y))
-
-            new_sum = pct_sum(new_vars..., add(new_x, new_y))
-            new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
-
-            push!(result, add(new_sum, new_terms...); name="add_sum")
         end
     end
     return result
@@ -283,17 +281,28 @@ function swallow_neighbors(terms)
     return result
 end
 
+"""
+∏((i,j), A(i,j)) * ∏((p, j), B(p,j)) = ∏(j, ∏(i, A(i, j)) * ∏(p, B(p, j)))
+"""
 function mul_product_neighbors(terms)
     result = NeighborList()
 
     for (i, x) in enumerate(terms)
         for (j, y) in enumerate(terms)
             i < j || continue
-            isa(x, Prod) && isa(y, Prod) && get_type(ff(x)) == get_type(ff(y)) || continue
-            z = make_node(Var, first(new_symbol(x, y)); type=get_type(ff(x)))
-            new_prod = make_node(Prod, z, mul(subst(fc(x), ff(x), z), subst(fc(y), ff(y), z)))
-            new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
-            push!(result, mul(new_prod, new_terms...); name="mul_product")
+            isa(x, Prod) && isa(y, Prod) || continue
+            for (r, v) in enumerate(content(ff(x)))
+                s = findfirst(t->get_type(t) == get_type(v), content(ff(y))) 
+                s===nothing && continue
+                y_remain = remove_i(ff(y), s)
+                x_remain = remove_i(ff(x), r)
+                z = var(first(new_symbol(x, y)), get_type(v))
+                new_x = pct_product(content(x_remain)..., fc(x))
+                new_y = pct_product(content(y_remain)..., fc(y))
+                new_prod = pct_product(z, mul(subst(new_x, v, z), subst(new_y, v, z)))
+                new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
+                push!(result, mul(new_prod, new_terms...); name="mul_product")
+            end
         end
     end
     return result
@@ -373,7 +382,7 @@ function neighbors(m::Monomial)
     b, p = base(m), power(m)
 
     # Sum mul neighbors
-    isa(p, Sum) && push!(result, pct_product(ff(p), monomial(b, fc(p))); name="sum_prod")
+    isa(p, Sum) && push!(result, pct_product(content(ff(p))..., monomial(b, fc(p))); name="sum_prod")
     #= is_zero(b) && push!(result, make_node(Constant, 0); dired=true, name="power_of_zero")
     !is_zero(b) && is_zero(p) && push!(result, make_node(Constant, 1); dired=true, name="zeroth_power") =#
     append!(result, add_mul_neighbors(m))
@@ -409,7 +418,7 @@ function sum_mul_neighbors(s::Sum)
 
     for v in content(ff(s))
         if isa(get_type(v), Domain)
-            push!(factors, add(upper(v), mul(constant(-1), lower(v))))
+            push!(factors, add(upper(get_type(v)), mul(constant(-1), lower(get_type(v)))))
         else
             push!(i_rem, v)
         end
@@ -436,15 +445,24 @@ function contract_delta_neighbors(s::Sum)
     for (i, v) in enumerate(content(ff(s)))
         indices = content(remove_i(ff(s), i))
         for (j, (u, l)) in enumerate(zip(content(upper(d)), content(lower(d))))
-            new_upper = remove_i(upper(d), j)
-            new_lower = remove_i(lower(d), j)
             #= println("v: ", typeof(v),", l: ", typeof(l),", u: ", typeof(u)) =#
             #= println("v==l: ", v==l, ", v==u: ", v==u)
             println("name(v)==name(l): ", name(v)==name(l)) =#
             if v == u
+                new_upper = remove_i(upper(d), j)
+                new_lower = subst(remove_i(lower(d), j), v, l)
                 new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, l)))
+                #= println("---------------------------------")
+                println("v: ", pretty(v))
+                println("u: ", pretty(u))
+                println("new indices: ", pretty.(indices))
+                println("old: ", pretty(s))
+                println("new: ", pretty(new_sum)) =#
+                #= length(indices) < 4 && println("ERROR in Contraction!") =#
                 push!(result, new_sum; dired=true, name="contract_delta")
             elseif v == l
+                new_upper = subst(remove_i(upper(d), j), v, u)
+                new_lower = remove_i(lower(d), j)
                 new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, u)))
                 push!(result, new_sum; dired=true, name="contract_delta")
             end
@@ -468,12 +486,12 @@ function sum_out_neighbors(s::Sum)
 
         for t in content(fc(mul_term))
             target = contains_name(t, name(v)) ? interior : exterior
-            push!(target)
+            push!(target, t)
         end
 
         isempty(exterior) && continue
         new_v = remove_i(ff(s), i)
-        new_sum = pct_sum(new_v, mul(exterior..., pct_sum(ff(s)[i], mul(interior))))
+        new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(ff(s)[i], mul(interior...))))
         push!(result, new_sum; dired=true, name="sum_out")
     end
 
@@ -488,7 +506,7 @@ function sum_merge_neighbors(s::Sum)
     isa(fc(s), Sum) || return result
 
     new_indices = pct_vec(vcat(content(ff(s)), content(ff(fc(s))))...)
-    push!(result, pct_sum(new_indices, fc(fc(s))); dired=true, name="sum_merge")
+    push!(result, pct_sum(content(new_indices)..., fc(fc(s))); dired=true, name="sum_merge")
 
     return result
 end
@@ -504,7 +522,7 @@ function sum_dist_neighbors(s::Sum)
     terms = content(fc(a))
     for (i, t) in enumerate(terms)
         new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, add(make_node(Sum, ff(s), t), make_node(Sum, ff(s), add(new_terms...))); name="sum_dist")
+        push!(result, add(pct_sum(content(ff(s))..., t), pct_sum(content(ff(s))..., add(new_terms...))); name="sum_dist")
     end
     return result
 end
@@ -529,7 +547,8 @@ function neighbors(s::Sum)
     result = NeighborList()
 
     append!(result, sub_neighbors(s))
-    append!(result, sum_out_neighbors(s))
+    #= append!(result, sum_out_neighbors(s)) =#
+    append!(result, sum_merge_neighbors(s))
     append!(result, sum_dist_neighbors(s))
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_sym_neighbors(s))
@@ -539,27 +558,35 @@ function neighbors(s::Sum)
     return result
 end
 
-function prod_ex_neighbors(p::Prod)
+#= function prod_ex_neighbors(p::Prod)
     result = NeighborList()
     i, j = ff(p), ff(fc(p))
     push!(result, pct_product(j, pct_product(i, fc(fc(p)))); name="prod_ex")
     return result
-end
+end =#
 
 function prod_sym_neighbors(p::Prod)
     result = NeighborList()
-    push!(result, set_content(p, subst(fc(p), ff(p), mul(constant(-1), ff(p)))); name="prod_sym")
+
+    for v in content(ff(p))
+        symmetric(get_type(v)) || continue
+        push!(result, set_content(p, subst(fc(p), v, mul(constant(-1), v))); name="prod_sym")
+    end
+
     return result
 end
 
 function prod_power_neighbors(p::Prod)
     result = NeighborList()
-    d = get_type(ff(p))
-    is_zero(fc(p)) && return push!(result, constant(0); dired=true, name="prod_of_zeros")
-    is_one(fc(p)) && return push!(result, constant(1); dired=true, name="prod_of_ones")
-    #TODO: Negative ones?
-    range = add(upper(d), mul(constant(-1), lower(d)))
-    push!(result, mul(fc(p), range); dired=true, name="prod_power")
+
+    vars = free_variables(fc(p))
+    for v in content(ff(p))
+        v in vars && continue
+        d = get_type(v)
+        #TODO: Negative ones?
+        range = add(upper(d), mul(constant(-1), lower(d)))
+        push!(result, mul(fc(p), range); dired=true, name="prod_power")
+    end
     return result
 end
 
@@ -570,15 +597,19 @@ function prod_dist_neighbors(p::Prod)
     terms = content(fc(a))
     for (i, t) in enumerate(terms)
         new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, mul(pct_product(ff(p), t), pct_product(ff(p), add(new_terms...))); name="prod_dist")
+        push!(result, mul(pct_product(content(ff(p))..., t), pct_product(content(ff(p))..., add(new_terms...))); name="prod_dist")
     end
     return result
 end
 
 function prod_sum_neighbors(p::Prod)
     result = NeighborList()
-    isa(fc(p), Monomial) && !contains_name(base(fc(p)), name(ff(p))) || return result
-    push!(result, monomial(base(fc(p)), pct_sum(ff(p), power(fc(p)))); name="prod_sum")
+    inner = filter(v->!contains_name(base(fc(p)), name(v)), content(ff(p)))
+    outer = filter(v->contains_name(base(fc(p)), name(v)), content(ff(p)))
+    isempty(inner) && return result
+    #= isa(fc(p), Monomial) && !contains_name(base(fc(p)), name(ff(p))) || return result =#
+    new_power = pct_sum(inner..., power(fc(p)))
+    push!(result, pct_product(outer..., monomial(base(fc(p)), new_power)); name="prod_sum")
     return result
 end
 
@@ -591,9 +622,11 @@ function neighbors(p::Prod)
         push!(result, set_content(p, t); name=s)
     end
 
-    isa(fc(p), Prod) && append!(result, prod_ex_neighbors(p))
-    symmetric(get_type(ff(p))) && append!(result, prod_sym_neighbors(p))
-    !contains_name(fc(p), name(ff(p))) && append!(result, prod_power_neighbors(p))
+    is_zero(fc(p)) && return push!(result, constant(0); dired=true, name="prod_of_zeros")
+    is_one(fc(p)) && return push!(result, constant(1); dired=true, name="prod_of_ones")
+    #= isa(fc(p), Prod) && append!(result, prod_ex_neighbors(p)) =#
+    append!(result, prod_sym_neighbors(p))
+    append!(result, prod_power_neighbors(p))
     append!(result, prod_dist_neighbors(p))
     append!(result, prod_sum_neighbors(p))
 
@@ -608,7 +641,6 @@ function neighbors(d::Delta)
         push!(result, delta(upper(d), lower(d), t); name=s)
     end =#
     append!(result, sub_neighbors(d))
-
     append!(result, delta_merge_neighbors(d))
     
     # TODO: use equivalence instead of equality

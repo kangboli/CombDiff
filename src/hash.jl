@@ -29,7 +29,7 @@ function Base.hash(d::Domain)
 end
 
 function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: AbstractPCTType}
-    R == S || return false
+    #= R == S || return false =#
     name(n_1) == name(n_2) # && get_type(n_1) == get_type(n_2)
 end
 
