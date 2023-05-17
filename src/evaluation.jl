@@ -10,10 +10,7 @@ Get the set of dummy variables that are in a node.
 end
 dummy_vars(t::TerminalNode) = Vector{APN}() =#
 
-function dummy_vars(n::APN)
-    return Vector{APN}()
-end
-
+dummy_vars(::APN) =  Vector{APN}()
 
 function dummy_vars(c::T) where T <: Union{Contraction, Prod}
     content(ff(c))
@@ -22,16 +19,25 @@ end
 function dummy_vars(m::Map)
     extract_var(n::Var) = [n]
     extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
-    vcat(dummy_vars(fc(m)), map(extract_var, content(ff(m)))...)
+    vcat(map(extract_var, content(ff(m)))...)
 end
 
-
+dummy_all(n::APN) = vcat(dummy_vars(n), map(dummy_vars, terms(n))...)
 
 variables(v::Var)::Vector{Var} = [v]
 variables(::Constant)::Vector{Var} = []
 variables(n::APN)::Vector{Var} = vcat(variables.(terms(n))...)
 
-free_variables(n::APN) = setdiff(Set(variables(n)), Set(dummy_vars(n)))
+function free_variables(n::APN) 
+    free = Vector{APN}()
+    dummies = dummy_all(n)
+    for v in variables(n)
+        (v in dummies || v in free) && continue
+        push!(free, v)
+    end
+    return free
+end
+
 
 """
 Check if a name is used in a node.

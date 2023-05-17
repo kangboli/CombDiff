@@ -215,11 +215,11 @@ end
 
 @testset "contraction" begin
     s = make_node(Sum, pct_vec(var(:i)), call(var(:x), var(:i)))
-    @test first(ff(s)) == var(:i_0, I()) # There is an default inference for sum
-    @test fc(s) == call(var(:x), var(:i_0))
+    @test first(ff(s)) == var(:i, I()) # There is an default inference for sum
+    @test fc(s) == call(var(:x), var(:i))
     i = make_node(Integral, pct_vec(var(:x)), call(var(:f), var(:x)))
-    @test first(ff(i)) == var(:i_0, R())
-    @test fc(i) == call(var(:f), var(:i_0))
+    @test first(ff(i)) == var(:x, R())
+    @test fc(i) == call(var(:f), var(:x))
 
     # non-generic constructor.
     @test s == pct_sum(var(:i), call(var(:x), var(:i)))
@@ -231,8 +231,8 @@ end
 
 @testset "product" begin
     p = make_node(Prod, pct_vec(var(:i)), call(var(:x), var(:i)))
-    @test first(ff(p)) == var(:i_0, I())
-    @test fc(p) == call(var(:x), var(:i_0))
+    @test first(ff(p)) == var(:i, I())
+    @test fc(p) == call(var(:x), var(:i))
     @test p == pct_product(var(:i), call(var(:x), var(:i)))
 end
 

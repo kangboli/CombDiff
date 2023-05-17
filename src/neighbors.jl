@@ -108,7 +108,6 @@ function gcd(a::APN, b::APN)
     return map(node_from_set, (a_rem, b_rem, c))
 end
 
-
 function gcd_neighbors(terms::Vector)
     result = NeighborList()
     for (i, x) in enumerate(terms)
@@ -126,6 +125,8 @@ end
 
 
 """
+Combine the addition of two sums into one. Exchange of summation indices is not allowed.
+
 sum((i::I1, j::I2), x(i, j)) + sum((p::I1, q::I3), y(p, q)) <-> 
 sum((i::I1), sum(j::I2, x(i, j)) + sum(q::I3, y(i, q)))
 """
@@ -137,40 +138,52 @@ function add_sum_neighbors(terms::Vector)
             i < j || continue
             isa(x, Sum) && isa(y, Sum) || continue
 
-            #= common_x, common_y = Vector{Var}(), Vector{Var}() =#
+            max_length = min(length(ff(x)), length(ff(y)))
+            k_max = findfirst(k->get_type(ff(x)[k]) != get_type(ff(y)[k]), 1:max_length)
+            k_max == 1 && continue
+            k_max === nothing && (k_max = max_length)
+            x_rem = content(ff(x))[k_max+1:end]
+            y_rem = content(ff(y))[k_max+1:end]
+            new_names = new_symbol(x, y; num=k_max)
+            new_vars = pct_vec(map(k->var(new_names[k], get_type(ff(x)[k])), 1:k_max)...)
+            new_x = subst(fc(x), ff(x)[1:k_max], new_vars)
+            new_y = subst(fc(y), ff(y)[1:k_max], new_vars)
+            #= println("x:")
+            println(pretty.(content(ff(x)[1:k_max])), "->", pretty.(content(new_vars)))
+            println(pretty(fc(x)))
+            println(pretty(new_x))
+            println("y:")
+            println(pretty.(content(ff(y)[1:k_max])), "->", pretty.(content(new_vars)))
+            println(pretty(fc(y)))
+            println(pretty(new_y)) =#
+            isempty(x_rem) || (new_x = pct_sum(x_rem..., new_x))
+            isempty(y_rem) || (new_y = pct_sum(y_rem..., new_y))
 
-
-            for (n, v) in enumerate(content(ff(x)))
-                for (m, u) in enumerate(content(ff(y)))
-                    #= n < m && continue =#
-                    get_type(v) == get_type(u) || continue
-                    #= push!(common_x, v)
-                    push!(common_y, u) =#
-                    common_x = v
-                    common_y = u
-                    y_rem = remove_i(ff(y), m)
-                    x_rem = remove_i(ff(x), n)
-                    #= break =#
-                    new_name = first(new_symbol(x, y))
-                    new_var = var(new_name, get_type(v))
-                    new_x = subst(fc(x), v, new_var)
-                    new_y = subst(fc(y), u, new_var)
-                    isempty(content(x_rem)) || (new_x = pct_sum(content(x_rem)..., new_x))
-                    isempty(content(x_rem)) || (new_y = pct_sum(content(y_rem)..., new_y))
-                    new_sum = pct_sum(new_var, add(new_x, new_y))
-                    new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
-                    push!(result, add(new_sum, new_terms...); name="add_sum")
-                end
-            end
-            #= isempty(common_x) && continue =#
-
-            #= x_rem = filter(t -> !(t in common_x), content(ff(x)))
-            y_rem = filter(t -> !(t in common_y), content(ff(y))) =#
-
+            new_sum = pct_sum(content(new_vars)..., add(new_x, new_y))
+            #= println("new_sum: ", pretty(new_sum)) =#
+            new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
+            push!(result, add(new_sum, new_terms...); dired=true, name="add_sum")
         end
     end
     return result
 end
+
+#= for (n, v) in enumerate(content(ff(x)))
+    for (m, u) in enumerate(content(ff(y)))
+        get_type(v) == get_type(u) || continue
+        y_rem = remove_i(ff(y), m)
+        x_rem = remove_i(ff(x), n)
+        new_name = first(new_symbol(x, y))
+        new_var = var(new_name, get_type(v))
+        new_x = subst(fc(x), v, new_var)
+        new_y = subst(fc(y), u, new_var)
+        isempty(content(x_rem)) || (new_x = pct_sum(content(x_rem)..., new_x))
+        isempty(content(x_rem)) || (new_y = pct_sum(content(y_rem)..., new_y))
+        new_sum = pct_sum(new_var, add(new_x, new_y))
+        new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
+        push!(result, add(new_sum, new_terms...); name="add_sum")
+    end
+end =#
 
 """
 delta((i, k), (j, l), A(i,j,k,l))  + delta((m, k), (n, l), A(m,n,k,l))
@@ -209,8 +222,6 @@ function add_delta_neighbors(terms::Vector)
 
             new_delta = delta(pct_vec(first.(common)...), pct_vec(last.(common)...), add(x_inner, y_inner))
             
-            #= Set([upper(x), lower(x)]) == Set([upper(y), lower(y)]) || continue =#
-            #= new_delta = delta(lower(x), upper(x), add(last(content(x)), last(content(y)))) =#
             new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
             push!(result, add(new_delta, new_terms...); dired=true, name="add_delta")
         end
@@ -249,7 +260,6 @@ function neighbors(a::Add)
     append!(result, sub_neighbors(a))
     append!(result, gcd_neighbors(terms))
     append!(result, add_sum_neighbors(terms))
-    #= append!(result, add_delta_neighbors(terms)) =#
     append!(result, add_const_neighbors(terms))
 
     return result
@@ -449,7 +459,7 @@ function contract_delta_neighbors(s::Sum)
             #= println("v==l: ", v==l, ", v==u: ", v==u)
             println("name(v)==name(l): ", name(v)==name(l)) =#
             if v == u
-                new_upper = remove_i(upper(d), j)
+                new_upper = subst(remove_i(upper(d), j), v, l)
                 new_lower = subst(remove_i(lower(d), j), v, l)
                 new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, l)))
                 #= println("---------------------------------")
@@ -462,7 +472,7 @@ function contract_delta_neighbors(s::Sum)
                 push!(result, new_sum; dired=true, name="contract_delta")
             elseif v == l
                 new_upper = subst(remove_i(upper(d), j), v, u)
-                new_lower = remove_i(lower(d), j)
+                new_lower = subst(remove_i(lower(d), j), v, u)
                 new_sum = pct_sum(indices..., delta(new_upper, new_lower, subst(fc(d), v, u)))
                 push!(result, new_sum; dired=true, name="contract_delta")
             end
@@ -473,28 +483,25 @@ function contract_delta_neighbors(s::Sum)
 end
 
 """
+Move factors that are independent of the summation indices out of the sum.
+Exchange of the summation indices are not allowed.
+    
 sum(i, j, k ⋅ x(i) ⋅ y(j)) -> k ⋅ sum(i, x(i) ⋅ sum(j, y(j)))
 """
 function sum_out_neighbors(s::Sum)
     result = NeighborList()
-
     mul_term = fc(s)
     isa(mul_term, Mul) || return result
-
-    for (i, v) in enumerate(content(ff(s)))
-        interior, exterior = Vector{APN}(), Vector{APN}()
-
-        for t in content(fc(mul_term))
-            target = contains_name(t, name(v)) ? interior : exterior
-            push!(target, t)
-        end
-
-        isempty(exterior) && continue
-        new_v = remove_i(ff(s), i)
-        new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(ff(s)[i], mul(interior...))))
-        push!(result, new_sum; dired=true, name="sum_out")
+    inner_index = last(content(ff(s)))
+    outer_indices = remove_i(ff(s), length(ff(s)))
+    interior, exterior = Vector{APN}(), Vector{APN}()
+    for t in content(fc(mul_term))
+        target = contains_name(t, name(inner_index)) ? interior : exterior
+        push!(target, t)
     end
-
+    isempty(exterior) && return result
+    new_sum = pct_sum(content(outer_indices)..., mul(exterior..., pct_sum(inner_index, mul(interior...))))
+    push!(result, new_sum; dired=false, name="sum_out")
     return result
 end
 
@@ -504,10 +511,8 @@ sum(i, sum(j, x(i, j))) -> sum((i, j), x(i, j))
 function sum_merge_neighbors(s::Sum)
     result = NeighborList()
     isa(fc(s), Sum) || return result
-
     new_indices = pct_vec(vcat(content(ff(s)), content(ff(fc(s))))...)
     push!(result, pct_sum(content(new_indices)..., fc(fc(s))); dired=true, name="sum_merge")
-
     return result
 end
 
@@ -522,7 +527,8 @@ function sum_dist_neighbors(s::Sum)
     terms = content(fc(a))
     for (i, t) in enumerate(terms)
         new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, add(pct_sum(content(ff(s))..., t), pct_sum(content(ff(s))..., add(new_terms...))); name="sum_dist")
+        push!(result, add(pct_sum(content(ff(s))..., t), 
+             pct_sum(content(ff(s))..., add(new_terms...))); name="sum_dist")
     end
     return result
 end
@@ -545,7 +551,6 @@ end
 
 function neighbors(s::Sum)
     result = NeighborList()
-
     append!(result, sub_neighbors(s))
     #= append!(result, sum_out_neighbors(s)) =#
     append!(result, sum_merge_neighbors(s))
@@ -554,7 +559,6 @@ function neighbors(s::Sum)
     append!(result, sum_sym_neighbors(s))
     append!(result, sum_mul_neighbors(s))
     #= isa(fc(s), Sum) && append!(result, sum_ex_neighbors(s)) =#
-
     return result
 end
 
@@ -636,16 +640,8 @@ end
 
 function neighbors(d::Delta)
     result = NeighborList()
-    #= neighbor_list = neighbors(fc(d))
-    for (t, s) in zip(nodes(neighbor_list), names(neighbor_list))
-        push!(result, delta(upper(d), lower(d), t); name=s)
-    end =#
     append!(result, sub_neighbors(d))
     append!(result, delta_merge_neighbors(d))
-    
-    # TODO: use equivalence instead of equality
-    #= upper(d) == lower(d) && push!(result, fc(d); dired=true, name="delta_id") =#
-
     return result
 end
 
@@ -671,3 +667,18 @@ function neighbors(v::PCTVector)
 end
 
 
+    #= for (i, v) in enumerate(content(ff(s)))
+        interior, exterior = Vector{APN}(), Vector{APN}()
+
+        for t in content(fc(mul_term))
+            target = contains_name(t, name(v)) ? interior : exterior
+            push!(target, t)
+        end
+
+        isempty(exterior) && continue
+        new_v = remove_i(ff(s), i)
+        new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(ff(s)[i], mul(interior...))))
+        push!(result, new_sum; dired=true, name="sum_out")
+    end 
+
+    return result =#

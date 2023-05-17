@@ -80,15 +80,6 @@ function make_node(::Type{T}, terms::Vararg;
 end
 
 """
-    e_class_reduction(T, terms)
-
-Reduce a term to one of the canonical ones within is e-class.
-"""
-function e_class_reduction(::Type{T}, terms::Vararg) where {T<:APN}
-    return T, collect(terms), partial_inference(T, terms...)
-end
-
-"""
     get_type(n)
 
 Return the PCT type of `n`.
@@ -168,10 +159,20 @@ function set_from(n::T, new_from...) where {T<:APN}
     set_pct_fields(n, from_fields(T), new_from...)
 end
 
+abstract type TerminalNode <: APN end
+
+struct Constant <: TerminalNode
+    type::AbstractPCTType
+    content::Number
+end
+
+constant(n::Number) = make_node(Constant, n)
+
+is_zero(t) = isa(t, Constant) && fc(t) == 0
+is_one(t) = isa(t, Constant) && fc(t) == 1
+is_minus_one(t) = isa(t, Constant) && fc(t) == -1
 base(n::APN) = n
 power(::APN) = make_node(Constant, 1)
-
-abstract type TerminalNode <: APN end
 
 mutable struct Var{T<:AbstractPCTType} <: TerminalNode
     type::T
@@ -181,7 +182,6 @@ end
 function set_type(n::Var{S}, new_type) where {S<:AbstractPCTType}
     return make_node(Var, terms(n)..., type=new_type)
 end
-
 
 name(v::Var) = v.content
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
@@ -302,15 +302,6 @@ struct PrimitiveCall <: AbstractCall
     args::PCTVector
 end
 
-
-function e_class_reduction(::Type{PrimitiveCall}, mapp::T, args::PCTVector) where T <: APN
-    if T == Map
-        return Call, [mapp, args], partial_inference(Call, mapp, args)
-    end
-    return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
-end
-
-
 function call(mapp::Union{Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:APN})
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
@@ -345,11 +336,6 @@ function dfs(n::APN, syms, sym_graph = Vector{APN}([n]))
     return sym_graph
 end
 
-function get_call(n::T) where T <: Union{Add, Mul}
-    i = findfirst(t->isa(t, PrimitiveCall), content(fc(n)))
-    return fc(n)[i]
-end
-
 
 function get_call(n::APN)
     ts = terms(n)
@@ -358,20 +344,6 @@ function get_call(n::APN)
 end
 
 get_call(n::PrimitiveCall) = n
-
-function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
-    #= if name(mapp) == :A
-        println(pretty(args))
-    end =#
-    get_type(mapp) == UndeterminedPCTType() && return PrimitiveCall, [mapp, args], UndeterminedPCTType()
-    syms = symmetries(get_type(mapp))
-
-    #= type = partial_inference(PrimitiveCall, mapp, args) =#
-    graph = dfs(PrimitiveCall(UndeterminedPCTType(), mapp, args), syms)
-    result = first(sort(graph, by=get_call))
-    return typeof(result), terms(result), partial_inference(typeof(result), terms(result)...)
-end
-
 
 #= abstract type BuiltinFunction <: APN end
 
@@ -402,14 +374,6 @@ power(n::Monomial) = n.power
 
 monomial(base::APN, power::APN) = make_node(Monomial, base, power)
 
-function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
-    is_zero(base) && return Constant, [0], I()
-    is_zero(power) && return Constant, [1], I()
-    is_one(power) && return T, terms(base), get_type(base)
-    isa(base, Constant) && isa(power, Constant) && return Constant, [fc(base)^fc(power)], partial_inference(Constant, [fc(base)^fc(power)])
-    return Monomial, [base, power], partial_inference(Monomial, base, power)
-end
-
 struct Add <: APN
     type::AbstractPCTType
     content::PCTVector
@@ -425,15 +389,6 @@ end
 
 flatten_add(a::APN) = [a]
 fc(a::Add)::PCTVector = a.content
-
-function e_class_reduction(::Type{Add}, term::PCTVector)
-    args = vcat(flatten_add.(content(term))...)
-    args = filter(t -> !is_zero(t), args)
-    isempty(args) && return Constant, [0], I()
-    sort!(args)
-    length(args) == 1 && return typeof(first(args)), terms(first(args)), get_type(first(args))
-    return Add, [pct_vec(args...)], partial_inference(Add, pct_vec(args...))
-end
 
 
 struct Mul <: APN
@@ -452,27 +407,15 @@ function mul(args::Vararg{<:APN})
     return make_node(Mul, make_node(PCTVector, args...))
 end
 
-function e_class_reduction(::Type{Mul}, term::PCTVector)
-    args = vcat(flatten_mul.(content(term))...)
-    args = filter(t -> !is_one(t), args)
-    n_negative = count(is_minus_one, args)
-    args = filter(t -> !is_minus_one(t), args)
-    n_negative % 2 == 1 && pushfirst!(args, constant(-1))
-    any(is_zero, args) && return Constant, [0], I()
-    isempty(args) && return Constant, [1], I()
-    sort!(args)
-    if length(args) == 1
-        return typeof(first(args)), terms(first(args)), get_type(first(args))
-    end
-    return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
+function get_call(n::T) where T <: Union{Add, Mul}
+    i = findfirst(t->isa(t, PrimitiveCall), content(fc(n)))
+    return fc(n)[i]
 end
+
 
 abstract type Contraction <: APN end
 
 function pct_sum(terms::Vararg)
-    #= node = make_node(Sum, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_sum(terms[1:end-2]..., node) =#
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
 end
 
@@ -483,64 +426,9 @@ struct Sum <: Contraction
     content::APN
     function Sum(type, from::PCTVector, summand::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        #= if get_type(content(from)) == UndeterminedPCTType()
-            from = set_type(from, I())
-        end =#
         new(type, from, summand)
     end
 end
-
-function renaming(original::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (s, t) in zip(new_symbol(n; num=l, namespace=:_tmp_), get_type.(original))
-        push!(tmp_vars, make_node(Var, s; type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    std_vars = Vector{Var}()
-    for (s, t) in zip(new_symbol(tmp, num=l), get_type.(tmp_vars))
-        push!(std_vars, make_node(Var, s; type=t))
-    end
-
-    for (o, d) in zip(tmp_vars, std_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    #= println("original: ", pretty.(original))
-    println("new vars: ", pretty.(std_vars))
-    println("result: ", pretty(tmp))
-    println("-----------------") =#
-    return std_vars, tmp
-end
-
-function renaming(original::Vector{Var}, new::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (s, t) in zip(new_symbol(n; num=l, namespace=:_tmp_), get_type.(original))
-        push!(tmp_vars, make_node(Var, s; type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    n = tmp
-    for (o, d) in zip(tmp_vars, new)
-        n = subst(n, o, d)
-    end
-
-    return n
-end
-
-
 
 struct Integral <: Contraction
     type::AbstractPCTType
@@ -548,18 +436,11 @@ struct Integral <: Contraction
     content::APN
     function Integral(type, from::PCTVector, integrand::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(from)]...)
-        #= if get_type(from) == UndeterminedPCTType()
-            from = set_type(from, R())
-        end =#
         new(type, from, integrand)
     end
 end
 
 function pct_int(terms::Vararg{APN})
-    #= node = make_node(Integral, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_int(terms[1:end-2]..., node) =#
-
     return make_node(Integral, pct_vec(terms[1:end-1]...), last(terms))
 end
 
@@ -569,39 +450,13 @@ struct Prod <: APN
     content::APN
     function Prod(type, from::PCTVector, productant::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        #= if get_type(from) == UndeterminedPCTType()
-            from = set_type(from, I())
-        end =#
         new(type, from, productant)
     end
 end
 
 function pct_product(terms::Vararg{APN})
-    #= node = make_node(Prod, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_product(terms[1:end-2]..., node) =#
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
-
-function e_class_reduction(::Type{T}, from::PCTVector, summand::APN) where T <: Union{Contraction, Prod}
-
-    isempty(content(from)) && return typeof(summand), [terms(summand)...], get_type(summand)
-    is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
-    is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
-    new_from = Vector{Var}(collect(Set(content(from))))
-    #= for v in free_variables(summand)
-        name(v) in name.(new_from) && continue
-        i = findfirst(t->name(t) == name(v), content(from))
-        i === nothing && continue
-        push!(new_from, from[i])
-    end =#
-    #= new_from = filter(v -> v in content(from), variables(summand)) =#
-
-    new_from, summand = renaming(new_from, summand)
-    new_from = pct_vec(new_from...)
-    T, [new_from, summand], partial_inference(Sum, new_from, summand)
-end
-
 
 
 abstract type AbstractDelta <: APN end
@@ -609,7 +464,6 @@ abstract type AbstractDelta <: APN end
 upper(d::AbstractDelta) = d.upper
 lower(d::AbstractDelta) = d.lower
 
-# from_fields(::Type{AbstractDelta}) = [:upper, :lower]
 content_fields(::Type{T}) where {T<:AbstractDelta} = [:upper, :lower, :content]
 fc(d::AbstractDelta) = d.content
 
@@ -620,27 +474,40 @@ struct Delta <: AbstractDelta
     content::APN
 end
 
-function e_class_reduction(::Type{T}, upper::PCTVector, lower::PCTVector, inner::R) where {T <: AbstractDelta, R <: APN}
-
-    new_pairs = Vector{Set{APN}}()
-
-    for (u, l) in zip(content(upper), content(lower))
-        u == l && continue
-        next_pair = Set([u, l])
-        next_pair in new_pairs && continue
-        push!(new_pairs, next_pair)
-    end
-
-    new_pairs = [collect(s) for s in new_pairs]
-    new_upper, new_lower = first.(new_pairs), last.(new_pairs)
-    isempty(new_upper) && return R, terms(inner), get_type(inner)
-     
-    new_upper = pct_vec(new_upper...)
-    new_lower = pct_vec(new_lower...)
-
-    return T, [new_upper, new_lower, inner], partial_inference(T, new_upper, new_lower, inner)
+function delta(upper_lower::Vararg{APN})
+    return make_node(Delta, upper_lower...)
 end
 
+struct DeltaNot <: AbstractDelta
+    type::AbstractPCTType
+    upper::PCTVector
+    lower::PCTVector
+    content::APN
+end
+
+function delta_not(upper_lower::Vararg{APN})
+    return make_node(DeltaNot, upper_lower...)
+end
+
+struct Conjugate <: APN
+    type::AbstractPCTType
+    content::APN
+end
+
+conjugate(term::APN) = make_node(Conjugate, term)
+
+struct Let <: APN
+    type::AbstractPCTType
+    substitutions::Vector{Pair{Var,<:APN}}
+    content::APN
+end
+
+substitutions(l::Let) = l.substitutions
+
+struct Negate <: APN
+    type::AbstractPCTType
+    content::APN
+end
 
 #= function delta_parse(upper_lower::Vararg{APN})
     #= length(upper_lower) == 1 && return pct_vec(), pct_vec(), first(upper_lower) =#
@@ -652,74 +519,4 @@ end
     lower = pct_vec(upper_lower[n÷2+1:end]...)
     return upper, lower, content
 end =#
-
-function delta(upper_lower::Vararg{APN})
-    #= upper, lower, content = delta_parse(upper_lower...) =#
-
-    return make_node(Delta, upper_lower...)
-end
-
-
-struct DeltaNot <: AbstractDelta
-    type::AbstractPCTType
-    upper::PCTVector
-    lower::PCTVector
-    content::APN
-end
-
-
-function delta_not(upper_lower::Vararg{APN})
-    #= upper, lower, content = delta_parse(upper_lower...) =#
-    return make_node(DeltaNot, upper_lower...)
-end
-
-
-struct Conjugate <: APN
-    type::AbstractPCTType
-    content::APN
-end
-
-function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
-    t = get_type(term)
-    if T == Mul
-        sub_terms = pct_vec(map(conjugate, content(fc(term)))...)
-        return Mul, [sub_terms], partial_inference(Mul, sub_terms)
-    end
-    if T == Constant
-        new_const = fc(term)'
-        return Constant, [new_const], partial_inference(Constant, new_const)
-    end
-    T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
-    t in [I(), R()] && return T, terms(term), get_type(term)
-    return Conjugate, [term], get_type(term)
-end
-
-conjugate(term::APN) = make_node(Conjugate, term)
-
-
-struct Constant <: TerminalNode
-    type::AbstractPCTType
-    content::Number
-end
-
-constant(n::Number) = make_node(Constant, n)
-
-is_zero(t) = isa(t, Constant) && fc(t) == 0
-is_one(t) = isa(t, Constant) && fc(t) == 1
-is_minus_one(t) = isa(t, Constant) && fc(t) == -1
-
-struct Let <: APN
-    type::AbstractPCTType
-    substitutions::Vector{Pair{Var,<:APN}}
-    content::APN
-end
-
-substitutions(l::Let) = l.substitutions
-
-
-struct Negate <: APN
-    type::AbstractPCTType
-    content::APN
-end
-
 
