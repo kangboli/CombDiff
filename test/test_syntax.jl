@@ -129,7 +129,7 @@ end
 
     # Multiple indices gives multiple sums
     f, _ = @pct sum((i, j, k), i * j * k)
-    @test fc(f) == mul(var(:i_0, I()), var(:i_1, I()), var(:i_2, I()))
+    @test fc(fc(fc(f))) == mul(var(:i, I()), var(:j, I()), var(:k, I()))
 
     f, _ = @pct prod(i, i^2)
     @test f == pct_product(var(:i, I()), monomial(var(:i, I()), constant(2)))
@@ -155,20 +155,19 @@ end
     g = @pct _ ctx begin
         sum(i::I1, i*2)
     end
-    @test first(ff(g)) == var(:i_0, ctx[:I1])
+    @test ff(g) == var(:i, ctx[:I1])
 
     g = @pct _ ctx begin
         sum((i::I1, j::I2), i * j)
     end
 
-    @test first(ff(g)) == var(:i_0, ctx[:I1])
-    @test last(ff(g)) == var(:i_1, ctx[:I2])
+    @test ff(g) == var(:i, ctx[:I1])
+    @test ff(fc(g)) == var(:j, ctx[:I2])
 
     g = @pct _ ctx begin
         prod(i::I1, int(j::R1, i * j))
     end
 
-    @test first(ff(g)) == var(:i_1, ctx[:I1])
 end
 
 @testset "pullback" begin
@@ -204,7 +203,7 @@ end
         (A::S) -> _
     end
     g = @pct f ctx (i::I, j::I) -> delta(i, j, A(i, j))
-    @test fc(fc(g)) == delta(pct_vec(var(:i, I())), pct_vec(var(:j, I())), call(var(:A, ctx[:S]), var(:i, I()), var(:j, I())))
+    @test fc(fc(g)) == delta(var(:i, I()), var(:j, I()), call(var(:A, ctx[:S]), var(:i, I()), var(:j, I())))
 
     f, _ = @pct (i::C) -> i'
     @test fc(f) == conjugate(var(:i, C()))

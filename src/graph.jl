@@ -78,9 +78,15 @@ If there is no sink cluster: traverse the subgraph and
 """
 function spanning_tree!(n::APN, seen=PCTGraph())
     push!(nodes(seen), n)
+    #= println("pushing $(hashset(seen))") =#
     push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
     neighbor_list = neighbors(n)
+    #= for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        println("$(name): $(pretty(t))")
+        println(d)
+    end
+    println() =#
 
     #= println("num neighbors: $(length(neighbor_list))") =#
     reduced_list = Vector{Tuple{APN, Bool, String}}()
@@ -91,15 +97,11 @@ function spanning_tree!(n::APN, seen=PCTGraph())
     for (t, d, name) in reduced_list
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        if length(Set(dummy_vars(t))) < 4 
-            println(pretty(t))
-            println(name)
-        end
-         #= println(length(nodes(seen)), " ", name, )
+        println(length(nodes(seen)), " ", name, )
         println(pretty(n))
         println(pretty(t))
         d && println("directed!")
-        println() =#
+        println()
         sink, tree = spanning_tree!(t, seen)
         (d || sink) && return (true, tree)
     end

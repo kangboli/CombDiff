@@ -257,7 +257,7 @@ function parse_node(::Type{T}, d::Expr) where T <: AbstractDelta
     upper_nodes = map(n -> parse_node(Param, n), upper_params)
     lower_nodes = map(n -> parse_node(Param, n), lower_params)
     constructor = T == Delta ? :delta : :delta_not
-    return :($(constructor)(pct_vec($(upper_nodes...)), pct_vec($(lower_nodes...)), $(parse_node(d.args[4]))))
+    return :($(constructor)($(upper_nodes...), $(lower_nodes...), $(parse_node(d.args[4]))))
 end
 
 function parse_node(::Type{Conjugate}, c::Expr)

@@ -164,7 +164,7 @@ end
     @test fc(a) == pct_vec(var(:x), var(:y))
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(var(:q), var(:p))
+    @test fc(a2) == pct_vec(var(:p), var(:q))
 
     @test flatten_add(a) == content(fc(a))
 
@@ -191,7 +191,7 @@ end
     @test fc(a) == pct_vec(var(:x), var(:y))
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(var(:q), var(:p))
+    @test fc(a2) == pct_vec(var(:p), var(:q))
 
     @test flatten_mul(a) == content(fc(a))
 
@@ -214,11 +214,12 @@ end
 end
 
 @testset "contraction" begin
-    s = make_node(Sum, pct_vec(var(:i)), call(var(:x), var(:i)))
-    @test first(ff(s)) == var(:i, I()) # There is an default inference for sum
+    s = make_node(Sum, var(:i), call(var(:x), var(:i)))
+    @test ff(s) == var(:i, I()) # There is an default inference for sum
     @test fc(s) == call(var(:x), var(:i))
-    i = make_node(Integral, pct_vec(var(:x)), call(var(:f), var(:x)))
-    @test first(ff(i)) == var(:x, R())
+
+    i = make_node(Integral, var(:x), call(var(:f), var(:x)))
+    @test ff(i) == var(:x, R())
     @test fc(i) == call(var(:f), var(:x))
 
     # non-generic constructor.
@@ -230,30 +231,30 @@ end
 end
 
 @testset "product" begin
-    p = make_node(Prod, pct_vec(var(:i)), call(var(:x), var(:i)))
-    @test first(ff(p)) == var(:i, I())
+    p = make_node(Prod, var(:i), call(var(:x), var(:i)))
+    @test ff(p) == var(:i, I())
     @test fc(p) == call(var(:x), var(:i))
     @test p == pct_product(var(:i), call(var(:x), var(:i)))
 end
 
 @testset "Delta" begin
-    d = make_node(Delta, pct_vec(var(:i)), pct_vec(var(:j)), call(var(:x), var(:i), var(:j)))
-    @test first(upper(d)) == var(:i)
-    @test first(lower(d)) == var(:j)
+    d = make_node(Delta, var(:i), var(:j), call(var(:x), var(:i), var(:j)))
+    @test upper(d) == var(:i)
+    @test lower(d) == var(:j)
     @test fc(d) == call(var(:x), var(:i), var(:j))
 
-    d2 = set_content(d, pct_vec(var(:p)), pct_vec(var(:q)), call(var(:x), var(:p), var(:q)))
-    @test first(upper(d2)) == var(:p)
-    @test first(lower(d2)) == var(:q)
+    d2 = set_content(d, var(:p), var(:q), call(var(:x), var(:p), var(:q)))
+    @test upper(d2) == var(:p)
+    @test lower(d2) == var(:q)
     @test fc(d2) == call(var(:x), var(:p), var(:q))
 
-    d = delta(pct_vec(var(:p), var(:i)), pct_vec(var(:q), var(:j)), call(var(:A), var(:i), var(:j)))
+    d = delta(var(:i), var(:p), var(:j), var(:q), call(var(:A), var(:i), var(:j)))
 
-    @test first(upper(d)) == var(:p)
-    @test first(lower(d)) == var(:q)
+    @test upper(d) == var(:p)
+    @test lower(d) == var(:q)
 
-    @test last(upper(d)) == var(:i)
-    @test last(lower(d)) == var(:j)
+    @test upper(fc(d)) == var(:i)
+    @test lower(fc(d)) == var(:j)
 end
 
 @testset "conjugate" begin
@@ -264,7 +265,7 @@ end
     @test c2 == var(:x)
 
     c3 = make_node(Conjugate, var(:x, I()))
-    @test c3 == var(:x, I())
+    @test c3 == var(:x)
 
     c4 = conjugate(var(:y, C()))
 
