@@ -123,6 +123,8 @@ function parse_node(::Type{Domain}, n::Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = pairs[:base]
         lower, upper = parse_node(pairs[:lower]), parse_node(pairs[:upper])
+        periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
+        contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
     else
         base = n.args[3]
         lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
@@ -130,7 +132,10 @@ function parse_node(::Type{Domain}, n::Expr)
     return :(
         pct_push!(_ctx, $(QuoteNode(name)), inference(Domain(
             $(base)(), $(lower), $(upper),
-            Dict(:name => $(QuoteNode(name)))
+            meta = Dict(:name => $(QuoteNode(name)), 
+            :periodic => $(periodic),
+            :contractable => $(contractable)
+            )
         )); replace=true))
 end
 

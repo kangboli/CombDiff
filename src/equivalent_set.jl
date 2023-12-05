@@ -1,4 +1,4 @@
-export neighbors, NeighborList, directed, nodes
+export neighbors, NeighborList, directed, nodes, sub_neighbors
 
 using IterTools
 """
@@ -12,6 +12,7 @@ struct NeighborList
 end
 
 NeighborList() = NeighborList(Vector{APN}(), Vector{Bool}(), Vector{String}())
+Base.lastindex(n::NeighborList) = length(nodes(n))
 nodes(n::NeighborList) = n.nodes
 directed(n::NeighborList) = n.directed
 names(n::NeighborList) = n.names
@@ -47,14 +48,24 @@ function Base.show(io::IO, ::MIME"text/plain", n::NeighborList)
     print(io, pretty(n))
 end
 
-neighbors(_::Union{Var,Constant}) = NeighborList()
 
-function sub_neighbors(c::PrimitiveCall)
+function latex(n::NeighborList)
+    join(map((name, t) -> "$(name): $(latexstring(latex(t)))", names(n), nodes(n)), "\n")
+end
+
+function Base.show(io::IO, ::MIME"text/latex", n::NeighborList)
+    print(io, latex(n))
+end
+
+neighbors(::Union{Var,Constant}; settings=Dict{Symbol,Bool}()) =
+    NeighborList()
+
+function sub_neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     a = args(c)
 
     for i in 1:length(a)
-        neighbor_list = neighbors(a[i])
+        neighbor_list = neighbors(a[i], settings=settings)
         for (t, d, n) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(c, mapp(c), set_i(a, i, t)); dired=d, name=n)
         end
@@ -63,24 +74,26 @@ function sub_neighbors(c::PrimitiveCall)
     return result
 end
 
-function neighbors(c::PrimitiveCall)
+function neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
     result = NeighborList()
 
     function apply_symmetry(indices, op)
         new_term = set_content(c, mapp(c), args(c)[collect(indices)])
         op == :conj && return conjugate(new_term)
         op == :neg && return mul(constant(-1), new_term)
-        op == :ineg && return set_content(c, mapp(c), 
-        [mul(constant(-1), t) for t in args(c)[collect(indices)]])
-        op == :inegc && return conjugate(set_content(c, mapp(c), 
-        [mul(constant(-1), t) for t in args(c)[collect(indices)]]))
+        op == :ineg && return set_content(c, mapp(c),
+            [mul(constant(-1), t) for t in args(c)[collect(indices)]])
+        op == :inegc && return conjugate(set_content(c, mapp(c),
+            [mul(constant(-1), t) for t in args(c)[collect(indices)]]))
         return new_term
     end
 
-    append!(result, sub_neighbors(c))
+    append!(result, sub_neighbors(c; settings=settings))
 
-    for (indices, op) in symmetries(get_type(mapp(c)))
-        push!(result, apply_symmetry(indices, op), name="symmetry")
+    if settings !== nothing && get(settings, :symmetry, false)
+        for (indices, op) in symmetries(get_type(mapp(c)))
+            push!(result, apply_symmetry(indices, op); name="symmetry")
+        end
     end
 
     return result
@@ -123,6 +136,7 @@ function gcd_neighbors(terms::Vector)
             x_rem, y_rem, common = gcd(x, y)
 
             is_one(common) && continue
+            is_minus_one(common) && continue
             push!(result, add(mul(common, add(x_rem, y_rem)),
                     terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]...); name="gcd", dired=true)
         end
@@ -196,11 +210,11 @@ function add_delta_neighbors(terms::Vector)
     return result
 end
 
-function sub_neighbors(n::Union{Add,Mul})
+function sub_neighbors(n::Union{Add,Mul}; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     c = fc(n)
     for i = 1:length(c)
-        neighbor_list = neighbors(c[i])
+        neighbor_list = neighbors(c[i]; settings=settings)
         for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(n, set_i(c, i, t)); dired=d, name=s)
         end
@@ -221,14 +235,14 @@ function add_const_neighbors(terms)
 end
 
 
-function neighbors(a::Add)
+function neighbors(a::Add; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(a))
     append!(result, gcd_neighbors(terms))
     #= append!(result, add_sum_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
     #= append!(result, add_const_neighbors(terms)) =#
-    append!(result, sub_neighbors(a))
+    append!(result, sub_neighbors(a; settings=settings))
 
     return result
 end
@@ -317,7 +331,7 @@ function prod_const_neighbors(terms)
 end
 
 
-function neighbors(m::Mul)
+function neighbors(m::Mul; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(m))
     #= length(terms) == 1 && push!(result, first(terms); dired=true, name="mul_collapse") =#
@@ -328,7 +342,7 @@ function neighbors(m::Mul)
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
     #= append!(result, prod_const_neighbors(terms)) =#
-    append!(result, sub_neighbors(m))
+    append!(result, sub_neighbors(m; settings=settings))
 
     return result
 end
@@ -347,7 +361,7 @@ end
 
 
 
-function neighbors(m::Monomial)
+function neighbors(m::Monomial; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     b, p = base(m), power(m)
 
@@ -371,7 +385,7 @@ function sum_sym_neighbors(s::Sum)
 
     for v in content(ff(s))
         symmetric(get_type(v)) || continue
-        push!(result, set_content(s, subst(fc(s), v, mul(constant(-1), v))); name="sum_sym")
+        push!(result, pct_sum(content(ff(s))..., subst(fc(s), v, mul(constant(-1), v))); name="sum_sym")
     end
 
     return result
@@ -387,8 +401,9 @@ function sum_mul_neighbors(s::Sum)
     factors = Vector{APN}()
 
     for v in content(ff(s))
+        contains_name(fc(s), name(v)) && continue
         if isa(get_type(v), Domain)
-            push!(factors, add(upper(v), mul(constant(-1), lower(v))))
+            push!(factors, add(upper(get_type(v)), mul(constant(-1), lower(v))))
         else
             push!(i_rem, v)
         end
@@ -407,20 +422,43 @@ function sum_mul_neighbors(s::Sum)
     return result
 end
 
+"""
+sum(j, delta(i, j+k, A(i, j, k))) 
+sets j -> i - k
+"""
 function contract_delta_neighbors(s::Sum)
     result = NeighborList()
     d = fc(s)
     isa(d, Delta) || return result
 
     for (i, v) in enumerate(content(ff(s)))
+        is_contractable(get_type(v)) || continue
+        #= if (contains_name(v, :b))
+            println(get_type(v).meta)
+        end =#
         indices = content(remove_i(ff(s), i))
-        if v == upper(d)
+
+        this, other = if contains_name(upper(d), name(v))
+            upper(d), lower(d)
+        elseif contains_name(lower(d), name(v))
+            lower(d), upper(d)
+        else
+            continue
+        end
+
+        new = isa(this, Add) ?
+              add([mul(constant(-1), t) for t in content(fc(this))]...) :
+              mul(constant(-1), this)
+        new_sum = pct_sum(indices..., subst(fc(d), v, add(other, v, new)))
+        push!(result, new_sum; dired=true, name="contract_delta")
+
+        #= if v == upper(d)
             new_sum = pct_sum(indices..., subst(fc(d), v, lower(d)))
             push!(result, new_sum; dired=true, name="contract_delta")
         elseif v == lower(d)
             new_sum = pct_sum(indices..., subst(fc(d), v, upper(d)))
             push!(result, new_sum; dired=true, name="contract_delta")
-        end
+        end =#
     end
 
     return result
@@ -440,17 +478,89 @@ function sum_out_neighbors(s::Sum)
 
         for t in content(fc(mul_term))
             target = contains_name(t, name(v)) ? interior : exterior
-            push!(target)
+            push!(target, t)
         end
-
         isempty(exterior) && continue
         new_v = remove_i(ff(s), i)
-        new_sum = pct_sum(new_v, mul(exterior..., pct_sum(ff(s)[i], mul(interior))))
+        new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(ff(s)[i], mul(interior...))))
         push!(result, new_sum; dired=true, name="sum_out")
     end
 
     return result
 end
+
+"""
+sum(i, i * sum(j, A(i, j) * j)) = sum(j, j * sum(i, i * A(i, j)))
+"""
+
+function sum_exchange(s::Sum)
+    result = NeighborList()
+
+    mul_term = fc(s)
+    isa(mul_term, Mul) || return result
+    index_sum = findfirst(t -> isa(t, Sum), content(fc(mul_term)))
+    index_sum === nothing && return result
+    sum_term = content(fc(mul_term))[index_sum]
+    other_terms = content(fc(mul_term))[1:end.!=index_sum]
+    for (i, term_i) in enumerate(content(ff(s)))
+
+        function can_pullout(t::APN)
+            #= i in content(ff(sum_term)) ||  =#
+            !contains_name(t, name(term_i))
+        end
+
+        inner_terms = isa(fc(sum_term), Mul) ? content(fc(fc(sum_term))) : [fc(sum_term)]
+        exterior = filter(can_pullout, inner_terms)
+        interior = filter(t -> !can_pullout(t), inner_terms)
+        #= println(pretty(term_i))
+        println.(pretty.(inner_terms)) =#
+        isempty(exterior) && continue
+
+        function require_rename(t::T) where {T<:Var}
+            for o in other_terms
+                free, _ = free_and_dummy(o)
+                name(t) in name.(free) && return true
+            end
+            return false
+        end
+
+        symbols = new_symbol(s, num=count(require_rename, content(ff(sum_term))))
+        new_ff = Vector{Var}()
+        for t in content(ff(sum_term))
+            if require_rename(t)
+                new_var = var(pop!(symbols), get_type(t))
+                push!(new_ff, new_var)
+                update_term(s) = subst(s, t, new_var)
+                exterior = update_term.(exterior)
+            else
+                push!(new_ff, t)
+            end
+        end
+
+        new_sum = pct_sum(content(ff(s))[1:end.!=i]..., new_ff...,
+            mul(exterior..., pct_sum(term_i, mul(other_terms..., interior...))))
+        push!(result, new_sum; name="sum_exchange")
+    end
+    return result
+end
+
+
+
+function sum_out_delta(s::Sum)
+    result = NeighborList()
+    d = fc(s)
+    isa(d, Delta) || return result
+    for (i, v) in enumerate(content(ff(s)))
+        (contains_name(upper(d), name(v)) || contains_name(lower(d), name(v))) && continue
+        new_v = remove_i(ff(s), i)
+        new_sum = pct_sum(content(new_v)..., delta(upper(d), lower(d), pct_sum(ff(s)[i], fc(d))))
+        push!(result, new_sum; dired=true, name="sum_out_delta")
+    end
+
+    return result
+end
+
+
 
 """
 sum(i, sum(j, x(i, j))) -> sum((i, j), x(i, j))
@@ -460,7 +570,41 @@ function sum_merge_neighbors(s::Sum)
     isa(fc(s), Sum) || return result
 
     new_indices = pct_vec(vcat(content(ff(s)), content(ff(fc(s))))...)
-    push!(result, pct_sum(new_indices, fc(fc(s))); dired=true, name="sum_merge")
+    push!(result, pct_sum(content(new_indices)..., fc(fc(s))); dired=true, name="sum_merge")
+
+    return result
+end
+
+function find_shift(i::T, n::APN) where {T<:Var}
+    vcat([find_shift(i, t) for t in content(n)]...)
+end
+
+function find_shift(i::T, a::Add) where {T<:Var}
+    rest = collect(filter(t -> t != i, content(fc(a))))
+    num = length(content(fc(a))) - length(rest)
+    num > 0 || return invoke(find_shift, Tuple{T,APN}, i, a)
+    num > 1 && error("Unable to do multishift")
+    return [add(rest...)]
+end
+
+function find_shift(::T, ::S) where {T<:Var,S<:Union{Var,Constant}}
+    return Vector{APN}()
+end
+
+function sum_shift_neighbors(s::Sum)
+    result = NeighborList()
+
+    for i in content(ff(s))
+        is_periodic(get_type(i)) || continue
+        shifts = find_shift(i, fc(s))
+        unique!(shifts)
+        for shift in shifts
+            inv_shift = isa(shift, Add) ?
+                        [mul(constant(-1), t) for t in content(fc(shift))] :
+                        [mul(constant(-1), shift)]
+            push!(result, pct_sum(content(ff(s))..., subst(fc(s), i, add(i, inv_shift...))); name="shift")
+        end
+    end
 
     return result
 end
@@ -487,11 +631,11 @@ function set_at(v::Any, i::Integer, h)
     map(j -> j == i ? h : v[j], 1:length(v))
 end
 
-function sub_neighbors(n::APN)
+function sub_neighbors(n::APN; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     sub_terms = terms(n)
     for (i, t) in enumerate(sub_terms)
-        neighbor_list = neighbors(t)
+        neighbor_list = neighbors(t, settings=settings)
         for (h, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_terms(n, set_at(sub_terms, i, h)...); dired=d, name=s)
         end
@@ -499,15 +643,21 @@ function sub_neighbors(n::APN)
     return result
 end
 
-function neighbors(s::Sum)
+function neighbors(s::Sum; settings=Dict{Symbol,Bool}())
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
+    append!(result, sum_merge_neighbors(s))
     append!(result, sum_out_neighbors(s))
-    #= append!(result, sum_sym_neighbors(s)) =#
+    append!(result, sum_out_delta(s))
+    if settings !== nothing && get(settings, :symmetry, false)
+        append!(result, sum_shift_neighbors(s))
+        append!(result, sum_sym_neighbors(s))
+        append!(result, sum_exchange(s))
+    end
     append!(result, sum_mul_neighbors(s))
-    append!(result, sub_neighbors(s))
+    append!(result, sub_neighbors(s; settings=settings))
     #= isa(fc(s), Sum) && append!(result, sum_ex_neighbors(s)) =#
 
     return result
@@ -557,12 +707,12 @@ function prod_sum_neighbors(p::Prod)
 end
 
 
-function neighbors(p::Prod)
+function neighbors(p::Prod; settings=Dict{Symbol,Bool}())
     result = NeighborList()
 
-    neighbor_list = neighbors(fc(p))
-    for (t, s) in zip(nodes(neighbor_list), names(neighbor_list))
-        push!(result, set_content(p, t); name=s)
+    neighbor_list = neighbors(fc(p), settings=settings)
+    for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        push!(result, set_content(p, t); dired=d, name=s)
     end
 
     isa(fc(p), Prod) && append!(result, prod_ex_neighbors(p))
@@ -575,11 +725,11 @@ function neighbors(p::Prod)
 end
 
 
-function neighbors(d::Delta)
+function neighbors(d::Delta; settings=Dict{Symbol,Bool}())
     result = NeighborList()
-    neighbor_list = neighbors(fc(d))
-    for (t, s) in zip(nodes(neighbor_list), names(neighbor_list))
-        push!(result, delta(upper(d), lower(d), t); name=s)
+    neighbor_list = neighbors(fc(d); settings=settings)
+    for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        push!(result, delta(upper(d), lower(d), t); dired=dir, name=s)
     end
 
     if isa(fc(d), Delta)
@@ -597,15 +747,15 @@ function neighbors(d::Delta)
     return result
 end
 
-function neighbors(c::Conjugate)
+function neighbors(c::Conjugate; settings=Dict{Symbol,Bool}())
     result = NeighborList()
-    append!(result, sub_neighbors(c))
+    append!(result, sub_neighbors(c; settings=settings))
     return result
 end
 
-function neighbors(v::PCTVector)
+function neighbors(v::PCTVector; settings=Dict{Symbol,Bool}())
     all(t -> isa(t, Var), content(v)) && return NeighborList()
-    return sub_neighbors(v)
+    return sub_neighbors(v; settings=settings)
 end
 
 

@@ -7,7 +7,7 @@ struct SignatureTree <: APN
     subtrees::Vector{Pair{SignatureTree,Int}}
 end
 
-get_type(sig::SignatureTree) = sig.type
+get_type(sig::SignatureTree)::AbstractPCTType = sig.type
 node_type(sig::SignatureTree) = sig.node_type
 extra(sig::SignatureTree) = sig.extra
 subtrees(sig::SignatureTree) = sig.subtrees
@@ -61,27 +61,32 @@ function process_content!(sig::SignatureTree, index::S, c::Vector{T}, other_indi
 end
 
 function SignatureTree(index::S, summand::T, other_indices::Vector{R}) where {S<:Var,T<:APN,R<:Var}
-    sig = SignatureTree(get_type(index), T, nothing, Vector{SignatureTree}())
+    sig = SignatureTree(get_type(summand), T, nothing, Vector{SignatureTree}())
     process_content!(sig, index, content(summand), other_indices)
     return sig
 end
 
 function SignatureTree(index::S, call::T, other_indices::Vector{R}) where {S <: Var, T <: AbstractCall, R <: Var}
-    sig = SignatureTree(get_type(index), T, nothing, Vector{SignatureTree}())
+    sig = SignatureTree(get_type(call), T, nothing, Vector{SignatureTree}())
     process_content!(sig, index, [mapp(call), content(args(call))...], other_indices)
     return sig
 end
 
 function SignatureTree(index::S, summand::T, ::Vector{R}) where {S <: Var, T <: Var, R <: Var}
     
-    return SignatureTree(get_type(index), T, index == summand ? nothing : summand, Vector{SignatureTree}())
+    return SignatureTree(get_type(summand), T, index == summand ? nothing : summand, Vector{SignatureTree}())
+end
+
+function SignatureTree(::S, summand::Constant, ::Vector{R}) where {S <: Var, R <: Var}
+    
+    return SignatureTree(get_type(summand), Constant, summand, Vector{SignatureTree}())
 end
 
 const Commtative = Union{Mul, Add}
 
 function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     #= get_type(sig_1) == get_type(sig_2) || println(get_type(sig_1), " vs ",get_type(sig_2)) =#
-    get_type(sig_1) == get_type(sig_2) || return false
+    #= get_type(sig_1) == get_type(sig_2) || return false =#
     #= node_type(sig_1) == node_type(sig_2) || println(node_type(sig_1), " vs ",node_type(sig_2)) =#
     node_type(sig_1) == node_type(sig_2) || return false
 
@@ -92,21 +97,24 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     end =#
     trees_to_compare_1 = subtrees(sig_1)
     trees_to_compare_2 = subtrees(sig_2)
-    if node_type(sig_1) <: Commtative
-        trees_to_compare_1 = content(first(first.(trees_to_compare_1)))
-        trees_to_compare_2 = content(first(first.(trees_to_compare_2)))
-    end
+    length(trees_to_compare_1) == length(trees_to_compare_2) || return false
+    node_type(sig_1) <: Commtative || return trees_to_compare_1 == trees_to_compare_2
 
+    trees_to_compare_1 = content(first(first.(trees_to_compare_1)))
+    trees_to_compare_2 = content(first(first.(trees_to_compare_2)))
+    dict_1 = Dict{Any, Int}()
     for t in trees_to_compare_1
-        n_1 = count(n -> n == t, trees_to_compare_1)
-        n_2 = count(n -> n == t, trees_to_compare_2)
-        n_1 == n_2 || return false
+        dict_1[t] = 1 + get(dict_1, t, 0)
     end
 
-    #= for (t_1, t_2) in zip(trees_to_compare_1, trees_to_compare_2)
-        t_1 == t_2 || println(t_1, " vs ", t_2)
-        t_1 == t_2 || return false
-    end =#
+    dict_2 = Dict{Any, Int}()
+    for t in trees_to_compare_2
+        dict_2[t] = 1 + get(dict_2, t, 0)
+    end
+
+    for (k, v) in dict_1
+        dict_2[k] == v || return false
+    end
 
     return true
 end
@@ -117,12 +125,12 @@ function Base.hash(p::Pair{SignatureTree, Int})
 end
 
 function Base.hash(sig::SignatureTree)
-    own_hash = sum(hash, (get_type(sig), node_type(sig), hash(extra(sig))))
+    own_hash = sum(hash, (node_type(sig), hash(extra(sig))))
     trees_to_hash = sort(subtrees(sig), by=last)
     if node_type(sig)  <: Commtative
         trees_to_hash = content(first(first.(trees_to_hash)))
     end
-    return own_hash * sum(sort(hash.(trees_to_hash)), init=0)
+    return own_hash + sum(sort(hash.(trees_to_hash)), init=0)
 end
 
 

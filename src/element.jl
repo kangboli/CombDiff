@@ -71,7 +71,9 @@ function make_node(::Type{T}, terms::Vararg;
     type=UndeterminedPCTType()
 ) where {T<:APN}
 
-    S, terms, t = e_class_reduction(T, terms...)
+    reduced = e_class_reduction(T, terms...)
+    S, terms, t = reduced
+    #= S, terms, t = e_class_reduction(T, terms...) =#
     #= type == UndeterminedPCTType() && (type = partial_inference(S, terms...)) =#
     type == UndeterminedPCTType() && (type = t)
     node = S(type, terms...)
@@ -87,12 +89,13 @@ function e_class_reduction(::Type{T}, terms::Vararg) where {T<:APN}
     return T, collect(terms), partial_inference(T, terms...)
 end
 
+
 """
     get_type(n)
 
 Return the PCT type of `n`.
 """
-get_type(n::APN) = n.type
+get_type(n::APN)::AbstractPCTType = n.type
 
 
 """
@@ -116,9 +119,10 @@ terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[term_start:e
 
 Set the subterms of `n`.
 """
-function set_terms(n::T, new_terms...) where {T<:APN}
-    make_node(T, new_terms...; type=get_type(n))
+function set_terms(::T, new_terms...) where {T<:APN}
+    make_node(T, new_terms...)
 end
+
 
 """
     from_fields(T)
@@ -150,7 +154,7 @@ content(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, 
 
 Get the first field that is considered content.
 """
-fc(n::APN)::Union{APN,Number} = first(content(n))
+fc(n::APN)::Union{APN,Number,Symbol} = first(content(n))
 
 function set_pct_fields(n::T, fields::Vector{Symbol}, values...) where {T<:APN}
     isempty(values) && return n
@@ -179,6 +183,10 @@ end
 
 function set_type(n::Var{S}, new_type) where {S<:AbstractPCTType}
     return make_node(Var, terms(n)..., type=new_type)
+end
+
+function set_terms(n::T, new_terms...) where {T<:Var}
+    make_node(T, new_terms...; type=get_type(n))
 end
 
 
@@ -338,9 +346,6 @@ end
 get_call(n::PrimitiveCall) = n
 
 function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
-    #= if name(mapp) == :A
-        println(pretty(args))
-    end =#
     get_type(mapp) == UndeterminedPCTType() && return PrimitiveCall, [mapp, args], UndeterminedPCTType()
     # syms = symmetries(get_type(mapp))
 
@@ -411,8 +416,23 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     args_rest = filter(t -> !isa(t, Constant), args)
     args = [args_const, args_rest...]
     args = filter(t -> !is_zero(t), args)
-    isempty(args) && return Constant, [0], I()
+    term_dict = Dict{APN, Number}()
+    for a in args
+        isa(a, Constant) && (term_dict[constant(1)] = fc(a) + get(term_dict, constant(1), 0))
+        if isa(a, Mul) 
+            constant_term = filter(t->isa(t, Constant), content(fc(a)))
+            constant_term = isempty(constant_term) ? constant(1) : first(constant_term)
+            rest = mul(filter(t->!isa(t, Constant), content(fc(a)))...)
+            term_dict[rest] = fc(constant_term) + get(term_dict, rest, 0)
+        else
+            term_dict[a] = 1 + get(term_dict, a, 0)
+        end
+    end
+
+    args = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+
     sort!(args)
+    length(args) == 0 && return Constant, [0], I()
     length(args) == 1 && return typeof(first(args)), terms(first(args)), get_type(first(args))
     return Add, [pct_vec(args...)], partial_inference(Add, pct_vec(args...))
 end
@@ -474,54 +494,6 @@ struct Sum <: Contraction
     end
 end
 
-function renaming(original::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    std_vars = Vector{Var}()
-    for (s, t) in zip(new_symbol(tmp, num=l), get_type.(tmp_vars))
-        push!(std_vars, make_node(Var, s; type=t))
-    end
-
-    for (o, d) in zip(tmp_vars, std_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    return std_vars, tmp
-end
-
-function renaming(original::Vector{Var}, new::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    n = tmp
-    for (o, d) in zip(tmp_vars, new)
-        n = subst(n, o, d)
-    end
-
-    return n
-end
-
-
-
 struct Integral <: Contraction
     type::AbstractPCTType
     from::PCTVector
@@ -563,10 +535,12 @@ function pct_product(terms::Vararg{APN})
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
 
-function e_class_reduction(::Type{T}, from::PCTVector, summand::APN) where T <: Union{Contraction, Prod}
+function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: Union{Contraction, Prod}, S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
+
+    isempty(content(from)) && return S, terms(summand), get_type(summand)
     #= new_from = Vector{Var}()
     for v in variables(summand)
         name(v) in name.(new_from) && continue
@@ -649,6 +623,10 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
         new_const = fc(term)'
         return Constant, [new_const], partial_inference(Constant, new_const)
     end
+    if T <: Contraction
+        new_terms = [ff(term), conjugate(fc(term))]
+        return T, new_terms, partial_inference(T, new_terms...) 
+    end
     T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
     t in [I(), R()] && return T, terms(term), get_type(term)
     return Conjugate, [term], get_type(term)
@@ -683,3 +661,50 @@ struct Negate <: APN
 end
 
 
+#= function renaming(original::Vector{Var}, n::APN)
+    l = length(original)
+
+    tmp_vars = Vector{Var}()
+    for (i, t) in zip(1:l, get_type.(original))
+        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
+    end
+
+    tmp = n
+    for (o, d) in zip(original, tmp_vars)
+        tmp = subst(tmp, o, d)
+    end
+
+    std_vars = Vector{Var}()
+    for (s, t) in zip(new_symbol(tmp, num=l), get_type.(tmp_vars))
+        push!(std_vars, make_node(Var, s; type=t))
+    end
+
+    for (o, d) in zip(tmp_vars, std_vars)
+        tmp = subst(tmp, o, d)
+    end
+
+    return std_vars, tmp
+end
+
+function renaming(original::Vector{Var}, new::Vector{Var}, n::APN)
+    l = length(original)
+
+    tmp_vars = Vector{Var}()
+    for (i, t) in zip(1:l, get_type.(original))
+        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
+    end
+
+    tmp = n
+    for (o, d) in zip(original, tmp_vars)
+        tmp = subst(tmp, o, d)
+    end
+
+    n = tmp
+    for (o, d) in zip(tmp_vars, new)
+        n = subst(n, o, d)
+    end
+
+    return n
+end
+
+ =#

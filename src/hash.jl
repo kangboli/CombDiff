@@ -128,7 +128,7 @@ function Base.hash(n::T) where T <: Contraction
     #= return hash(ff(n)) + hash(fc(n)) + T.hash =#
 
     signatures = [SignatureTree(ff(n)[i], fc(n), content(ff(n))[1:end .!= i]) for i in 1:length(ff(n))]
-    println.(to_string.(signatures))
+    #= println.(to_string.(signatures)) =#
     dummy_removed = fc(n)
     for index in content(ff(n))
         dummy_removed = subst(dummy_removed, index, var(:dummy, get_type(index)))
@@ -141,8 +141,6 @@ function Base.hash(n::T) where T <: Contraction
     for (index, sig) in zip(content(ff(n)), signatures)
         replaced_expr = subst(replaced_expr, index, variable_map[sig])
     end
-    println(hash(replaced_expr))
-    println(hash.(signatures))
     return sum(sort(hash.(signatures))) + hash(replaced_expr)
 end
 

@@ -75,44 +75,47 @@ end
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
-function partial_inference(::Type{T}, terms...) where T <: PCTVector
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: PCTVector
     return VecType(get_type.([terms...]))
 end
 
-function partial_inference(::Type{Map}, terms...)
+function partial_inference(::Type{Map}, terms...)::AbstractPCTType
     from, content = terms
     return MapType(get_type(from), get_type(content))
 end
 
-partial_inference(::Type{T}, ::Symbol) where T <: Var = UndeterminedPCTType()
+function partial_inference(::Type{T}, ::Symbol)::AbstractPCTType where T <: Var 
+    UndeterminedPCTType()
+end
 
-function partial_inference(::Type{T}, terms...) where T <: AbstractCall
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
     #= return content(get_type([terms...][end-1])) =#
     return content(get_type(first(terms)))
 end
 
-function partial_inference(::Type{T}, term) where T <: Union{Add, Mul}
+function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where T <: Union{Add, Mul}
+    @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
 end
 
 
-function partial_inference(::Type{T}, terms...)  where T <: Contraction
+function partial_inference(::Type{T}, terms...)::AbstractPCTType  where T <: Contraction
     return get_type(last(terms))
 end
 
-function partial_inference(::Type{Prod}, terms...)  
+function partial_inference(::Type{Prod}, terms...)::AbstractPCTType  
     return get_type(last(terms))
 end
 
-partial_inference(::Type{Conjugate}, terms...) = get_type(last(terms))
+partial_inference(::Type{Conjugate}, terms...)::AbstractPCTType = get_type(last(terms))
 
-function partial_inference(::Type{Pullback}, mapp)
+function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     from_type = from(get_type(mapp))
     content_type = content(get_type(mapp))
     MapType(add_content(from_type, content_type), fc(from_type))
 end
 
-function partial_inference(::Type{PrimitivePullback}, v::Union{Var, Map})
+function partial_inference(::Type{PrimitivePullback}, v::Union{Var, Map})::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
     from_type = from(get_type(v))
     content_type = content(get_type(v))
@@ -121,19 +124,21 @@ end
 
 
 
-function partial_inference(::Type{Constant}, term)
+function partial_inference(::Type{Constant}, term)::AbstractPCTType
     isa(term, Int) && return I()
     isa(term, Real) && return R()
     isa(term, Complex) && return C()
 end
 
-function partial_inference(::Type{T}, terms...) where T <: AbstractDelta
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
     get_type(last(terms))
 end
 
 #= partial_inference(::Type{Negate}, term) = get_type(term) =#
 
-partial_inference(::Type{Monomial}, base::APN, power::APN) = escalate(get_type(base), get_type(power))
+function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCTType
+    escalate(get_type(base), get_type(power))
+end
 
 function inference(d::Domain)
     context = TypeContext()

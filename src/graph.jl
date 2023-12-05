@@ -76,12 +76,12 @@ If there is no sink cluster: traverse the subgraph and
     2. return the subgraph.
 
 """
-function spanning_tree!(n::APN, seen=PCTGraph())
+function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     push!(nodes(seen), n)
     #= println("pushing $(hashset(seen))") =#
     push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
-    neighbor_list = neighbors(n)
+    neighbor_list = neighbors(n; settings=settings)
     #= for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         println("$(name): $(pretty(t))")
         println(d)
@@ -93,16 +93,17 @@ function spanning_tree!(n::APN, seen=PCTGraph())
     @time for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         t in hashset(seen) || push!(reduced_list, (t, d, name))
     end
-
-    for (t, d, name) in reduced_list
+    
+    for (t, d, name) in sort(reduced_list, by=e->-e[2])
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
         println(length(nodes(seen)), " ", name, )
         println(pretty(n))
         println(pretty(t))
+        d || println("undirected")
         d && println("directed!")
         println()
-        sink, tree = spanning_tree!(t, seen)
+        sink, tree = spanning_tree!(t, seen; settings=settings)
         (d || sink) && return (true, tree)
     end
 
@@ -114,8 +115,8 @@ end
 
 
 
-function simplify(n::APN)
-    g = last(spanning_tree!(n))
+function simplify(n::APN; settings=Dict{Symbol, Bool}())
+    g = last(spanning_tree!(n; settings=settings))
     min_size = minimum(pct_size, nodes(g))
     smallest = Vector{APN}()
 
@@ -126,8 +127,8 @@ function simplify(n::APN)
     return smallest
 end
 
-function simplify(n::Map)
-    map(t->make_node(Map, ff(n), t), simplify(fc(n)))
+function simplify(n::Map; settings=Dict{Symbol, Bool}())
+    map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
 end
 
 

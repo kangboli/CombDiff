@@ -26,8 +26,8 @@ struct Domain <: ElementType
     meta::Dict
 end
 
-Domain(base::ElementType, lower::APN, upper::APN) = 
-    Domain(base, lower, upper, Dict()) 
+Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) = 
+    Domain(base, lower, upper, meta) 
 
 function symmetric(d::Domain)
     #TODO: Use equivalence instead of equality.
@@ -39,6 +39,19 @@ function symmetric(d::Domain)
 end
 
 symmetric(::ElementType) = false
+
+is_periodic(d::Domain) = haskey(d.meta, :periodic) && (d.meta[:periodic] == true)
+is_periodic(::ElementType) = false
+
+
+function is_contractable(d::Domain) 
+    if haskey(d.meta, :contractable) 
+        return d.meta[:contractable]
+    end
+    true
+end
+
+is_contractable(::ElementType) = true
 
 """
     name(d)
@@ -105,5 +118,6 @@ function escalate(element_types::Vararg)
     any(t->type_based(t, C()), element_types) && return C()
     any(t->type_based(t, R()), element_types) && return R()
     any(t->type_based(t, I()), element_types) && return I()
+    return UndeterminedPCTType()
 end
 

@@ -101,7 +101,60 @@ end
 end
 
 @testset "Wannier" begin
+    f, ctx = @pct begin 
 
+        @domain P begin
+            base = I
+            lower = -N
+            upper = N
+            periodic = true
+        end
+
+        @domain Q begin
+            base = I
+            lower = -N
+            upper = N
+            contractable = false
+        end
+
+        @space Mmn begin
+            type = (I, I, I, I) -> C
+            symmetries = (((2, 1, 4, 3), :conj), )
+        end
+
+        @space Sym begin
+            type = (I, ) -> C
+            symmetries = (((1, ), :ineg), )
+        end
+
+        @space Gauge begin
+            type = (I, I, I) -> C
+        end
+
+        @space Density begin
+            type = (I, I) -> C
+        end
+
+        #= @space SymC begin
+            type = (I, ) -> C
+            symmetries = (((1, ), :inegc), )
+        end =#
+
+        (S::Mmn, w::Sym) -> _
+    end
+
+    g = @pct f ctx pullback((U::Gauge) -> ((ρ::Density) -> sum((n::I, b::Q), ρ(n, b)' * ρ(n, b)))(
+        (n::I, b::Q) -> sum((k::P, p, q), U(p, n, k)' * S(p,q,k,k+b) * U(q, n, k+b))))
+    eval_all(g)
+    g_1 = fc(eval_all(reduce_pullback(eval_all(g))))
+    g_2 = eval_all(call(g_1, first(ff(g_1)), constant(1)))
+
+    g_3 = simplify(g_2) |> first
+    
+
+    fc(fc(g)) |> neighbors
+    fc(fc(g)) |> neighbors |> first |> first |> neighbors 
+    println(verbose(fc(fc(g))))
 
 end
 
