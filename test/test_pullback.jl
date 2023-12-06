@@ -106,7 +106,7 @@ end
         @domain P begin
             base = I
             lower = -N
-            upper = N
+            upper = N-1
             periodic = true
         end
 
@@ -148,9 +148,12 @@ end
     eval_all(g)
     g_1 = fc(eval_all(reduce_pullback(eval_all(g))))
     g_2 = eval_all(call(g_1, first(ff(g_1)), constant(1)))
+    @profview neighbors(fc(fc(g_2)))
 
-    g_3 = simplify(g_2) |> first
-    
+    @time g_3 = simplify(g_2) |> first
+    a, b = content(fc(first(fc(fc(g_3)))))
+    b_s = simplify(b, settings=Dict(:symmetry=>true))
+    g_4 = simplify(g_3, settings=Dict(:symmetry=>true))
 
     fc(fc(g)) |> neighbors
     fc(fc(g)) |> neighbors |> first |> first |> neighbors 

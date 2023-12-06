@@ -10,12 +10,21 @@ function Base.:(==)(n_1::R, n_2::S) where {R <: APN, S <: APN}
     return true
 end
 
-function Base.hash(n::APN)
-    prod(hash, terms(n))
+function Base.hash(n::T) where T <: APN
+    # sum(PCT.hash, terms(n))
+    trunc_hash(n, 3)
+end
+
+function trunc_hash(n::T, level=3) where T <: APN
+    result = T.hash
+    level == 0 && return result
+    return result + sum(trunc_hash(t, level-1) for t in terms(n))
 end
 
 Base.:(==)(t_1::T, t_2::T) where T <: ElementType = true
-Base.hash(::T) where T <: ElementType = T.hash
+# Base.hash(::T) where T <: ElementType = T.hash
+trunc_hash(::T, ::Int) where T <: ElementType = T.hash
+trunc_hash(n::Constant, ::Int) = hash(fc(n))
     
 
 function Base.:(==)(d_1::Domain, d_2::Domain)
@@ -33,9 +42,12 @@ function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: 
     name(n_1) == name(n_2) # && get_type(n_1) == get_type(n_2)
 end
 
-function Base.hash(v::Var{T}) where T <: AbstractPCTType
+# function Base.hash(v::Var{T}) where T <: AbstractPCTType
+#     return hash(name(v)) + T.hash
+#     # hash(get_type(v))
+# end
+function trunc_hash(v::Var{T}, ::Int) where T <: AbstractPCTType
     return hash(name(v)) + T.hash
-    # hash(get_type(v))
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
@@ -46,33 +58,41 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) && return true =#
     
     length(ff(n_1)) == length(ff(n_2)) || return false
-    signatures_1 = [SignatureTree(ff(n_1)[i], fc(n_1), content(ff(n_1))[1:end .!= i]) for i in 1:length(ff(n_1))]
-    signatures_2 = [SignatureTree(ff(n_2)[i], fc(n_2), content(ff(n_2))[1:end .!= i]) for i in 1:length(ff(n_2))]
+    # signatures_1 = [SignatureTree(ff(n_1)[i], fc(n_1), content(ff(n_1))[1:end .!= i]) for i in 1:length(ff(n_1))]
+    # set_1 = Set(signatures_1)
+    # signatures_2 = Vector{SignatureTree}()
+    # for i in 1:length(ff(n_2))
+    #     sig = SignatureTree(ff(n_2)[i], fc(n_2), content(ff(n_2))[1:end .!= i])
+    #     sig in set_1 || return false
+    #     push!(signatures_2, sig)
+    # end
 
     #= println(issetequal(Set(signatures_1), Set(signatures_2))) =#
     #= println(to_string(signatures_1[1]))
     println(to_string(signatures_2[1])) =#
 
-    Set(signatures_1) == Set(signatures_2) || return false
-    symbols = new_symbol(fc(n_1), fc(n_2), num=length(signatures_1))
-    variable_map = Dict(sig => var(s, t) for (sig, s, t) 
-        in zip(signatures_1, symbols, get_type.(content(ff(n_1)))))
-    for sig in signatures_1 
-        if !haskey(variable_map, sig)
-            println(hash(sig))
-            println.(hash.(signatures_1))
-        end
+    # Set(signatures_1) == Set(signatures_2) || return false
+    # println(Set(signatures!(n_1)) == Set(signatures!(n_2)))
+    Set(signatures!(n_1)) == Set(signatures!(n_2)) || return false
+    symbols = new_symbol(fc(n_1), fc(n_2), num=length(signatures!(n_1)))
+    variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols))
+
+    replaced_expr_1 = deepcopy(fc(n_1))
+    # replaced_expr_1 = soft_copy(fc(n_1), name.(content(ff(n_1))))
+    for (index, sig) in zip(content(ff(n_1)), signatures!(n_1))
+        replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
     end
-    replaced_expr_1 = fc(n_1)
-    for (index, sig) in zip(content(ff(n_1)), signatures_1)
-        replaced_expr_1 = subst(replaced_expr_1, index, variable_map[sig])
-    end
+    replaced_expr_1 = remake_node(replaced_expr_1)
 
 
-    replaced_expr_2 = fc(n_2)
-    for (index, sig) in zip(content(ff(n_2)), signatures_2)
-        replaced_expr_2 = subst(replaced_expr_2, index, variable_map[sig])
+    replaced_expr_2 = deepcopy(fc(n_2))
+    # replaced_expr_2 = soft_copy(fc(n_2), name.(content(ff(n_2))))
+    for (index, sig) in zip(content(ff(n_2)), signatures!(n_2))
+        replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
     end
+    replaced_expr_2 = remake_node(replaced_expr_2)
+    # println(pretty(replaced_expr_1))
+    # println(pretty(replaced_expr_2))
 
     return replaced_expr_1 == replaced_expr_2
     
@@ -102,7 +122,8 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     #= d = make_node(Var, Symbol(rand()); type=get_type(ff(n_1))) =#
 end
 
-function Base.hash(n::T) where T <: Contraction
+# function Base.hash(n::T) where T <: Contraction
+function trunc_hash(n::T, level=3) where T <: Contraction
     #= l = length(content(ff(n)))
 
     ds = Vector{Var}(undef, l)
@@ -126,47 +147,48 @@ function Base.hash(n::T) where T <: Contraction
 
 
     #= return hash(ff(n)) + hash(fc(n)) + T.hash =#
+    level == 0 && return T.hash
 
-    signatures = [SignatureTree(ff(n)[i], fc(n), content(ff(n))[1:end .!= i]) for i in 1:length(ff(n))]
+    # signatures = [SignatureTree(ff(n)[i], fc(n), content(ff(n))[1:end .!= i]) for i in 1:length(ff(n))]
     #= println.(to_string.(signatures)) =#
-    dummy_removed = fc(n)
+    dummy_removed = deepcopy(fc(n))
     for index in content(ff(n))
-        dummy_removed = subst(dummy_removed, index, var(:dummy, get_type(index)))
+        # dummy = var(:dummy, get_type(index))
+        dummy_removed = fast_rename!(dummy_removed, index, :dummy)
     end
-    symbols = new_symbol(dummy_removed, num=length(signatures))
-    variable_map = Dict(sig => var(s, t) for (sig, s, t) 
-        in zip(signatures, symbols, get_type.(content(ff(n)))))
+    symbols = new_symbol(dummy_removed, num=length(signatures!(n)))
+    variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n), symbols))
 
-    replaced_expr = fc(n)
-    for (index, sig) in zip(content(ff(n)), signatures)
-        replaced_expr = subst(replaced_expr, index, variable_map[sig])
+    replaced_expr = deepcopy(fc(n))
+    for (index, sig) in zip(content(ff(n)), signatures!(n))
+        # replaced_expr = subst(replaced_expr, index, variable_map[sig], true)
+        replaced_expr = fast_rename!(replaced_expr, index, variable_map[sig])
     end
-    return sum(sort(hash.(signatures))) + hash(replaced_expr)
+    return sum(hash.(signatures!(n))) + trunc_hash(replaced_expr, level-1)
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
     objectid(n_1) == objectid(n_2) && return true
     c_1, c_2 = content(fc(n_1)), content(fc(n_2))
     length(c_1) == length(c_2) || return false
-    for t in c_1
-        n_1 = count(n -> n == t, c_1)
-        n_2 = count(n -> n == t, c_2)
-        n_1 == n_2 || return false
-    end
-    return true
+    # return sort!(c_1) == sort!(c_2)
+    return c_1 == c_2
 end
 
 function Base.hash(n::T) where T <: Union{Mul, Add}
-    sorted_v = sort(content(fc(n)), by=hash)
-    return prod(hash, sorted_v) + T.hash
+    hashes = hash.(content(fc(n)))
+    # sorted_v = sort(, by=hash)
+    return sum(hashes) + T.hash
 end
 
 function Base.:(==)(v_1::VecType, v_2::VecType)
+    objectid(v_1) == objectid(v_2) && return true
     length(v_1) == length(v_2) &&
     all(i->content(v_1)[i] == content(v_2)[i], 1:length(v_1))
 end
 
 function Base.:(==)(m_1::MapType, m_2::MapType)
+    objectid(m_1) == objectid(m_2) && return true
     from(m_1) == from(m_2) && content(m_1) == content(m_2)
 end
 
@@ -198,6 +220,8 @@ function Base.isless(n_1::R, n_2::S) where {R <: APN, S <: APN}
     length(t_1) == length(t_2) || return length(t_1) < length(t_2) 
 
     for i = 1:length(t_1)
+        # hash(t_1[i]) == hash(t_2[i]) || return t_1[i] < t_2[i]
+        # t_1[i] != t_2[i] 
         t_1[i] == t_2[i] || return t_1[i] < t_2[i]
     end
 

@@ -6,6 +6,7 @@ using GraphPlot
 
 include("type.jl")
 include("element.jl")
+# include("soft_copy.jl")
 include("index_signature.jl")
 include("hash.jl")
 include("evaluation.jl")

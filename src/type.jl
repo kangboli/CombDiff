@@ -1,6 +1,7 @@
 export AbstractPCTType, MapType, VecType, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric
 
 abstract type AbstractPCTType end
+abstract type AbstractSignatureTree end
 
 """
 The most general and abstract node that represents anything in the theory.

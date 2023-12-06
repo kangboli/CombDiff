@@ -100,8 +100,8 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
         println(length(nodes(seen)), " ", name, )
         println(pretty(n))
         println(pretty(t))
-        d || println("undirected")
-        d && println("directed!")
+        d || println("notdirected")
+        d && println("yesdirected!")
         println()
         sink, tree = spanning_tree!(t, seen; settings=settings)
         (d || sink) && return (true, tree)
@@ -129,6 +129,10 @@ end
 
 function simplify(n::Map; settings=Dict{Symbol, Bool}())
     map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
+end
+
+function simplify(n::Add; settings=Dict{Symbol, Bool}())
+    simplify(add([simplify(t; settings=settings) for t in content(fc(n))]...))
 end
 
 

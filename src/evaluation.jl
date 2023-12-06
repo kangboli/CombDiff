@@ -16,30 +16,30 @@ function dummy_vars(m::Map)
 end =#
 
 function free_and_dummy(n::APN)
-    all_free, outer_dummy = Vector{Var}(), own_dummy(n)
+    all_free, outer_dummy = Set{Var}(), own_dummy(n)
     all_dummies = copy(outer_dummy)
     for t in content(n)
         free, dummy = free_and_dummy(t)
         free = filter(f -> !(name(f) in name.(outer_dummy)), free)
-        append!(all_free, free)
-        append!(all_dummies, dummy)
+        union!(all_free, free)
+        union!(all_dummies, dummy)
     end
     filter!(d -> !(name(d) in name.(all_free)), all_dummies)
     return all_free, unique(all_dummies)
 end
 
-free_and_dummy(::Constant) = Vector{Var}(), Vector{Var}()
-free_and_dummy(v::T) where {T<:Var} = Vector{Var}([v]), Vector{Var}()
+free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
+free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
 
-own_dummy(::APN) = Vector{Var}()
+own_dummy(::APN) = Set{Var}()
 function own_dummy(c::Contraction)
     #= any(t->isa(t, Add), content(ff(c))) && println(verbose(c)) =#
-    return Vector{Var}(content(ff(c)))
+    return Set{Var}(content(ff(c)))
 end
 function own_dummy(m::Map)
     extract_var(n::Var) = [n]
     extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
-    return Vector{Var}(vcat(map(extract_var, content(ff(m)))...))
+    return Set{Var}(vcat(map(extract_var, content(ff(m)))...))
 end
 
 
@@ -47,6 +47,22 @@ end
 variables(v::Var)::Vector{Var} = [v]
 variables(::Constant)::Vector{Var} = []
 variables(n::APN)::Vector{Var} = vcat(variables.(terms(n))...)
+
+function fast_rename!(n::T, old::Var, new::Symbol)::T where T <: APN
+    for t in terms(n)
+        fast_rename!(t, old, new) 
+    end
+    return n
+end
+
+function fast_rename!(n::Var, old::Var, new::Symbol)::Var
+    if name(n) == name(old) 
+        n.content = new
+    end
+    return n
+end
+
+fast_rename!(n::Constant, ::Var, ::Symbol)::Constant = n
 
 
 """
@@ -136,11 +152,11 @@ subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
 subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c
 
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
-    _, dummies = free_and_dummy(n)
-
-    !replace_dummy && name(old) in name.(dummies) && return n
-    n = resolve_conflict(n, old, new)
-
+    if !replace_dummy
+        _, dummies = free_and_dummy(n)
+        name(old) in name.(dummies) && return n
+        n = resolve_conflict(n, old, new)
+    end
 
     return reconstruct(n, old, new, replace_dummy) # set_terms(n, [subst(t, old, new) for t in terms(n)]...)
 end
@@ -160,22 +176,30 @@ The dummy variables are not allowed to be a `PrimitiveCall`, so
 we don't have to consider replacing the dummy variabless.
 """
 function subst(n::T, old::PrimitiveCall, new::APN, replace_dummy=false) where {T<:APN}
-    _, dummies = free_and_dummy(n)
+    if !replace_dummy
+        _, dummies = free_and_dummy(n)
 
-    name(mapp(old)) in name.(dummies) && return n
-    n = resolve_conflict(n, old, new)
+        name(mapp(old)) in name.(dummies) && return n
+        n = resolve_conflict(n, old, new)
+    end
 
     return set_terms(n, [subst(t, old, new, replace_dummy) for t in terms(n)]...)
     #= return subst(n, old, new) =#
 end
 
+"""
+If free variables of new collide with dummy variables in n
+replace the dummies with something new.
+sum(i, i * sum(j, A(i, j)))
+"""
 function resolve_conflict(n::T, old::APN, new::APN) where T <: APN
     conflict = Vector{Var}()
-    _, new_dummies = free_and_dummy(new)
-    old_dummies = last(free_and_dummy(n))
-    for d in old_dummies
-        name(d) in name.(new_dummies) && continue
-        contains_name(new, name(d)) && push!(conflict, d)
+    new_free, _ = free_and_dummy(new)
+    n_dummies = last(free_and_dummy(n))
+    for d in n_dummies
+        name(d) in name.(new_free) && push!(conflict, d)
+        # name(d) in name.(new_dummies) && continue
+        # contains_name(new, name(d)) && push!(conflict, d)
     end
     #= conflict = filter(d->contains_name(new, name(d)), dummy_vars(n)) =#
     isempty(conflict) && return n

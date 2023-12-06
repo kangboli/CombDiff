@@ -55,7 +55,7 @@ export Var,
     APN
 
 
-const term_start = 2
+term_start(n::APN) = 2
 
 """
     make_node(T, terms...,
@@ -89,6 +89,9 @@ function e_class_reduction(::Type{T}, terms::Vararg) where {T<:APN}
     return T, collect(terms), partial_inference(T, terms...)
 end
 
+function remake_node(n::T) where T <: APN
+    make_node(T, terms(n)...; type=get_type(n))
+end
 
 """
     get_type(n)
@@ -112,7 +115,7 @@ end
 
 Get the subterms of `n`.
 """
-terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[term_start:end])
+terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[term_start(n):end])
 
 """
     set_terms(n)
@@ -160,7 +163,7 @@ function set_pct_fields(n::T, fields::Vector{Symbol}, values...) where {T<:APN}
     isempty(values) && return n
     d = Dict(zip(fields, [values...]))
     take_field(f::Symbol) = get(d, f, getfield(n, f))
-    return set_terms(n, take_field.(fieldnames(T)[term_start:end])...)
+    return set_terms(n, take_field.(fieldnames(T)[term_start(n):end])...)
 end
 
 function set_content(n::T, new_content...) where {T<:APN}
@@ -430,7 +433,6 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     end
 
     args = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
-
     sort!(args)
     length(args) == 0 && return Constant, [0], I()
     length(args) == 1 && return typeof(first(args)), terms(first(args)), get_type(first(args))
@@ -480,9 +482,9 @@ function pct_sum(terms::Vararg)
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
 end
 
-
-struct Sum <: Contraction
+mutable struct Sum <: Contraction
     type::AbstractPCTType
+    signatures::Vector{AbstractSignatureTree}
     from::PCTVector
     content::APN
     function Sum(type, from::PCTVector, summand::APN)
@@ -490,8 +492,17 @@ struct Sum <: Contraction
         #= if get_type(content(from)) == UndeterminedPCTType()
             from = set_type(from, I())
         end =#
-        new(type, from, summand)
+        signatures = Vector{AbstractSignatureTree}()
+        new(type, signatures, from, summand)
     end
+end
+
+term_start(n::Contraction) = 3
+function signatures!(n::Contraction)
+    isempty(n.signatures) || return n.signatures
+    from, summand = ff(n), fc(n)
+    n.signatures = [SignatureTree(from[i], summand, content(from)[1:end .!= i]) for i in 1:length(from)]
+    return n.signatures
 end
 
 struct Integral <: Contraction
@@ -535,22 +546,15 @@ function pct_product(terms::Vararg{APN})
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
 
-function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: Union{Contraction, Prod}, S<:APN}
+function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: Contraction, S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
-    is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
-
+    # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
     isempty(content(from)) && return S, terms(summand), get_type(summand)
-    #= new_from = Vector{Var}()
-    for v in variables(summand)
-        name(v) in name.(new_from) && continue
-        i = findfirst(t->name(t) == name(v), content(from))
-        i === nothing && continue
-        push!(new_from, from[i])
+    if T == S 
+        new_from = pct_vec(content(from)..., content(ff(summand))...)
+        return T, [new_from, fc(summand)], partial_inference(Sum, new_from, fc(summand))
     end
-    new_from, summand = renaming(new_from, summand)
-    new_from = pct_vec(new_from...)
-    T, [new_from, summand], partial_inference(Sum, new_from, summand) =#
     T, [from, summand], partial_inference(Sum, from, summand)
 end
 
