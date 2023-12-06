@@ -21,7 +21,7 @@ that calls `make_node` underneath.
 ### `PCTVector`
 
 We use a `PCTVector` instead of the builtin vector in Julia. This reason is to
-make it a `APN` so that we can treat it as a node in the AST. This is
+make it a `APN` so that we can treat it as a node in the *AST*. This is
 impossible if we use Julia's builtin vector or subtype `AbstractVector`.
 A second reason is that we plan to use Julia vectors as "Static Vectors" in
 our theory so as to do symbolic linear algebra.

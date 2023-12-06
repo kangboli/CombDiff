@@ -83,16 +83,6 @@ Base.getindex(v::VecType, i::Int) = content(v)[i]
 fc(v::VecType) = first(content(v))
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(content(v)), t))
 
-#= function Base.append!(v_1::VecType, rest::Vararg{VecType})
-    append!(content(v_1), content.([rest...])...)
-    return v_1
-end
-
-function Base.push!(v_1::VecType, e::AbstractPCTType)
-    push!(content(v_1), e)
-    return v_1
-end =#
-
 
 struct MapType <: AbstractPCTType 
     from::VecType

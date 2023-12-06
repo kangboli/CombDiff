@@ -30,44 +30,6 @@ function PCTGraph(n::APN)
     return g
 end
 
-#= function spanning_tree!(n::APN, g=PCTGraph(n))
-
-    neighbor_list = neighbors(n)
-    #= neighbor_list = filter(((t, d), )->!(t in nodes(g)), collect(zip(nodes(neighbor_list), directed(neighbor_list)))) =#
-    #= index_n = findfirst(t->t==n, nodes(g)) =#
-    index_n = length(nodes(g))
-
-    for (t, d) in zip(nodes(neighbor_list), directed(neighbor_list))
-        #= !d && push!(edges(g), length(nodes(g))=>index_n) =#
-
-        if d
-            println("Directed!")
-            println("N:", pretty(n))
-            println()
-            (tree, _) = spanning_tree!(t, g)
-            #= println()
-            println("tree:", length(nodes(tree)))
-            println("t:", pretty(t)) =#
-            return (tree, true)
-        else
-            t in nodes(g) && continue
-            println("Undirected?")
-            push!(nodes(g), t)
-            push!(edges(g), index_n=>length(nodes(g)))
-            push!(edges(g), length(nodes(g))=>index_n) 
-            (tree, d) = spanning_tree!(t, g)
-            d && return (tree, d)
-        end
-    end
-
-    #= for (t, _) in neighbor_list
-        spanning_tree!(t, g)
-    end =#
-    #= println(pretty(g)) =#
-
-    return (g, false)
-end =#
-
 """
 
 If there is a sink cluster: return the sink cluster with a `true`.
@@ -78,17 +40,9 @@ If there is no sink cluster: traverse the subgraph and
 """
 function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     push!(nodes(seen), n)
-    #= println("pushing $(hashset(seen))") =#
     push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
     neighbor_list = neighbors(n; settings=settings)
-    #= for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
-        println("$(name): $(pretty(t))")
-        println(d)
-    end
-    println() =#
-
-    #= println("num neighbors: $(length(neighbor_list))") =#
     reduced_list = Vector{Tuple{APN, Bool, String}}()
     @time for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         t in hashset(seen) || push!(reduced_list, (t, d, name))
@@ -97,12 +51,7 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     for (t, d, name) in sort(reduced_list, by=e->-e[2])
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        println(length(nodes(seen)), " ", name, )
-        println(pretty(n))
-        println(pretty(t))
-        d || println("notdirected")
-        d && println("yesdirected!")
-        println()
+        log_edge(n, t, d, name, length(nodes(seen)))
         sink, tree = spanning_tree!(t, seen; settings=settings)
         (d || sink) && return (true, tree)
     end
@@ -110,9 +59,16 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     new_nodes = nodes(seen)[node_start:end]
     new_edges = edge_start == length(edges(seen)) ? Vector{Pair{Int, Int}}() : edges(seen)[edge_start+1:end]
     return false, PCTGraph(new_nodes, new_edges, hashset(seen))
-    #= return false, PCTGraph(new_nodes, new_edges, Set(new_nodes)) =#
 end
 
+function log_edge(n, t, d, name, i)
+    println(i, " ", name)
+    println(pretty(n))
+    println(pretty(t))
+    d || println("notdirected")
+    d && println("yesdirected!")
+    println()
+end
 
 
 function simplify(n::APN; settings=Dict{Symbol, Bool}())
@@ -123,7 +79,6 @@ function simplify(n::APN; settings=Dict{Symbol, Bool}())
     for n in nodes(g)
         pct_size(n) == min_size && push!(smallest, n)
     end
-    #= return filter(t->pct_size(t)==min_size, nodes(g)) =#
     return smallest
 end
 

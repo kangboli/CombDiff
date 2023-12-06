@@ -1,0 +1,665 @@
+"""
+sum((i::I1, j::I2), x(i, j)) + sum((p::I1, q::I3), y(p, q)) <-> 
+sum((i::I1), sum(j::I2, x(i, j)) + sum(q::I3, y(i, q)))
+"""
+function add_sum_neighbors(terms::Vector)
+    result = NeighborList()
+
+    for (i, x) in enumerate(terms)
+        for (j, y) in enumerate(terms)
+            i < j || continue
+            isa(x, Sum) && isa(y, Sum) || continue
+
+            common_x, common_y = Vector{Var}(), Vector{Var}()
+
+            y_rem = Vector{APN}(content(ff(y)))
+
+            for v in content(ff(x))
+                for (i, u) in enumerate(y_rem)
+                    get_type(v) == get_type(u) || continue
+                    push!(common_x, v)
+                    push!(common_y, u)
+                    deleteat!(y_rem, i)
+                    break
+                end
+            end
+
+            isempty(common_x) && continue
+
+            x_rem = filter(t -> !(t in common_x), content(ff(x)))
+            y_rem = filter(t -> !(t in common_y), content(ff(y)))
+
+            new_names = new_symbol(x, y, num=length(common_x))
+            new_vars = Vector{Var}([var(s, d) for (s, d) in zip(new_names, get_type.(common_x))])
+
+            new_x = renaming(common_x, new_vars, fc(x))
+            isempty(x_rem) || (new_x = pct_sum(x_rem..., new_x))
+
+            new_y = renaming(common_y, new_vars, fc(y))
+            isempty(x_rem) || (new_y = pct_sum(y_rem..., new_y))
+
+            new_sum = pct_sum(new_vars..., add(new_x, new_y))
+            new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
+
+            push!(result, add(new_sum, new_terms...); name="add_sum")
+        end
+    end
+    return result
+end
+
+function add_const_neighbors(terms)
+    result = NeighborList()
+    constants = filter(t -> isa(t, Constant), terms)
+    nonconstants = filter(t -> !isa(t, Constant), terms)
+    length(constants) > 1 || return result
+
+    new_const = make_node(Constant, sum(fc, constants))
+    push!(result, add(new_const, nonconstants...); dired=true, name="add_const")
+    return result
+end
+
+
+
+"""
+    e_class_reduction(T, terms)
+
+Reduce a term to one of the canonical ones within is e-class.
+"""
+function e_class_reduction(::Type{T}, terms::Vararg) where {T<:APN}
+    return T, collect(terms), partial_inference(T, terms...)
+end
+
+function e_class_reduction(::Type{PrimitiveCall}, mapp::T, args::PCTVector) where T <: APN
+    if T == Map
+        return Call, [mapp, args], partial_inference(Call, mapp, args)
+    end
+    return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
+end
+
+
+function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
+    get_type(mapp) == UndeterminedPCTType() && return PrimitiveCall, [mapp, args], UndeterminedPCTType()
+    syms = symmetries(get_type(mapp))
+
+    #= type = partial_inference(PrimitiveCall, mapp, args) =#
+    graph = dfs(PrimitiveCall(UndeterminedPCTType(), mapp, args), syms)
+    result = first(sort(graph, by=get_call))
+    return typeof(result), terms(result), partial_inference(typeof(result), terms(result)...)
+end
+
+
+function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
+    is_zero(base) && return Constant, [0], I()
+    is_zero(power) && return Constant, [1], I()
+    is_one(power) && return T, terms(base), get_type(base)
+    isa(base, Constant) && isa(power, Constant) && return Constant, [fc(base)^fc(power)], partial_inference(Constant, [fc(base)^fc(power)])
+    return Monomial, [base, power], partial_inference(Monomial, base, power)
+end
+
+function e_class_reduction(::Type{Add}, term::PCTVector)
+    args = vcat(flatten_add.(content(term))...)
+    args = filter(t -> !is_zero(t), args)
+    isempty(args) && return Constant, [0], I()
+    sort!(args)
+    length(args) == 1 && return typeof(first(args)), terms(first(args)), get_type(first(args))
+    return Add, [pct_vec(args...)], partial_inference(Add, pct_vec(args...))
+end
+
+
+function e_class_reduction(::Type{Mul}, term::PCTVector)
+    args = vcat(flatten_mul.(content(term))...)
+    args = filter(t -> !is_one(t), args)
+    n_negative = count(is_minus_one, args)
+    args = filter(t -> !is_minus_one(t), args)
+    n_negative % 2 == 1 && pushfirst!(args, constant(-1))
+    any(is_zero, args) && return Constant, [0], I()
+    isempty(args) && return Constant, [1], I()
+    sort!(args)
+    if length(args) == 1
+        return typeof(first(args)), terms(first(args)), get_type(first(args))
+    end
+    return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
+end
+
+function e_class_reduction(::Type{T}, from::PCTVector, summand::APN) where T <: Union{Contraction, Prod}
+    isempty(content(from)) && return typeof(summand), [terms(summand)...], get_type(summand)
+    is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
+    is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
+    #= new_from = Vector{Var}()
+    for t in content(from)
+        !(t in new_from) && push!(new_from, t)
+    end =#
+    #= new_from, summand = renaming(new_from, summand) =#
+    #= new_from = pct_vec(new_from...) =#
+    new_from = from
+    T, [new_from, summand], partial_inference(Sum, new_from, summand)
+end
+
+function e_class_reduction(::Type{T}, upper::PCTVector, lower::PCTVector, inner::R) where {T <: AbstractDelta, R <: APN}
+
+    pair_sets = Vector{Set{APN}}()
+    pairs = Vector{Pair{APN, APN}}()
+
+    for (u, l) in zip(content(upper), content(lower))
+        u == l && continue
+        next_pair = Set([u, l])
+        next_pair in pair_sets && continue
+        push!(pair_sets, next_pair)
+        push!(pairs , u=>l)
+    end
+
+    new_upper, new_lower = first.(pairs), last.(pairs)
+    isempty(new_upper) && return R, terms(inner), get_type(inner)
+     
+    new_upper = pct_vec(new_upper...)
+    new_lower = pct_vec(new_lower...)
+
+    return T, [new_upper, new_lower, inner], partial_inference(T, new_upper, new_lower, inner)
+end
+
+
+function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
+    t = get_type(term)
+    if T == Mul
+        sub_terms = pct_vec(map(conjugate, content(fc(term)))...)
+        return Mul, [sub_terms], partial_inference(Mul, sub_terms)
+    end
+    if T == Constant
+        new_const = fc(term)'
+        return Constant, [new_const], partial_inference(Constant, new_const)
+    end
+    T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
+    t in [I(), R()] && return T, terms(term), get_type(term)
+    return Conjugate, [term], get_type(term)
+end
+
+function soft_copy(n::T, symbols::Vector{Symbol}) where T <: APN
+    any(s->contains_name(n, s), symbols) || return n
+    return make_node(T, [soft_copy(t, symbols) for t  in terms(n)]...; type=get_type(n))
+end
+
+function soft_copy(n::Union{Number, Symbol}, ::Vector{Symbol})
+    return n
+end
+
+export @cascade, combine_add,  delta_reduce, delta_reducible
+
+macro cascade(f)
+    esc(:(begin
+        PCT.$(f)(n::APN) = set_terms(n, map(PCT.$(f), terms(n))...)
+        PCT.$(f)(t::TerminalNode) = t
+    end))
+end
+
+function combine_add(s::Add)
+    d = Dict()
+    one = make_node(Constant, 1)
+    process_term!(t::APN) = d[t] = get!(d, t, 0) + 1
+    process_term!(c::Constant) = d[one] = get!(d, c, 0) + content(c)
+    process_term!(m::Mul) = let (c, n) = split_constant(m)
+        d[n] = get!(d, n, 0) + content(c)
+    end
+    map(process_term!, content(s))
+    filter!(((k, v),)->abs(v) > 1e-7, d)
+
+    mul_term(k, v) = v == 1 ? k : mul(make_node(Constant, v), k)
+    add([combine_add(mul_term(k, v)) for (k, v) in d]...)
+end
+
+@cascade combine_add
+
+minimize_node!(n::Var) = n
+
+delta_reducible(i::Var, n::APN) = any(t->delta_reducible(i, t), content(n))
+
+function delta_reducible(i::Var, n::Contraction) 
+    i  == ff(n) && return false
+    return invoke(delta_reducible, Tuple{Var, APN}, i, n)
+end
+
+function delta_reducible(i::Var, d::Delta)
+    any(t->contains_name(t, name(i)), [lower(d), upper(d)]) && return true
+    return invoke(delta_reducible, Tuple{Var, APN}, i, d)
+end
+
+function delta_reducible(i::Var, m::Map)
+    (i  in content(ff(m))) && return false
+    return invoke(delta_reducible, Tuple{Var, APN}, i, m)
+end
+
+delta_reducible(::Var, ::AbstractCall) = false
+
+delta_reducible(::Var, ::TerminalNode) = false
+
+delta_reducible(::Var, ::Pullback) = error("Pullbacks should be evaluated before minimization.")
+
+delta_reducible(::Var, ::PrimitivePullback) = false
+
+delta_reduce(i::Var, n::Union{PrimitiveCall, TerminalNode}, ::Type{T}) where T <: Contraction =
+    make_node(T,  make_node(PCTVector, i), n)
+
+"""
+Assume at least one of the terms is reducible.
+"""
+function delta_reduce(i::Var, n::Add, ::Type{T}) where T <: Contraction
+    reduce_if_reducible(n::APN) = delta_reducible(i, n) ? delta_reduce(i, n, T) : make_node(T, make_node(PCTVector, i), n)
+    set_content(n, make_node(PCTVector, map(reduce_if_reducible, content(fc(n)))...))
+end
+
+"""
+Assume at least one of the terms is reducible.
+"""
+function delta_reduce(i::Var, m::Mul, ::Type{T}) where T <: Contraction
+    reduce_if_reducible(n::APN) = delta_reducible(i, n) ? delta_reduce(i, n, T) : n 
+    set_content(m, make_node(PCTVector, map(reduce_if_reducible, content(fc(m)))...))
+end
+
+
+function delta_reduce(i::Var, d::Delta, ::Type{T}) where T <: Contraction
+    (i == upper(d) || i == lower(d)) || 
+    return make_node(Delta, upper(d), lower(d), delta_reduce(i, last(content(d)), T))
+
+    j = i == upper(d) ? lower(d) : upper(d)
+
+    return  subst(last(content(d)), i, j)
+end
+
+function delta_reduce(i::Var, n::APN, ::Type{T}) where T <: Contraction
+    set_content(n, delta_reduce(i, fc(n), T))
+end
+
+
+function delta_reduce(c::T) where T <: Contraction
+    reduced_content = delta_reduce(fc(c))
+    delta_reducible(ff(c), reduced_content) || return set_content(c, reduced_content)
+    return delta_reduce(ff(c), reduced_content, T)
+end
+
+
+function delta_reduce(n::APN)
+    #= println.(pretty.(map(delta_reduce, content(n)))) =#
+    set_content(n, map(delta_reduce, content(n))...)
+end
+
+delta_reduce(n::TerminalNode) = n
+    
+# function apply_symmetry(indices::Vector{Int}, op::Symbol, n::APN)
+#     return set_content(n, map(t->apply_symmetry(indices, op, t), content(n))...)
+# end
+
+# function apply_symmetry(indices::Vector{Int}, op::Symbol, n::PrimitiveCall)
+#     new_term = PrimitiveCall(get_type(n), mapp(n), args(n)[collect(indices)])
+#     op == :conj && return conjugate(new_term)
+#     op == :neg && return mul(constant(-1), new_term)
+#     return new_term
+# end
+
+# function dfs(n::APN, syms, sym_graph = Vector{APN}([n]))
+#     neighbors = Vector{APN}()
+#     for (indices, op) in syms
+#         neighbor = apply_symmetry([indices...], op, n)
+#         neighbor in sym_graph && continue
+#         push!(neighbors, neighbor)
+#     end
+#     append!(sym_graph, neighbors)
+
+#     for b in neighbors
+#         dfs(b, syms, sym_graph)
+#     end
+#     return sym_graph
+# end
+
+# syms = symmetries(get_type(mapp))
+
+# #= type = partial_inference(PrimitiveCall, mapp, args) =#
+# graph = dfs(PrimitiveCall(UndeterminedPCTType(), mapp, args), syms)
+# #= println(join(pretty.(graph), "\n")) =#
+# result = first(sort(graph, by=get_call))
+
+#= function sum_ex_neighbors(s::Sum)
+    result = NeighborList()
+    i, j = ff(s), ff(fc(s))
+    push!(result, pct_sum(j, pct_sum(i, fc(fc(s)))); name="sum_ex")
+    return result
+end =#
+
+
+
+#= is_zero(fc(s)) && push!(result, constant(0); dired=true, name="sum_of_zero") =#
+#= push!(result, mul(range, fc(s)); dired=true, name="sum_mul") =#
+
+    #= for (i, t) in enumerate(terms)
+        new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
+        push!(result, add(make_node(Sum, ff(s), t), make_node(Sum, ff(s), add(new_terms...))); name="sum_dist")
+    end =#
+
+#= dummy_vars(::APN) = Vector{APN}()
+
+dummy_vars(c::Contraction) = content(ff(c))
+
+function dummy_vars(m::Map)
+    extract_var(n::Var) = [n]
+    extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
+    vcat(dummy_vars(fc(m)), map(extract_var, content(ff(m)))...)
+end =#
+
+    #= get_type(n) == get_type(old) || error("type mismatch: $(get_type(n)) vs $(get_type(old))") =#
+ # set_terms(n, [subst(t, old, new) for t in terms(n)]...)
+
+    #= return subst(n, old, new) =#
+
+        # name(d) in name.(new_dummies) && continue
+        # contains_name(new, name(d)) && push!(conflict, d)
+
+    #= conflict = filter(d->contains_name(new, name(d)), dummy_vars(n)) =#
+
+
+    #= f_1, f_2 = ff(n_1), ff(n_1) =#
+    #= get_type(f_1) == get_type(f_2) || return false =#
+    #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) && return true =#
+    
+#= function spanning_tree!(n::APN, g=PCTGraph(n))
+
+    neighbor_list = neighbors(n)
+    #= neighbor_list = filter(((t, d), )->!(t in nodes(g)), collect(zip(nodes(neighbor_list), directed(neighbor_list)))) =#
+    #= index_n = findfirst(t->t==n, nodes(g)) =#
+    index_n = length(nodes(g))
+
+    for (t, d) in zip(nodes(neighbor_list), directed(neighbor_list))
+        #= !d && push!(edges(g), length(nodes(g))=>index_n) =#
+
+        if d
+            println("Directed!")
+            println("N:", pretty(n))
+            println()
+            (tree, _) = spanning_tree!(t, g)
+            #= println()
+            println("tree:", length(nodes(tree)))
+            println("t:", pretty(t)) =#
+            return (tree, true)
+        else
+            t in nodes(g) && continue
+            println("Undirected?")
+            push!(nodes(g), t)
+            push!(edges(g), index_n=>length(nodes(g)))
+            push!(edges(g), length(nodes(g))=>index_n) 
+            (tree, d) = spanning_tree!(t, g)
+            d && return (tree, d)
+        end
+    end
+
+    #= for (t, _) in neighbor_list
+        spanning_tree!(t, g)
+    end =#
+    #= println(pretty(g)) =#
+
+    return (g, false)
+end =#
+    # signatures_1 = [SignatureTree(ff(n_1)[i], fc(n_1), content(ff(n_1))[1:end .!= i]) for i in 1:length(ff(n_1))]
+    # set_1 = Set(signatures_1)
+    # signatures_2 = Vector{SignatureTree}()
+    # for i in 1:length(ff(n_2))
+    #     sig = SignatureTree(ff(n_2)[i], fc(n_2), content(ff(n_2))[1:end .!= i])
+    #     sig in set_1 || return false
+    #     push!(signatures_2, sig)
+    # end
+
+    #= println(issetequal(Set(signatures_1), Set(signatures_2))) =#
+    #= println(to_string(signatures_1[1]))
+    println(to_string(signatures_2[1])) =#
+
+    # Set(signatures_1) == Set(signatures_2) || return false
+    # println(Set(signatures!(n_1)) == Set(signatures!(n_2)))
+
+    #= ff(n_1) == ff(n_2) && fc(n_1) == fc(n_2) =#
+    #= f_1 == f_2 && return fc(n_1) == fc(n_2) =#
+    #= return false =#
+    #= num_1 = length(f_1) =#
+
+    #= ds = Vector{Var}(undef, num_1)
+    d_symbols = new_symbol(n_1, n_2, num=num_1)
+    for (i, s, t) in zip(1:num_1, d_symbols, get_type.(f_1))
+        ds[i] = make_node(Var, s; type=t)
+    end
+
+    s_1 = fc(n_1)
+    for (o, d) in zip(f_1, ds)
+        s_1 = subst(s_1, o, d)
+    end
+
+    s_2 = fc(n_2)
+    for (o, d) in zip(f_1, ds)
+        s_2 = subst(s_2, o, d)
+    end =#
+
+    #= return s_1 == s_2 =#
+    #= d = make_node(Var, Symbol(rand()); type=get_type(ff(n_1))) =#
+
+# function Base.hash(n::T) where T <: Contraction
+
+    #= l = length(content(ff(n)))
+
+    ds = Vector{Var}(undef, l)
+    for (i, t) in zip(1:l, get_type.(content(ff(n))))
+        ds[i] = make_node(Var, Symbol(string("_tmp_", i)); type=t)
+    end
+
+    tmp = fc(n)
+    for (o, d) in zip(content(ff(n)), ds)
+        tmp = subst(tmp, o, d)
+    end
+
+    es = Vector{Var}(undef, l)
+    for (i, s, t) in zip(1:l, new_symbol(tmp, num=length(ff(n))), get_type.(content(ff(n))))
+        es[i] = make_node(Var, s; type=t)
+    end
+
+    for (o, d) in zip(content(ff(n)), es)
+        tmp = subst(tmp, o, d)
+    end =#
+    #= return hash(ff(n)) + hash(fc(n)) + T.hash =#
+    # signatures = [SignatureTree(ff(n)[i], fc(n), content(ff(n))[1:end .!= i]) for i in 1:length(ff(n))]
+    #= println.(to_string.(signatures)) =#
+        # dummy = var(:dummy, get_type(index))
+
+# function tree_bfs(sig::SignatureTree, nodes=Dict{Int,Vector{Pair{Type,Int}}}(0 => [node_type(sig) => 1]), level=0)
+#     for (t, i) in subtrees(sig)
+#         nodes[level+1] = push!(get(nodes, level + 1, Vector{Pair{Type,Int}}()), node_type(t) => i)
+#     end
+
+#     for (t, _) in subtrees(sig)
+#         tree_bfs(t, nodes, level + 1)
+#     end
+#     return nodes
+# end
+
+
+#= evaluate_pullback(n::APN) = set_terms(n, evaluate_pullback.(terms(n))...)
+
+evaluate_pullback(n::TerminalNode) = n
+
+function evaluate_pullback(p::Pullback)
+    mapp = fc(p)
+    is_univariate(mapp) || return evaluate_pullback(p, MapType)
+    if get_type(fc(mapp)) == MapType
+        return parametrization(p)
+    else
+        return pullback(fc(ff(mapp)), fc(mapp))
+    end
+end
+function parametrization(p::Pullback)
+    mapp = fc(p)
+
+    z = fc(ff(mapp))
+    k = make_node(Var, :_K; type=get_type(fc(mapp)))
+
+    result_map_type = get_type(fc(mapp))
+    sum_types = content(from(result_map_type))
+    sum_index_symbols = new_symbol(p, z, k; num=length(sum_types))
+    b = map((s, t) -> var(s, t), sum_index_symbols, content(sum_types))
+
+    fb = call(fc(mapp), b...)
+    kb = call(k, b...)
+
+    return pct_map(z, k, pct_sum(b..., call(pullback(z,  fb), z, kb)))
+end
+
+function evaluate_pullback(p::Pullback, ::Type{MapType})
+    mapp = fc(p)
+    length(ff(mapp)) > 1 && error("Multivariate tensor pullbacks are not supported.")
+    z = fc(ff(mapp))
+    k = make_node(Var, :_K; type=get_type(fc(mapp)))
+    a_types = from(get_type(z))
+    a_index_symbols = new_symbol(p, z, k; num=length(a_types))
+    a = map((s, t) -> var(s, t), a_index_symbols, content(a_types))
+
+    if isa(get_type(fc(mapp)), MapType)
+        return functor(p, z, k, a)
+    else
+        return functional(p, z, k, a)
+    end
+end
+
+"""
+(z, k) -> (z...) ->
+"""
+function functional(p, z, k, z_vars)
+    mapp = fc(p)
+    #= z_vars = make_node(PCTVector, z_vars...) =#
+    return pct_map(z, k, pct_map(z_vars...,
+        call(pullback(call(z, z_vars...), fc(mapp)), call(z, z_vars...), k)))
+end
+
+function functor(p, z, k, a)
+    mapp = fc(p)
+    result_map_type = get_type(fc(mapp))
+    sum_types = content(from(result_map_type))
+    sum_index_symbols = new_symbol(p, z, k, a...; num=length(sum_types))
+
+    b = map((s, t) -> var(s, t), sum_index_symbols, content(sum_types))
+
+    #= z_vars = make_node(PCTVector, z_vars...)
+    sum_vars = make_node(PCTVector, sum_vars...) =#
+    za = call(z, a...)
+    fb = call(fc(mapp), b...)
+    kb = call(k, b...)
+    return pct_map(z, k, pct_map(a..., pct_sum(b..., call(pullback(pct_map(za, fb))), za, kb)))
+
+end
+
+
+struct ElementWise end
+
+# Univariate pullbacks
+
+function pullback(z::Var, ov::Var)
+    k = make_node(Var, :_K; type=get_type(ov))
+    if name(z) == name(ov)
+        #= base(get_type(iv)) == base(get_type(ov)) ||
+            error("type mismatch: $(get_type(iv)) vs $(get_type(ov))") =#
+        return pct_map(z, k, k)
+    end
+    return pct_map(z, k, constant(0))
+end
+
+function pullback(z::Var, ov::Monomial)
+    k = var(:_K, get_type(ov))
+    ph = pullback(z, base(ov))
+    contains_name(power(ov), name(z)) && error("x^x is not supported")
+    pg = mul(power(ov), conjugate(monomial(base(ov), add(power(ov), constant(-1)))), k)
+    pct_map(z, k, call(ph, z, pg))
+end
+
+
+function pullback(z::Var, ov::Conjugate)
+    k = var(:_K, get_type(ov))
+    ph = pullback(z, fc(ov))
+    pct_map(z, k, call(ph, z, conjugate(k)))
+end
+
+
+function pullback(z::APN, ov::Add)
+    k = var(:_K, get_type(ov))
+    terms = map(c -> call(pullback(z, c), z, k), content(fc(ov)))
+    pct_map(z, k, add(terms...))
+end
+
+
+function pullback(z::APN, ov::Mul)
+    k = var(:_K, get_type(ov))
+    terms::PCTVector = fc(ov)
+    t1 = fc(terms)
+    rest = length(terms) > 2 ? mul(content(terms)[2:end]...) : last(terms)
+
+    arg_1 = mul(conjugate(rest), k)
+    arg_2 = mul(conjugate(t1), k)
+    term_1 = call(pullback(z, t1), z, arg_1)
+    term_2 = call(pullback(z, rest), z, arg_2)
+    pct_map( z, k, add(term_1, term_2))
+end
+
+"""
+
+pullback(iv->(ff->fc)(y(a...))) = (iv, k) -> ∑(a, pullback(iv->a)(iv, pullback(ff->fc)(a..., k))
+"""
+function pullback(z::APN, ov::Call)
+    k = make_node(Var, :_K; type=get_type(ov))
+    g = mapp(ov)
+    #= inner_pullback = call(pullback(ff(g), fc(g)), args(ov)..., k) =#
+    hz = content(args(ov))
+    pg = map(a->call(pullback(a, fc(g)), hz..., k), content(ff(g)))
+    pct_map(z, k, add(map(a -> call(pullback(z, a), z, pg...), hz)...))
+end
+
+"""
+    pullback(iv, ov)
+
+The pullback between two primitive calls.
+
+pullback(x(i)->x(j)) = (iv, k) -> δ(i, j, k)
+
+pullback(x(i)->y(j)) = (iv, k) -> 0
+
+Not working/tested.
+pullback(x(i)->y(a(x))) = (iv, k) -> ∑(a, P(x->a(x))(iv, P(y)(x(j), k))
+"""
+function pullback(iv::PrimitiveCall, ov::PrimitiveCall)
+    k = make_node(Var, :_K; type=get_type(ov))
+
+    if name(mapp(iv)) == name(mapp(ov))
+        for (a_1, a_2) in zip(get_type.(content(args(iv))), get_type.(content(args(ov))))
+            base(a_1) == base(a_2) || error("type mismatch: $(a_1) vs $(a_2)")
+        end
+        return pct_map(iv, k, delta(content(args(iv))..., content(args(ov))..., k))
+    end
+
+    contains_name(ov, name(mapp(iv))) || return pct_map(iv, k, constant(0))
+
+    inner_pullback = call(pullback(mapp(ov)), content(args(ov))..., k)
+
+    pct_map(iv, k, map(a -> call(pullback(iv, a), iv, inner_pullback), content(args(ov)))...)
+end
+
+"""
+    pullback(iv, ov)
+
+Univariate pullback of a contraction.
+
+pullback(iv->∑(ff, fc)) =
+    (iv, k) -> ∑(ff, pullback(iv->fc)(iv, k))
+"""
+function pullback(iv::APN, ov::T) where {T<:Contraction}
+    k = make_node(Var, :_K; type=get_type(ov))
+    pct_map(iv, k, make_node(T, ff(ov), call(pullback(iv, fc(ov)), iv, k)))
+end =#
+
+#= function Base.append!(v_1::VecType, rest::Vararg{VecType})
+    append!(content(v_1), content.([rest...])...)
+    return v_1
+end
+
+function Base.push!(v_1::VecType, e::AbstractPCTType)
+    push!(content(v_1), e)
+    return v_1
+end =#
+

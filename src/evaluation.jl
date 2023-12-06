@@ -1,20 +1,10 @@
-export evaluate, subst, dummy_vars, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy
 
 # Rule for evaluating the functions that can be evaluated
 
 """
-Get the set of dummy variables that are in a node.
+Get the set of free and dummy variables that are in a node.
 """
-#= dummy_vars(::APN) = Vector{APN}()
-
-dummy_vars(c::Contraction) = content(ff(c))
-
-function dummy_vars(m::Map)
-    extract_var(n::Var) = [n]
-    extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
-    vcat(dummy_vars(fc(m)), map(extract_var, content(ff(m)))...)
-end =#
-
 function free_and_dummy(n::APN)
     all_free, outer_dummy = Set{Var}(), own_dummy(n)
     all_dummies = copy(outer_dummy)
@@ -32,31 +22,30 @@ free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
 free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
 
 own_dummy(::APN) = Set{Var}()
+
 function own_dummy(c::Contraction)
-    #= any(t->isa(t, Add), content(ff(c))) && println(verbose(c)) =#
     return Set{Var}(content(ff(c)))
 end
+
 function own_dummy(m::Map)
     extract_var(n::Var) = [n]
     extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
     return Set{Var}(vcat(map(extract_var, content(ff(m)))...))
 end
 
-
-
 variables(v::Var)::Vector{Var} = [v]
 variables(::Constant)::Vector{Var} = []
 variables(n::APN)::Vector{Var} = vcat(variables.(terms(n))...)
 
-function fast_rename!(n::T, old::Var, new::Symbol)::T where T <: APN
+function fast_rename!(n::T, old::Var, new::Symbol)::T where {T<:APN}
     for t in terms(n)
-        fast_rename!(t, old, new) 
+        fast_rename!(t, old, new)
     end
     return n
 end
 
 function fast_rename!(n::Var, old::Var, new::Symbol)::Var
-    if name(n) == name(old) 
+    if name(n) == name(old)
         n.content = new
     end
     return n
@@ -89,7 +78,6 @@ function new_symbol(nodes::Vararg{APN}; num=1)::Vector{Symbol}
     symbols = Vector{Symbol}()
     num == 0 && return symbols
     g = SymbolGenerator()
-    #= name_used = (n::APN)->contains_name(n, s) =#
     for s in g
         flag::Bool = false
         for n in nodes
@@ -97,7 +85,6 @@ function new_symbol(nodes::Vararg{APN}; num=1)::Vector{Symbol}
             flag && break
         end
         flag && continue
-        #= any(name_used, nodes) && continue =#
         length(symbols) == num && return symbols
         push!(symbols, s)
     end
@@ -123,7 +110,6 @@ end
 
 function subst(n::Var, old::Var, new::APN, ::Bool)
     name(n) == name(old) || return n
-    #= get_type(n) == get_type(old) || error("type mismatch: $(get_type(n)) vs $(get_type(old))") =#
     return new
 end
 
@@ -158,7 +144,7 @@ function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R
         n = resolve_conflict(n, old, new)
     end
 
-    return reconstruct(n, old, new, replace_dummy) # set_terms(n, [subst(t, old, new) for t in terms(n)]...)
+    return reconstruct(n, old, new, replace_dummy)
 end
 
 function reconstruct(n::APN, old::APN, new::APN, replace_dummy::Bool)
@@ -168,7 +154,6 @@ end
 function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)
     call(new, (subst(t, old, new, replace_dummy) for t in content(args(n)))...)
 end
-
 
 
 """
@@ -184,7 +169,6 @@ function subst(n::T, old::PrimitiveCall, new::APN, replace_dummy=false) where {T
     end
 
     return set_terms(n, [subst(t, old, new, replace_dummy) for t in terms(n)]...)
-    #= return subst(n, old, new) =#
 end
 
 """
@@ -192,16 +176,13 @@ If free variables of new collide with dummy variables in n
 replace the dummies with something new.
 sum(i, i * sum(j, A(i, j)))
 """
-function resolve_conflict(n::T, old::APN, new::APN) where T <: APN
+function resolve_conflict(n::T, old::APN, new::APN) where {T<:APN}
     conflict = Vector{Var}()
     new_free, _ = free_and_dummy(new)
     n_dummies = last(free_and_dummy(n))
     for d in n_dummies
         name(d) in name.(new_free) && push!(conflict, d)
-        # name(d) in name.(new_dummies) && continue
-        # contains_name(new, name(d)) && push!(conflict, d)
     end
-    #= conflict = filter(d->contains_name(new, name(d)), dummy_vars(n)) =#
     isempty(conflict) && return n
 
     for c in conflict

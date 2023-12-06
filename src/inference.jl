@@ -12,8 +12,6 @@ function TypeContext()
     return context
 end
 
-#= inference(f::APN) = inference(f::APN, TypeContext()) =#
-
 Base.haskey(c::TypeContext, k) = haskey(content(c), k)
 Base.getindex(c::TypeContext, k) = first(content(c)[k])
 
@@ -42,9 +40,7 @@ end
 op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v)) 
 
 function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext) 
-    #= map_type = get_type(mapp(v)) =#
     map_type = context[name(mapp(v))]
-    #= op!(context, name(mapp(v)), map_type) =#
     for (a, t) in zip(content(args(v)), content(from(map_type)))
         a.type = t
         op!(context, name(a), t)
@@ -89,7 +85,6 @@ function partial_inference(::Type{T}, ::Symbol)::AbstractPCTType where T <: Var
 end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
-    #= return content(get_type([terms...][end-1])) =#
     return content(get_type(first(terms)))
 end
 
@@ -133,8 +128,6 @@ end
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
     get_type(last(terms))
 end
-
-#= partial_inference(::Type{Negate}, term) = get_type(term) =#
 
 function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCTType
     escalate(get_type(base), get_type(power))

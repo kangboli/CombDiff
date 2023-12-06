@@ -48,7 +48,6 @@ function Base.show(io::IO, ::MIME"text/plain", n::NeighborList)
     print(io, pretty(n))
 end
 
-
 function latex(n::NeighborList)
     join(map((name, t) -> "$(name): $(latexstring(latex(t)))", names(n), nodes(n)), "\n")
 end
@@ -57,7 +56,7 @@ function Base.show(io::IO, ::MIME"text/latex", n::NeighborList)
     print(io, latex(n))
 end
 
-neighbors(::Union{Var,Constant}; settings=Dict{Symbol,Bool}()) = NeighborList()
+neighbors(::Union{Var,Constant}; _...) = NeighborList()
 
 function sub_neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
     result = NeighborList()
@@ -126,7 +125,6 @@ function gcd(a::APN, b::APN)
     return map(node_from_set, (a_rem, b_rem, c))
 end
 
-
 function gcd_neighbors(terms::Vector)
     result = NeighborList()
     for (i, x) in enumerate(terms)
@@ -176,11 +174,8 @@ function neighbors(a::Add; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(a))
     append!(result, gcd_neighbors(terms))
-    #= append!(result, add_sum_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
-    #= append!(result, add_const_neighbors(terms)) =#
     append!(result, sub_neighbors(a; settings=settings))
-
     return result
 end
 
@@ -269,41 +264,37 @@ end
 
 function sum_in(terms)
     result = NeighborList()
-    i = findfirst(t->isa(t, Sum), terms)
+    i = findfirst(t -> isa(t, Sum), terms)
     i === nothing && return result
-    free = free_and_dummy(mul(terms[1:end .!= i]...)) |> first
+    free = free_and_dummy(mul(terms[1:end.!=i]...)) |> first
     require_renaming(t) = name(t) in name.(free)
     symbols = new_symbol(terms..., num=count(require_renaming, content(ff(terms[i]))))
     new_ff = Vector{Var}()
     summand = fc(terms[i])
     for t in content(ff(terms[i]))
-        if require_renaming(t)
+        if require_renaming(t) 
             new_var = var(pop!(symbols), get_type(t))
             push!(new_ff, new_var)
             summand = subst(summand, t, new_var)
         else
-            push!(new_ff, t)
+            push!(new_ff, t) 
         end
     end
 
-    push!(result, pct_sum(new_ff..., mul(summand, terms[1:end .!= i]...)); dired=true, name="sum_in")
+    push!(result, pct_sum(new_ff..., mul(summand, terms[1:end.!=i]...)); dired=true, name="sum_in")
     return result
 end
 
 function neighbors(m::Mul; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(m))
-    #= length(terms) == 1 && push!(result, first(terms); dired=true, name="mul_collapse") =#
-
     append!(result, mul_add_neighbors(terms))
     get(settings, :clench_sum, false) || append!(result, sum_in(terms))
-    #= any(is_zero, terms) && push!(result, make_node(Constant, 0); dired=true, name="mul_zero") =#
     append!(result, swallow_neighbors(terms))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
     #= append!(result, prod_const_neighbors(terms)) =#
     append!(result, sub_neighbors(m; settings=settings))
-
     return result
 end
 
@@ -313,7 +304,7 @@ function add_mul_neighbors(m::Monomial)
     isa(p, Add) || return result
     terms = content(fc(p))
     for (i, t) in enumerate(terms)
-        rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
+        rem_terms = terms[1:end.!=i]
         push!(result, mul(monomial(b, t), monomial(b, add(rem_terms...))); name="add_mul")
     end
     return result
@@ -321,24 +312,14 @@ end
 
 
 
-function neighbors(m::Monomial; settings=Dict{Symbol,Bool}())
+function neighbors(m::Monomial; _...)
     result = NeighborList()
     b, p = base(m), power(m)
 
-    # Sum mul neighbors
     isa(p, Sum) && push!(result, pct_product(ff(p), monomial(b, fc(p))); name="sum_prod")
-    #= is_zero(b) && push!(result, make_node(Constant, 0); dired=true, name="power_of_zero")
-    !is_zero(b) && is_zero(p) && push!(result, make_node(Constant, 1); dired=true, name="zeroth_power") =#
     append!(result, add_mul_neighbors(m))
     return result
 end
-
-#= function sum_ex_neighbors(s::Sum)
-    result = NeighborList()
-    i, j = ff(s), ff(fc(s))
-    push!(result, pct_sum(j, pct_sum(i, fc(fc(s)))); name="sum_ex")
-    return result
-end =#
 
 function sum_sym_neighbors(s::Sum)
     result = NeighborList()
@@ -357,8 +338,7 @@ sum(i, k) = N ⋅ k
 function sum_mul_neighbors(s::Sum)
     result = NeighborList()
 
-    i_rem = Vector{APN}()
-    factors = Vector{APN}()
+    i_rem, factors = Vector{APN}(), Vector{APN}()
 
     for v in content(ff(s))
         contains_name(fc(s), name(v)) && continue
@@ -377,8 +357,6 @@ function sum_mul_neighbors(s::Sum)
         push!(result, mul(factors..., pct_sum(i_rem..., fc(s))); dired=true, name="sum_mul")
     end
 
-    #= is_zero(fc(s)) && push!(result, constant(0); dired=true, name="sum_of_zero") =#
-    #= push!(result, mul(range, fc(s)); dired=true, name="sum_mul") =#
     return result
 end
 
@@ -393,9 +371,6 @@ function contract_delta_neighbors(s::Sum)
 
     for (i, v) in enumerate(content(ff(s)))
         is_contractable(get_type(v)) || continue
-        #= if (contains_name(v, :b))
-            println(get_type(v).meta)
-        end =#
         indices = content(remove_i(ff(s), i))
 
         this, other = if contains_name(upper(d), name(v))
@@ -406,19 +381,13 @@ function contract_delta_neighbors(s::Sum)
             continue
         end
 
-        new = isa(this, Add) ?
-              add([mul(constant(-1), t) for t in content(fc(this))]...) :
-              mul(constant(-1), this)
+        new = if isa(this, Add)
+            add([mul(constant(-1), t) for t in content(fc(this))]...)
+        else
+            mul(constant(-1), this)
+        end
         new_sum = pct_sum(indices..., subst(fc(d), v, add(other, v, new)))
         push!(result, new_sum; dired=true, name="contract_delta")
-
-        #= if v == upper(d)
-            new_sum = pct_sum(indices..., subst(fc(d), v, lower(d)))
-            push!(result, new_sum; dired=true, name="contract_delta")
-        elseif v == lower(d)
-            new_sum = pct_sum(indices..., subst(fc(d), v, upper(d)))
-            push!(result, new_sum; dired=true, name="contract_delta")
-        end =#
     end
 
     return result
@@ -574,12 +543,7 @@ function sum_dist_neighbors(s::Sum)
     a = fc(s)
     isa(a, Add) || return result
     terms = content(fc(a))
-
     push!(result, add([make_node(Sum, ff(s), t) for t in terms]...); dired=true, name="sum_dist")
-    #= for (i, t) in enumerate(terms)
-        new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, add(make_node(Sum, ff(s), t), make_node(Sum, ff(s), add(new_terms...))); name="sum_dist")
-    end =#
     return result
 end
 
@@ -604,18 +568,14 @@ function neighbors(s::Sum; settings=Dict{Symbol,Bool}())
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
-    # append!(result, sum_merge_neighbors(s))
     get(settings, :clench_sum, false) && append!(result, sum_out_neighbors(s))
     append!(result, sum_out_delta(s))
     if get(settings, :symmetry, false)
         append!(result, sum_shift_neighbors(s))
         append!(result, sum_sym_neighbors(s))
-        # append!(result, sum_exchange(s))
     end
     append!(result, sum_mul_neighbors(s))
     append!(result, sub_neighbors(s; settings=settings))
-    #= isa(fc(s), Sum) && append!(result, sum_ex_neighbors(s)) =#
-
     return result
 end
 

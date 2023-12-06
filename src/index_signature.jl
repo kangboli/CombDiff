@@ -10,17 +10,6 @@ node_type(sig::SignatureTree) = sig.node_type
 extra(sig::SignatureTree) = sig.extra
 subtrees(sig::SignatureTree) = sig.subtrees
 
-# function tree_bfs(sig::SignatureTree, nodes=Dict{Int,Vector{Pair{Type,Int}}}(0 => [node_type(sig) => 1]), level=0)
-#     for (t, i) in subtrees(sig)
-#         nodes[level+1] = push!(get(nodes, level + 1, Vector{Pair{Type,Int}}()), node_type(t) => i)
-#     end
-
-#     for (t, _) in subtrees(sig)
-#         tree_bfs(t, nodes, level + 1)
-#     end
-#     return nodes
-# end
-
 function tree_dfs_vis(sig::SignatureTree, nodes=Vector{Any}([(node_type(sig), extra(sig)) => 1]))
     edges = Vector{Pair{Int,Int}}()
     node_start = length(nodes)
@@ -30,9 +19,6 @@ function tree_dfs_vis(sig::SignatureTree, nodes=Vector{Any}([(node_type(sig), ex
         _, new_edges = tree_dfs_vis(t, nodes)
         append!(edges, new_edges)
     end
-
-    #= for (t, _) in subtrees(sig)
-    end =#
 
     return nodes, edges
 end
@@ -84,16 +70,8 @@ end
 const Commtative = Union{Mul, Add}
 
 function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
-    #= get_type(sig_1) == get_type(sig_2) || println(get_type(sig_1), " vs ",get_type(sig_2)) =#
-    #= get_type(sig_1) == get_type(sig_2) || return false =#
-    #= node_type(sig_1) == node_type(sig_2) || println(node_type(sig_1), " vs ",node_type(sig_2)) =#
     node_type(sig_1) == node_type(sig_2) || return false
 
-    #= if node_type(sig_1) == PrimitiveCall
-        first(subtrees(sig_1)) == first(subtrees(sig_2)) || return false
-        subtrees(first(last(subtrees(sig_1)))) == 
-        subtrees(first(last(subtrees(sig_2)))) || return false
-    end =#
     trees_to_compare_1 = subtrees(sig_1)
     trees_to_compare_2 = subtrees(sig_2)
     length(trees_to_compare_1) == length(trees_to_compare_2) || return false
@@ -102,7 +80,19 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     trees_to_compare_1 = first.(subtrees(first(first(trees_to_compare_1))))
     trees_to_compare_2 = first.(subtrees(first(first(trees_to_compare_2))))
     # trees_to_compare_1 == trees_to_compare_2
-    dict_1 = Dict{Any, Int}()
+
+    # TODO: Change this to a sort based comparison
+    for t in trees_to_compare_1
+        n_1 = count(x->x==t, trees_to_compare_1)
+        n_2 = count(x->x==t, trees_to_compare_2)
+        n_1 == n_2 || return false
+    end
+
+    return true
+
+end
+
+    #= dict_1 = Dict{Any, Int}()
     for t in trees_to_compare_1
         dict_1[t] = 1 + get(dict_1, t, 0)
     end
@@ -116,12 +106,10 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
         if !(haskey(dict_2, k) && dict_2[k] == v) 
             return false
         end
-    end
+    end =#
 
-    return true
-end
 
-function Base.isless(t_1::SignatureTree, t_2::SignatureTree)
+#= function Base.isless(t_1::SignatureTree, t_2::SignatureTree)
     T_1, T_2 = node_type(t_1), node_type(t_2)
     T_1 == T_2  || return T_1.hash < T_2.hash
 
@@ -133,9 +121,8 @@ function Base.isless(t_1::SignatureTree, t_2::SignatureTree)
     end
 
     return false
-end
+end =#
 
-# function Base.hash(p::Pair{SignatureTree, Int})
 function trunc_hash(p::Pair{SignatureTree, Int}, level=3)
     return trunc_hash(first(p), level) + hash(last(p))
 end
@@ -145,7 +132,6 @@ Base.hash(sig::SignatureTree) = trunc_hash(sig)
 function trunc_hash(sig::SignatureTree, level=3)
     own_hash = sum(hash, (node_type(sig), hash(extra(sig))))
     level == 0 && return own_hash
-    # trees_to_hash = sort(subtrees(sig), by=last)
     trees_to_hash = subtrees(sig)
     if node_type(sig)  <: Commtative
         trees_to_hash = first.(subtrees(first(first(trees_to_hash))))

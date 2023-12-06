@@ -1,8 +1,6 @@
 export parse_node, purge_line_numbers, @pit, @pct 
 
 macro pit(expr, ctx)
-    #= space_nodes = filter(a->a.head == :macrocall, expr.args)
-    spaces = map(parse_node, space_nodes) =#
     expr = purge_line_numbers(expr)
     if isa(expr, Symbol) || isa(expr, Number) || expr.head != :block
         top_level_nodes = [parse_node(expr)]
@@ -98,7 +96,6 @@ function parse_node(::Type{MapType}, s::Expr)
     name = s.args[2]
     block = s.args[3]
 
-    #= parse_pair(::Val{:name}, n::Symbol) = n =#
     parse_pair(::Val{:symmetries}, t::Expr) = t
     function parse_pair(::Val{:type}, t::Expr)
         from_type(a::Symbol) = a in [:I, :R, :C] ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
@@ -159,8 +156,6 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
         name, type = p.args
         type = type in [:I, :R, :C] ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
         isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
-        #= mapp, args = QuoteNode(name.args[1]), parse_node(name.args[2])
-        return :(call(var($(mapp)), $(args))) =#
     end
     if p.head == :call
         return :(call($(parse_node(p.args[1])), $(parse_node.(p.args[2:end])...)))
@@ -175,8 +170,6 @@ parse_node(i::Number) = :(constant($(i)))
 function parse_node(::Type{AbstractCall}, c::Expr)
     @assert c.head == :call
     func = c.args[1]
-    #= isa(func, Expr) && func.head == Symbol("->") &&
-        return :(call($(parse_node(func)), $(parse_node.(c.args[2:end])...))) =#
 
     return :(call($(parse_node(func)), $(parse_node.(c.args[2:end])...)))
 end

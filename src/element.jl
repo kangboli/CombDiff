@@ -314,32 +314,6 @@ function call(mapp::Union{Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:A
 end
 
 
-# function apply_symmetry(indices::Vector{Int}, op::Symbol, n::APN)
-#     return set_content(n, map(t->apply_symmetry(indices, op, t), content(n))...)
-# end
-
-# function apply_symmetry(indices::Vector{Int}, op::Symbol, n::PrimitiveCall)
-#     new_term = PrimitiveCall(get_type(n), mapp(n), args(n)[collect(indices)])
-#     op == :conj && return conjugate(new_term)
-#     op == :neg && return mul(constant(-1), new_term)
-#     return new_term
-# end
-
-# function dfs(n::APN, syms, sym_graph = Vector{APN}([n]))
-#     neighbors = Vector{APN}()
-#     for (indices, op) in syms
-#         neighbor = apply_symmetry([indices...], op, n)
-#         neighbor in sym_graph && continue
-#         push!(neighbors, neighbor)
-#     end
-#     append!(sym_graph, neighbors)
-
-#     for b in neighbors
-#         dfs(b, syms, sym_graph)
-#     end
-#     return sym_graph
-# end
-
 function get_call(n::APN)
     ts = terms(n)
     i = findfirst(t->isa(t, PrimitiveCall), ts)
@@ -350,12 +324,6 @@ get_call(n::PrimitiveCall) = n
 
 function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
     get_type(mapp) == UndeterminedPCTType() && return PrimitiveCall, [mapp, args], UndeterminedPCTType()
-    # syms = symmetries(get_type(mapp))
-
-    # #= type = partial_inference(PrimitiveCall, mapp, args) =#
-    # graph = dfs(PrimitiveCall(UndeterminedPCTType(), mapp, args), syms)
-    # #= println(join(pretty.(graph), "\n")) =#
-    # result = first(sort(graph, by=get_call))
     return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
 end
 
@@ -461,9 +429,6 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     args_const = [fc(t) for t in filter(t -> isa(t, Constant), args)]
     args = [constant(prod(args_const, init=1.0)), filter(t -> !isa(t, Constant), args)...]
     args = filter(t -> !is_one(t), args)
-    # n_negative = count(is_minus_one, args)
-    # args = filter(t -> !is_minus_one(t), args)
-    # n_negative % 2 == 1 && pushfirst!(args, constant(-1))
     any(is_zero, args) && return Constant, [0], I()
     isempty(args) && return Constant, [1], I()
     sort!(args)
@@ -476,9 +441,6 @@ end
 abstract type Contraction <: APN end
 
 function pct_sum(terms::Vararg)
-    #= node = make_node(Sum, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_sum(terms[1:end-2]..., node) =#
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
 end
 
@@ -489,9 +451,6 @@ mutable struct Sum <: Contraction
     content::APN
     function Sum(type, from::PCTVector, summand::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        #= if get_type(content(from)) == UndeterminedPCTType()
-            from = set_type(from, I())
-        end =#
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, from, summand)
     end
@@ -511,18 +470,11 @@ struct Integral <: Contraction
     content::APN
     function Integral(type, from::PCTVector, integrand::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        #= if get_type(from) == UndeterminedPCTType()
-            from = set_type(from, R())
-        end =#
         new(type, from, integrand)
     end
 end
 
 function pct_int(terms::Vararg{APN})
-    #= node = make_node(Integral, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_int(terms[1:end-2]..., node) =#
-
     return make_node(Integral, pct_vec(terms[1:end-1]...), last(terms))
 end
 
@@ -532,17 +484,11 @@ struct Prod <: APN
     content::APN
     function Prod(type, from::PCTVector, productant::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        #= if get_type(from) == UndeterminedPCTType()
-            from = set_type(from, I())
-        end =#
         new(type, from, productant)
     end
 end
 
 function pct_product(terms::Vararg{APN})
-    #= node = make_node(Prod, terms[end-1:end]...)
-    length(terms) == 2 && return node
-    return pct_product(terms[1:end-2]..., node) =#
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
 
@@ -565,7 +511,6 @@ abstract type AbstractDelta <: APN end
 upper(d::AbstractDelta) = d.upper
 lower(d::AbstractDelta) = d.lower
 
-# from_fields(::Type{AbstractDelta}) = [:upper, :lower]
 content_fields(::Type{T}) where {T<:AbstractDelta} = [:upper, :lower, :content]
 fc(d::AbstractDelta) = d.content
 
