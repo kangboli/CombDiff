@@ -68,16 +68,21 @@ contains_name(v::Var, s::Symbol)::Bool = name(v) == s
 
 contains_name(c::Constant, ::Symbol)::Bool = false
 
-struct SymbolGenerator end
+struct SymbolGenerator
+    base_symbol::Symbol
+end
 
-Base.iterate(::SymbolGenerator)::Tuple{Symbol,Int} = (:i_0, 1)
+SymbolGenerator() = SymbolGenerator(:i)
+base_symbol(g::SymbolGenerator) = g.base_symbol
 
-Base.iterate(::SymbolGenerator, state)::Tuple{Symbol,Int} = (Symbol(string("i_", state)), state + 1)
+Base.iterate(g::SymbolGenerator)::Tuple{Symbol,Int} = (Symbol(string(base_symbol(g)), "_", 0), 1)
 
-function new_symbol(nodes::Vararg{APN}; num=1)::Vector{Symbol}
+Base.iterate(g::SymbolGenerator, state)::Tuple{Symbol,Int} = (Symbol(string(base_symbol(g), "_", state)), state + 1)
+
+function new_symbol(nodes::Vararg{APN}; num=1, symbol=:_i)::Vector{Symbol}
     symbols = Vector{Symbol}()
     num == 0 && return symbols
-    g = SymbolGenerator()
+    g = SymbolGenerator(symbol)
     for s in g
         flag::Bool = false
         for n in nodes
@@ -119,7 +124,7 @@ Replacing `x(i)` with `x(j)` in `n`.
 
 This function turns out to be mostly useless.
 """
-function subst(n::PrimitiveCall, old::PrimitiveCall, new::AbstractCall, ::Bool)::Union{Add,PrimitiveCall}
+#= function subst(n::PrimitiveCall, old::PrimitiveCall, new::AbstractCall, ::Bool)::Union{Add,PrimitiveCall}
     old == new && return n
     sub_args = map(t -> subst(t, old, new), args(n))
     if name(mapp(n)) == name(mapp(old))
@@ -131,11 +136,11 @@ function subst(n::PrimitiveCall, old::PrimitiveCall, new::AbstractCall, ::Bool):
     end
 
     set_content(n, mapp(n), sub_args)
-end
+end =#
 
-subst(v::Var, ::PrimitiveCall, ::AbstractCall, ::Bool)::Var = v
+#= subst(v::Var, ::PrimitiveCall, ::AbstractCall, ::Bool)::Var = v
+subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c =#
 subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
-subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c
 
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
     if !replace_dummy
@@ -152,11 +157,17 @@ function reconstruct(n::APN, old::APN, new::APN, replace_dummy::Bool)
 end
 
 function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)
-    call(new, (subst(t, old, new, replace_dummy) for t in content(args(n)))...)
+    new_args = map(t->subst(t, old, new), content(args(n)))
+    if name(mapp(n)) == name(old)
+        return call(new, map(t->subst(t, old, new, replace_dummy), new_args)...)
+    else 
+        return call(mapp(n), new_args...)
+    end
 end
 
 
 """
+TODO: This must change
 The dummy variables are not allowed to be a `PrimitiveCall`, so
 we don't have to consider replacing the dummy variabless.
 """
@@ -200,9 +211,18 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
+    new_from = map(var, new_symbol(c, num=length(ff(mapp(c)))), get_type(ff(mapp(c))))
     n = evaluate(fc(mapp(c)))
-    for (old, new) in zip(content(ff(mapp(c))), content(args(c)))
+    for (old, new) in zip(content(ff(mapp(c))), new_from)
         n = subst(n, old, new)
+    end
+    for (old, new) in zip(new_from, args(c))
+        #= println("----->")
+        println(pretty(old))
+        println(pretty(new))
+        println(pretty(n)) =#
+        n = subst(n, old, new)
+        #= println(pretty(n)) =#
     end
     return n
 end

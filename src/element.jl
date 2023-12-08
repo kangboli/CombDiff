@@ -221,6 +221,16 @@ Base.first(v::PCTVector) = first(content(v))
 Base.last(v::PCTVector) = last(content(v))
 Base.length(v::PCTVector) = length(content(v))
 
+function Base.iterate(v::Union{PCTVector, VecType})
+    isempty(content(v)) && return nothing 
+    return content(v)[1], 2
+end
+
+function Base.iterate(v::Union{PCTVector, VecType}, state::Int)
+    state > length(v) && return nothing
+    return content(v)[state], state+1
+end
+
 function set_i(v::PCTVector, i::Integer, new_item::APN)
     replace_item(j::Integer) = i == j ? new_item : v[j]
     set_content(v, replace_item.(1:length(v))...)
@@ -283,8 +293,7 @@ struct PrimitivePullback <: AbstractPullback
     content::APN
 end
 
-pullback(map::Var) = make_node(PrimitivePullback, map)
-
+pullback(map::Union{Var, PCTVector}) = make_node(PrimitivePullback, map)
 
 abstract type AbstractCall <: APN end
 
@@ -345,6 +354,11 @@ struct Exp <: BuiltinFunction
     content::APN
 end =#
 
+struct Exp <: APN
+    type::AbstractPCTType
+    content::APN
+end
+
 struct Monomial <: APN
     type::AbstractPCTType
     base::APN
@@ -382,14 +396,17 @@ flatten_add(a::APN) = [a]
 fc(a::Add)::PCTVector = a.content
 
 function e_class_reduction(::Type{Add}, term::PCTVector)
-    args = vcat(flatten_add.(content(term))...)
-    args_const = constant(sum([fc(t) for t in filter(t -> isa(t, Constant), args)], init=0))
-    args_rest = filter(t -> !isa(t, Constant), args)
-    args = [args_const, args_rest...]
-    args = filter(t -> !is_zero(t), args)
+    new_terms = vcat(flatten_add.(content(term))...)
+    const_terms = constant(sum([fc(t) for t in filter(t -> isa(t, Constant), new_terms)], init=0))
+    rest_terms = filter(t -> !isa(t, Constant), new_terms)
+    new_terms = [const_terms, rest_terms...]
+    new_terms = filter(t -> !is_zero(t), new_terms)
     term_dict = Dict{APN, Number}()
-    for a in args
-        isa(a, Constant) && (term_dict[constant(1)] = fc(a) + get(term_dict, constant(1), 0))
+    for a in new_terms
+        if isa(a, Constant) 
+            term_dict[constant(1)] = fc(a) + get(term_dict, constant(1), 0)
+            continue
+        end
         if isa(a, Mul) 
             constant_term = filter(t->isa(t, Constant), content(fc(a)))
             constant_term = isempty(constant_term) ? constant(1) : first(constant_term)
@@ -400,11 +417,20 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
         end
     end
 
-    args = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
-    sort!(args)
-    length(args) == 0 && return Constant, [0], I()
-    length(args) == 1 && return typeof(first(args)), terms(first(args)), get_type(first(args))
-    return Add, [pct_vec(args...)], partial_inference(Add, pct_vec(args...))
+    new_terms = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+    sort!(new_terms)
+    length(new_terms) == 0 && return Constant, [0], I()
+    length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
+
+    if any(t->isa(t, MapType), get_type.(new_terms))
+        allequal(get_type.(new_terms)) || error("adding tensors of different types")
+        m = first(new_terms)
+        new_from = pct_vec(map(var, new_symbol(term; num=length(ff(m))), get_type.(ff(m)))...)
+        new_terms = [new_from, add(map(t->ecall(t, new_from...), new_terms)...)]
+        return Map, new_terms, partial_inference(Map, new_terms...)
+    end
+
+    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
 end
 
 
@@ -495,12 +521,19 @@ end
 function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: Contraction, S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
+    # TODO: Rewrite this with multiple dispatch
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
     isempty(content(from)) && return S, terms(summand), get_type(summand)
     if T == S 
         new_from = pct_vec(content(from)..., content(ff(summand))...)
         return T, [new_from, fc(summand)], partial_inference(Sum, new_from, fc(summand))
     end
+
+    if isa(summand, Map)
+        new_sum = pct_sum(from...,fc(summand))
+        return Map, [ff(summand), new_sum], partial_inference(Map, ff(summand), new_sum)
+    end
+
     T, [from, summand], partial_inference(Sum, from, summand)
 end
 
@@ -576,6 +609,11 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
         new_terms = [ff(term), conjugate(fc(term))]
         return T, new_terms, partial_inference(T, new_terms...) 
     end
+
+    if T == Delta
+        new_terms = [lower(term), upper(term), conjugate(fc(term))]
+        return T, new_terms, partial_inference(T, new_terms...)
+    end
     T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
     t in [I(), R()] && return T, terms(term), get_type(term)
     return Conjugate, [term], get_type(term)
@@ -594,6 +632,10 @@ constant(n::Number) = make_node(Constant, n)
 is_zero(t) = isa(t, Constant) && fc(t) == 0
 is_one(t) = isa(t, Constant) && fc(t) == 1
 is_minus_one(t) = isa(t, Constant) && fc(t) == -1
+
+function call(vec::PCTVector, c::Constant)
+    return content(vec)[fc(c)]
+end
 
 struct Let <: APN
     type::AbstractPCTType

@@ -30,6 +30,8 @@ function PCTGraph(n::APN)
     return g
 end
 
+default_settings = Dict(:clench_sum=>true)
+
 """
 
 If there is a sink cluster: return the sink cluster with a `true`.
@@ -47,7 +49,7 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     @time for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         t in hashset(seen) || push!(reduced_list, (t, d, name))
     end
-    
+
     for (t, d, name) in sort(reduced_list, by=e->-e[2])
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
@@ -65,13 +67,13 @@ function log_edge(n, t, d, name, i)
     println(i, " ", name)
     println(pretty(n))
     println(pretty(t))
-    d || println("notdirected")
-    d && println("yesdirected!")
+    d || println("<->")
+    d && println("-->")
     println()
 end
 
 
-function simplify(n::APN; settings=Dict{Symbol, Bool}())
+function simplify(n::APN; settings=default_settings)
     g = last(spanning_tree!(n; settings=settings))
     min_size = minimum(pct_size, nodes(g))
     smallest = Vector{APN}()
@@ -82,13 +84,19 @@ function simplify(n::APN; settings=Dict{Symbol, Bool}())
     return smallest
 end
 
-function simplify(n::Map; settings=Dict{Symbol, Bool}())
+function simplify(n::Map; settings=default_settings)
     map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
 end
 
-function simplify(n::Add; settings=Dict{Symbol, Bool}())
-    simplify(add([simplify(t; settings=settings) for t in content(fc(n))]...))
-end
+#= function simplify(n::Add, recurse=true; settings=Dict{Symbol, Bool}())
+
+    if recurse
+        simplify(add([first(simplify(t; settings=settings)) for t in content(fc(n))]...), false; settings=settings)
+    else
+        invoke(simplify, Tuple{APN, Dict{Symbol, Bool}()}, n, settings)
+    end
+
+end =#
 
 
 function graphs_jl(g::PCTGraph)

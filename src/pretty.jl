@@ -26,7 +26,7 @@ end
 
 function verbose(m::Map)
     "($(join(verbose(ff(m))))->\n"*
-    "$(indent(verbose(fc(m))))\n"*
+    "$(indent(verbose(fc(m)))))\n"*
     "::$(verbose(get_type(m)))"
 end
 

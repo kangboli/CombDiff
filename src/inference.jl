@@ -117,6 +117,9 @@ function partial_inference(::Type{PrimitivePullback}, v::Union{Var, Map})::Abstr
     MapType(add_content(from_type, content_type), fc(from_type))
 end
 
+function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCTType
+    return UndeterminedPCTType()
+end
 
 
 function partial_inference(::Type{Constant}, term)::AbstractPCTType

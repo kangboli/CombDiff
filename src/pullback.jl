@@ -11,6 +11,29 @@ function reduce_pullback(p::Pullback)
     pb(content(ff(mapp))..., fc(mapp))
 end
 
+"""
+f(z) = g(h1(z), h2(z))
+Pg = [(h1, h2)->P(h1->g(h1, h2))(h1, k), (h1, h2)->P(h2->g(h1, h2))(h2, k)]
+Pf = Ph1(z, Pg(h1, h2, k)) + Ph2(z, Pg(h1, h2, k))
+"""
+function pbs(z::APN, ov::Call)
+    g = mapp(ov)
+    #= ks = map(t->var(:_K, t), content(from(get_type(g)))) =#
+    k = var(:_K, get_type(ov))
+    hz = content(args(ov))
+    vs = new_symbol(z, ov, k, num=length(hz))
+    vs = [var(v, get_type(h)) for (h, v) in zip(hz, vs)]
+    #= p_s = T == Call ? pb(content(ff(g))..., fc(g)) :
+          map(v -> make_node(PrimitivePullback,
+            length(vs) == 1 ? g : pct_map(v, call(g, vs...))
+        ), vs) =#
+    p_s = pb(content(ff(g))..., fc(g))
+
+    pg = map((p, h) -> call(p, h, k), p_s, hz)
+    #= pg = map(a->call(pullback(a, fc(g)), hz..., k), content(ff(g))) =#
+    pct_map(z, k, add(map(a -> call(pbs(z, a), z, pg...), hz)...))
+end
+
 
 """
 pb((x, y) -> f(x, y)) = [(x, y, k) -> pb(x->f(x, y))(x, k), (x, y, k) -> pb(y->f(x, y))(y, k)]
@@ -23,68 +46,32 @@ function pb(ff_and_fc::Vararg{APN})
     function dispatcher(z, ov)
         isa(get_type(z), ElementType) && isa(get_type(ov), ElementType) && return pbs
         isa(get_type(z), MapType) && isa(get_type(ov), ElementType) && return functional
-        isa(get_type(z), ElementType) && isa(get_type(ov), MapType) && return parametrization
+        isa(get_type(z), ElementType) && isa(get_type(ov), MapType) && return fibration
         isa(get_type(z), MapType) && isa(get_type(ov), MapType) && return functor
     end
 
     [map(z -> pct_map(z_s..., k, call(dispatcher(z, ov)(z, ov), z, k)), z_s)...]
 end
 
-function pbs(z::Var, ov::Var)
-    k = var(:_K, get_type(ov))
-    name(z) == name(ov) && return pct_map(z, k, k)
-    return pct_map(z, k, constant(0))
-end
-
 """
-𝒫(z->f(z)') = (z, k) -> 𝒫(z->f(z))(z, k')
+𝒫(z -> expr) = (z, k) -> (a) -> 𝒫(z(a) -> expr)(z(a), k)
+Deprecate this
 """
-function pbs(z::APN, ov::Conjugate)
-    k = var(:_K, get_type(ov))
-    ph = pbs(z, fc(ov))
-    pct_map(z, k, call(ph, z, conjugate(k)))
-end
-
-
-"""
-f(z) = g1(z) + g2(z)
-Pf = (z, k) -> P(z->g1(z))(z, k) + P(z->g2(z))(z, k)
-"""
-function pbs(z::APN, ov::Add)
-    k = var(:_K, get_type(ov))
-    terms = map(c -> call(pbs(z, c), z, k), content(fc(ov)))
-    pct_map(z, k, add(terms...))
-end
-
-
-function pbs(z::APN, ov::Mul)
-    k = var(:_K, get_type(ov))
-    terms::PCTVector = fc(ov)
-    t1 = fc(terms)
-    rest = length(terms) > 2 ? mul(content(terms)[2:end]...) : last(terms)
-
-    arg_1 = mul(conjugate(rest), k)
-    arg_2 = mul(conjugate(t1), k)
-    term_1 = call(pbs(z, t1), z, arg_1)
-    term_2 = call(pbs(z, rest), z, arg_2)
-    pct_map(z, k, add(term_1, term_2))
-end
-
-
 function functional(z::APN, ov::APN)
     k = var(:_K, get_type(ov))
     a_types = from(get_type(z))
     a_index_symbols = new_symbol(z, ov, k; num=length(a_types))
-    #= println(a_index_symbols) =#
     a = map((s, t) -> var(s, t), a_index_symbols, content(a_types))
-    #= println(pretty.(a)) =#
 
     za = call(z, a...)
     pct_map(z, k, pct_map(a..., call(pbs(za, ov), za, k)))
 
 end
 
-function parametrization(z::APN, ov::APN)
+"""
+𝒫(z -> f) = (z, k) -> ∑(b, 𝒫(z->f(b))(x, k(b)))
+"""
+function fibration(z::APN, ov::APN)
     k = var(:_K, get_type(ov))
     result_map_type = get_type(ov)
     sum_types = content(from(result_map_type))
@@ -96,6 +83,14 @@ function parametrization(z::APN, ov::APN)
     pct_map(z, k, pct_sum(b..., call(pbs(z, fb), z, kb)))
 end
 
+function finite_fibration(z::APN, ov::Vector{APN})
+    ks = [var(Symbol("_K_$(i)"), get_type(t)) for (i, t) in enumerate(ov)]
+    return pct_map(z, ks..., add([call(pbs(z, fb), z, kb) for (fb, kb) in zip(ov, ks)]))
+end
+
+"""
+Deprecate
+"""
 function functor(z::APN, ov::APN)
     k = var(:_K, get_type(ov))
     a_types = from(get_type(z))
@@ -172,28 +167,47 @@ function pbs(z::T, ov::PrimitiveCall) where {T<:APN}
     #= pct_map(iv, k, map(a -> call(pullback(iv, a), iv, inner_pullback), content(args(ov)))...) =#
 end
 
-"""
-f(z) = g(h1(z), h2(z))
-Pg = [(h1, h2)->P(h1->g(h1, h2))(h1, k), (h1, h2)->P(h2->g(h1, h2))(h2, k)]
-Pf = Ph1(z, Pg(h1, h2, k)) + Ph2(z, Pg(h1, h2, k))
-"""
-function pbs(z::APN, ov::Call)
-    g = mapp(ov)
-    #= ks = map(t->var(:_K, t), content(from(get_type(g)))) =#
+function pbs(z::Var, ov::Var)
     k = var(:_K, get_type(ov))
-    hz = content(args(ov))
-    vs = new_symbol(z, ov, k, num=length(hz))
-    vs = [var(v, get_type(h)) for (h, v) in zip(hz, vs)]
-    #= p_s = T == Call ? pb(content(ff(g))..., fc(g)) :
-          map(v -> make_node(PrimitivePullback,
-            length(vs) == 1 ? g : pct_map(v, call(g, vs...))
-        ), vs) =#
-    p_s = pb(content(ff(g))..., fc(g))
-
-    pg = map((p, h) -> call(p, h, k), p_s, hz)
-    #= pg = map(a->call(pullback(a, fc(g)), hz..., k), content(ff(g))) =#
-    pct_map(z, k, add(map(a -> call(pbs(z, a), z, pg...), hz)...))
+    name(z) == name(ov) && return pct_map(z, k, k)
+    return pct_map(z, k, constant(0))
 end
+
+"""
+𝒫(z->f(z)') = (z, k) -> 𝒫(z->f(z))(z, k')
+"""
+function pbs(z::APN, ov::Conjugate)
+    k = var(:_K, get_type(ov))
+    ph = pbs(z, fc(ov))
+    pct_map(z, k, call(ph, z, conjugate(k)))
+end
+
+
+"""
+f(z) = g1(z) + g2(z)
+Pf = (z, k) -> P(z->g1(z))(z, k) + P(z->g2(z))(z, k)
+"""
+function pbs(z::APN, ov::Add)
+    k = var(:_K, get_type(ov))
+    terms = map(c -> call(pbs(z, c), z, k), content(fc(ov)))
+    pct_map(z, k, add(terms...))
+end
+
+
+function pbs(z::APN, ov::Mul)
+    k = var(:_K, get_type(ov))
+    terms::PCTVector = fc(ov)
+    t1 = fc(terms)
+    rest = length(terms) > 2 ? mul(content(terms)[2:end]...) : last(terms)
+
+    arg_1 = mul(conjugate(rest), k)
+    arg_2 = mul(conjugate(t1), k)
+    term_1 = call(pbs(z, t1), z, arg_1)
+    term_2 = call(pbs(z, rest), z, arg_2)
+    pct_map(z, k, add(term_1, term_2))
+end
+
+
 
 """
 Pullback of a contraction.
@@ -213,5 +227,4 @@ function pbs(z::Var, ov::Monomial)
     pg = mul(power(ov), conjugate(monomial(base(ov), add(power(ov), constant(-1)))), k)
     pct_map(z, k, call(ph, z, pg))
 end
-
 

@@ -289,7 +289,7 @@ function neighbors(m::Mul; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(m))
     append!(result, mul_add_neighbors(terms))
-    get(settings, :clench_sum, false) || append!(result, sum_in(terms))
+    get(settings, :clench_sum, false) && append!(result, sum_in(terms))
     append!(result, swallow_neighbors(terms))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
@@ -568,7 +568,7 @@ function neighbors(s::Sum; settings=Dict{Symbol,Bool}())
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
-    get(settings, :clench_sum, false) && append!(result, sum_out_neighbors(s))
+    get(settings, :clench_sum, false) || append!(result, sum_out_neighbors(s))
     append!(result, sum_out_delta(s))
     if get(settings, :symmetry, false)
         append!(result, sum_shift_neighbors(s))

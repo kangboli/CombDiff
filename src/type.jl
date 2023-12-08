@@ -93,7 +93,8 @@ end
 from(m::MapType) = m.from
 content(m::MapType) = m.content
 
-MapType(from, content) = MapType(from, content, Dict())
+MapType(from::VecType, content::AbstractPCTType) = MapType(from, content, Dict())
+MapType(from::APN, content::AbstractPCTType) = MapType(VecType([from]), content, Dict())
 
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b

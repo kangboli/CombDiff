@@ -1,3 +1,16 @@
+
+struct BOne <: ABF end
+
+function as_map(::BOne)
+    z = var(:z, C())
+    return pct_map(z, z)
+end
+
+decompose(z::Var, ov::Var) = z == ov ? comp(z) : comp(z, BConst(ov))
+
+apns(::BOne) = Vector{APN}()
+
+pretty(::BOne) = "I"
 """
 sum((i::I1, j::I2), x(i, j)) + sum((p::I1, q::I3), y(p, q)) <-> 
 sum((i::I1), sum(j::I2, x(i, j)) + sum(q::I3, y(i, q)))
