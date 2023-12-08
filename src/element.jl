@@ -423,7 +423,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
 
     if any(t->isa(t, MapType), get_type.(new_terms))
-        allequal(get_type.(new_terms)) || error("adding tensors of different types")
+        # allequal(get_type.(new_terms)) || error("adding tensors of different types")
         m = first(new_terms)
         new_from = pct_vec(map(var, new_symbol(term; num=length(ff(m))), get_type.(ff(m)))...)
         new_terms = [new_from, add(map(t->ecall(t, new_from...), new_terms)...)]

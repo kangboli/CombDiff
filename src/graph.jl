@@ -1,6 +1,6 @@
 using GraphPlot, DataStructures
 
-export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify
+export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings
 
 struct PCTGraph
     nodes::Vector{APN}
@@ -30,7 +30,15 @@ function PCTGraph(n::APN)
     return g
 end
 
-default_settings = Dict(:clench_sum=>true)
+default_settings = Dict(:clench_sum=>false, :symmetry=>false)
+function custom_settings(custom::Vararg{Pair{Symbol, Bool}})
+    new_settings = deepcopy(default_settings)
+    for (s, b) in custom
+        new_settings[s] = b
+    end
+    return new_settings
+end
+const symmetry_settings = custom_settings(:clench_sum=>false, :symmetry=>true)
 
 """
 
@@ -88,6 +96,9 @@ function simplify(n::Map; settings=default_settings)
     map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
 end
 
+function propagate_k(n::Map, k=constant(1))
+    return ecall(n, ff(n)[1:end-1]..., k)
+end
 #= function simplify(n::Add, recurse=true; settings=Dict{Symbol, Bool}())
 
     if recurse

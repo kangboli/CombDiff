@@ -88,12 +88,11 @@ function neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
 
     append!(result, sub_neighbors(c; settings=settings))
 
-    if get(settings, :symmetry, false)
-        for (indices, op) in symmetries(get_type(mapp(c)))
-            push!(result, apply_symmetry(indices, op); name="symmetry")
-        end
-    end
+    settings[:symmetry] || return result
 
+    for (indices, op) in symmetries(get_type(mapp(c)))
+        push!(result, apply_symmetry(indices, op); name="symmetry")
+    end
     return result
 end
 
@@ -262,7 +261,7 @@ function prod_const_neighbors(terms)
     return result
 end
 
-function sum_in(terms)
+function relax_sum(terms)
     result = NeighborList()
     i = findfirst(t -> isa(t, Sum), terms)
     i === nothing && return result
@@ -289,7 +288,7 @@ function neighbors(m::Mul; settings=Dict{Symbol,Bool}())
     result = NeighborList()
     terms = content(fc(m))
     append!(result, mul_add_neighbors(terms))
-    get(settings, :clench_sum, false) && append!(result, sum_in(terms))
+    settings[:clench_sum] || append!(result, relax_sum(terms))
     append!(result, swallow_neighbors(terms))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
@@ -372,10 +371,15 @@ function contract_delta_neighbors(s::Sum)
     for (i, v) in enumerate(content(ff(s)))
         is_contractable(get_type(v)) || continue
         indices = content(remove_i(ff(s), i))
+        contractable(expr::APN, s::Symbol)::Bool = false
+        contractable(expr::Var, s::Symbol)::Bool = name(expr) == s
+        contractable(expr::Add, s::Symbol)::Bool = any(t->contractable(t, s), fc(expr))
+        contractable(expr::Mul, s::Symbol)::Bool = contractable(mul(expr, constant(-1)), s)
 
-        this, other = if contains_name(upper(d), name(v))
+
+        this, other = if contractable(upper(d), name(v))
             upper(d), lower(d)
-        elseif contains_name(lower(d), name(v))
+        elseif contractable(lower(d), name(v))
             lower(d), upper(d)
         else
             continue
@@ -396,7 +400,7 @@ end
 """
 sum(i, j, k ⋅ x(i) ⋅ y(j)) -> k ⋅ sum(i, x(i) ⋅ sum(j, y(j)))
 """
-function sum_out_neighbors(s::Sum)
+function clench_sum(s::Sum)
     result = NeighborList()
 
     mul_term = fc(s)
@@ -563,14 +567,23 @@ function sub_neighbors(n::APN; settings=Dict{Symbol,Bool}())
     return result
 end
 
+# function sum_delta_out(s::Sum)
+#     result = NeighborList()
+#     isa(fc(s), Delta) || return result
+#     delta = fc(s)
+#     any(t->contains_name(t, ff(s)), [upper(delta), lower(delta)]) && return result
+
+#     return delta(upper(delta), lower(delta), pct_sum(ff(s)..., fc(delta)))
+# end
+
 function neighbors(s::Sum; settings=Dict{Symbol,Bool}())
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
-    get(settings, :clench_sum, false) || append!(result, sum_out_neighbors(s))
+    settings[:clench_sum] && append!(result, clench_sum(s))
     append!(result, sum_out_delta(s))
-    if get(settings, :symmetry, false)
+    if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))
         append!(result, sum_sym_neighbors(s))
     end

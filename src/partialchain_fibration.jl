@@ -4,9 +4,7 @@ abstract type AbstractBuiltinFunction end
 const ABF = AbstractBuiltinFunction
 ecall(ts::Vararg{APN}) = eval_all(call(ts...))
 
-
 abstract type AbstractFibration <: ABF end
-
 
 param(b::ABF) = b.param
 
@@ -55,9 +53,7 @@ struct Pconst <: ABF
     maptype::MapType
 end
 
-function as_map(b::Pconst)
-    return pct_map(z_vars(b)..., param(b))
-end
+as_map(b::Pconst) = pct_map(z_vars(b)..., param(b))
 
 decompose(z::APN, c::Constant) = comp(z, Pconst(c, MapType(v_wrap(get_type(z)), get_type(c))))
 
@@ -78,9 +74,7 @@ maptype(::BConj) = MapType(VecType([C()]), C())
 
 decompose(z::APN, c::Conjugate) = push(decompose(z, fc(c)), BConj())
 
-function as_map(b::BConj, zs=z_vars(b))
-    pct_map(zs..., conjugate(zs...))
-end
+as_map(b::BConj, zs=z_vars(b)) = pct_map(zs..., conjugate(zs...))
 
 function pp(b::BConj, (zs, ks)=zk_vars(b))
     pct_map(zs..., ks..., conjugate(ks...))
@@ -111,9 +105,7 @@ function avoid_overflow(zs::APN, ov::APN)
     return target, rest
 end
 
-function as_map(b::BAdd, zs=z_vars(b))
-    pct_map(zs..., add(zs..., param(b)))
-end
+as_map(b::BAdd, zs=z_vars(b)) = pct_map(zs..., add(zs..., param(b)))
 
 function pp(b::BAdd)
     zs, ks = zk_vars(b)
@@ -190,8 +182,7 @@ function decompose(z::APN, ov::Sum)
     push(decompose(z, inner_map), BSum(ff(ov), MapType(v_wrap(get_type(inner_map)), get_type(ov))))
 end
 
-function as_map(b::BSum)
-    zs = z_vars(b)
+function as_map(b::BSum, zs = z_vars(b))
     pct_map(zs..., pct_sum(param(b)..., call(zs..., param(b)...)))
 end
 
@@ -207,17 +198,11 @@ Exponentiation
 """
 struct BExp <: ABF end
 
-function decompose(z::APN, ov::Exp)
-    push(decompose(z, fc(ov)), BExp())
-end
+decompose(z::APN, ov::Exp) = push(decompose(z, fc(ov)), BExp())
 
-function as_map(::BExp)
-    error("Not yet supported")
-end
+as_map(::BExp) = error("Not yet supported")
 
-function pp(::BExp)
-    error("Not yet supported")
-end
+pp(::BExp) = error("Not yet supported")
 
 """
 z -> f1(f2(z))
@@ -247,7 +232,7 @@ pop(c::PComp) = last(pfuncs(c)), comp(input(c), pfuncs(c)[1:end-1]...)
 Base.isempty(c::PComp) = isempty(pfuncs(c))
 #= output_type(c::PComposition) = get_type(call(as_map(c), input(c))) =#
 
-pretty(c::PComp) = "$(pretty(input(c))): " * join([pretty.(reverse(pfuncs(c)))...], " ▷ ")
+pretty(c::PComp) = "$(pretty(input(c))): " * join([pretty.(reverse(pfuncs(c)))...], " ◀ ")
 Base.show(io::IO, c::PComp) = println(io, pretty(c))
 
 apns(fc::PComp) = vcat(content(input(fc)), apns.(pfuncs(fc))...)
@@ -264,8 +249,6 @@ end
 
 function pp(c::PComp)
     zs = input(c)
-    #= ot = v_wrap(output_type(c)) =#
-    #= ks = pct_vec([var(Symbol("_k_$(i)"), t) for (i, t) in enumerate(ot)]...) =#
     ys, ks = zk_vars(c)
     isempty(pfuncs(c)) && return pct_map(ys..., ks..., v_unwrap(ks))
 
@@ -285,16 +268,8 @@ function pp(c::PComp)
             deltas = map(d -> delta(e, i, d), deltas)
         end =#
         deltas = foldl((ds, (e, i)) -> map(d->delta(e, i, d), ds), zip(content(expr), is); init=ks)
-        #= println(">>>>>>")
-        println(pretty(expr))
-        println.(pretty.(deltas)) =#
-        #= deltas = reduce((e_i, d)->delta(first(e_i), last(e_i), d), zip(expr, is); init=k) =#
         partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(deltas))))
         chain = pct_vec(map(add, chain, partial)...)
-        #= println(pretty(partial))
-        println()
-        println(pretty(chain))
-        println("<<<<<<") =#
     end
     return pct_map(ys..., ks..., v_unwrap(chain))
 end
@@ -337,22 +312,13 @@ end
 
 function pp(fib::Fibration)
     bs = fiber_var(fib)
-    #= vectype = input_type(fib)
-    symbols = new_symbol(apns(fib)..., num=length(vectype) + 1) =#
-    #= zs = [var(s, t) for (s, t) in zip(symbols[1:end-1], vectype)]
-
-    k = var(last(symbols), output_type(fib)) =#
     zs, ks = zk_vars(fib)
     return pct_map(zs..., ks..., pct_sum(bs..., call(pp(fibers(fib)), zs..., call(ks..., bs...))))
 end
 
-function apns(fib::Fibration)
-    return [fiber_var(fib)..., apns(fibers(fib))...]
-end
+apns(fib::Fibration) = [fiber_var(fib)..., apns(fibers(fib))...]
 
-function pretty(fib::Fibration)
-    return "{$(pretty(fiber_var(fib))) ⇥ $(pretty(fibers(fib)))}"
-end
+pretty(fib::Fibration) = "{$(pretty(fiber_var(fib))) ⇥ $(pretty(fibers(fib)))}"
 
 """
 Finite fibration
@@ -378,31 +344,32 @@ end
 """
 function pp(fib::FiniteFibration)
     zs, ks = zk_vars(fib)
-    return pct_map(zs..., ks..., add(
-        [ecall(pp(f), zs..., k) for (f, k) in zip(fibers(fib), ks)]...))
+    return pct_map(zs..., ks..., add(map((f, k) -> ecall(pp(f), zs..., k), fibers(fib), ks)...))
 end
 
 apns(fib::FiniteFibration) = vcat(apns.(fibers(fib))...)
 
-function pretty(fib::FiniteFibration)
-    return join(pretty.(fibers(fib)), "|")
-end
+pretty(fib::FiniteFibration) = join(pretty.(fibers(fib)), "|")
 
 """
 Map to a call
 """
 struct BMap <: ABF
     param::APN
-    maptype::MapType
 end
 param(b::BMap) = b.param
-
-function as_map(m::BMap)
-    return param(m)
+function maptype(b::BMap) 
+    result = get_type(param(b))
+    if isa(result, VecType)
+        return MapType(VecType([I()]), get_type(first(content(result))))
+    end
+    return result
 end
 
+as_map(m::BMap) = param(m)
+
 function decompose(z::APN, ov::AbstractCall)
-    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), BMap(mapp(ov), get_type(mapp(ov))))
+    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), BMap(mapp(ov)))
     push(decompose(z, args(ov)), BMap(mapp(ov)))
 end
 
@@ -411,7 +378,7 @@ function decompose(zs::PCTVector, ov::Var)
     const_type = MapType(get_type(zs), get_type(ov))
     i = findfirst(t -> t == ov, content(zs))
     i === nothing && return comp(zs, Pconst(ov, const_type))
-    return comp(zs, Pconst(constant(i), MapType(get_type(zs), I())), BMap(zs, MapType(v_wrap(I()), get_type(first(zs)))))
+    return comp(zs, Pconst(constant(i), MapType(get_type(zs), I())), BMap(zs))
 end
 
 function pp(b::BMap)
@@ -419,24 +386,12 @@ function pp(b::BMap)
     isa(param(b), Union{Var,PCTVector}) && return pullback(param(b))
 end
 
-function decompose(map::Map)
-    result = [decompose(t, fc(map)) for t in content(ff(map))]
-    length(result) == 1 && return first(result)
-end
+decompose(map::Map) = v_unwrap([decompose(t, fc(map)) for t in content(ff(map))])
 
-function pretty(b::BMap)
-    return "ℳ $(pretty(param(b)))"
-end
+pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 
 v_wrap(n::APN) = pct_vec(n)
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
 v_unwrap(n::Union{PCTVector,Vector}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n
-
-
-#
-#= if length(functions(c)) == 1
-    return pct_map(zs..., k, call(pp(first(functions(c))), zs..., k)) 
-
-end =#
