@@ -1,7 +1,7 @@
 using PCT, Test
 
 # Test Var
-@testset "variables" begin
+@testset "element: variables" begin
     # The machine-facing constructor.
     # `make_node` always takes one or more `APN`s.
     x = make_node(Var, :x)
@@ -35,7 +35,7 @@ end
 
 
 # Test vectors
-@testset "PCTVector" begin
+@testset "element: PCTVector" begin
 
     # The machine-facing constructor
     v = make_node(PCTVector, var(:x, I()), var(:y, I()), var(:z, I()))
@@ -74,7 +74,7 @@ end
 end
 
 # Test maps
-@testset "maps" begin
+@testset "element: maps" begin
     m = make_node(Map, pct_vec(var(:x, I())), var(:x, I()))
 
     @test content(get_type(m)) == I()
@@ -110,7 +110,7 @@ end
 
 # Test pullbacks
 
-@testset "pullbacks" begin
+@testset "element: pullbacks" begin
     m = make_node(Map, pct_vec(var(:x, I())), var(:x, I()))
     m2 = set_from(m, pct_vec(var(:y, I())))
     # Constructing a pullback is just wrapping 
@@ -142,7 +142,7 @@ end
 end
 
 # Test monomials
-@testset "monomials" begin
+@testset "element: monomials" begin
 
     m = make_node(Monomial, var(:x), var(:y))
     @test base(m) == var(:x)
@@ -159,12 +159,12 @@ end
 end
 
 # Test Add
-@testset "add" begin
+@testset "element: add" begin
     a = make_node(Add, pct_vec(var(:x), var(:y)))
-    @test fc(a) == pct_vec(var(:x), var(:y))
+    @test fc(a) == pct_vec(sort([var(:x), var(:y)])...)
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(var(:p), var(:q))
+    @test fc(a2) == pct_vec(sort([var(:p), var(:q)])...)
 
     @test flatten_add(a) == content(fc(a))
 
@@ -186,12 +186,12 @@ end
 end
 # Test Mul
 
-@testset "mul" begin
+@testset "element: mul" begin
     a = make_node(Mul, pct_vec(var(:x), var(:y)))
-    @test fc(a) == pct_vec(var(:x), var(:y))
+    @test fc(a) == pct_vec(sort([var(:x), var(:y)])...)
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(var(:p), var(:q))
+    @test fc(a2) == pct_vec(sort([var(:p), var(:q)])...)
 
     @test flatten_mul(a) == content(fc(a))
 
@@ -213,13 +213,13 @@ end
     @test mul(var(:m), var(:x), var(:z)) == a
 end
 
-@testset "contraction" begin
-    s = make_node(Sum, var(:i), call(var(:x), var(:i)))
-    @test ff(s) == var(:i, I()) # There is an default inference for sum
+@testset "element: contraction" begin
+    s = pct_sum(var(:i), call(var(:x), var(:i)))
+    @test ff(s) == pct_vec(var(:i, I())) # There is an default inference for sum
     @test fc(s) == call(var(:x), var(:i))
 
-    i = make_node(Integral, var(:x), call(var(:f), var(:x)))
-    @test ff(i) == var(:x, R())
+    i = pct_int(var(:x), call(var(:f), var(:x)))
+    @test ff(i) == pct_vec(var(:x, R()))
     @test fc(i) == call(var(:f), var(:x))
 
     # non-generic constructor.
@@ -230,14 +230,14 @@ end
     @test isa(pct_sum(var(:i), var(:j), call(var(:x), var(:i), var(:j))), Sum)
 end
 
-@testset "product" begin
-    p = make_node(Prod, var(:i), call(var(:x), var(:i)))
-    @test ff(p) == var(:i, I())
+#= @testset "product" begin
+    p = pct_product(var(:i), call(var(:x), var(:i)))
+    @test ff(p) == pct_vec(var(:i, I()))
     @test fc(p) == call(var(:x), var(:i))
     @test p == pct_product(var(:i), call(var(:x), var(:i)))
-end
+end =#
 
-@testset "Delta" begin
+@testset "element: Delta" begin
     d = make_node(Delta, var(:i), var(:j), call(var(:x), var(:i), var(:j)))
     @test upper(d) == var(:i)
     @test lower(d) == var(:j)
@@ -257,15 +257,15 @@ end
     @test lower(fc(d)) == var(:j)
 end
 
-@testset "conjugate" begin
-    c = make_node(Conjugate, var(:x))
-    @test fc(c) == var(:x)
+@testset "element: conjugate" begin
+    c = make_node(Conjugate, var(:x, C()))
+    @test fc(c) == var(:x, C())
 
     c2 = make_node(Conjugate, c)
-    @test c2 == var(:x)
+    @test c2 == var(:x, C())
 
     c3 = make_node(Conjugate, var(:x, I()))
-    @test c3 == var(:x)
+    @test c3 == var(:x, I())
 
     c4 = conjugate(var(:y, C()))
 

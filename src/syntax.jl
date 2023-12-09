@@ -116,6 +116,8 @@ end
 function parse_node(::Type{Domain}, n::Expr)
     name = n.args[2]
     block = n.args[3]
+    periodic = QuoteNode(false)
+    contractable = QuoteNode(true)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = pairs[:base]

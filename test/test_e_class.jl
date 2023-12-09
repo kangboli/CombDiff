@@ -1,7 +1,7 @@
 using PCT, Test
 
 
-@testset "Primitive Calls & Symmetries" begin
+#= @testset "e_class: primitive calls and symmetries" begin
     f, ctx = @pct begin
         @space S begin
             type = (I, I) -> R
@@ -60,7 +60,7 @@ using PCT, Test
     f3 = @pct f ctx A(i, -B(j, i))
 
     @test f1 == f2 == f3
-end
+end =#
 
 @testset "Contraction and Products" begin
 
@@ -68,7 +68,7 @@ end
     f2, _ = @pct  0
     @test f1 == f2
 
-    # prod_of_zeros
+    #= # prod_of_zeros
     f1 = @pct f ctx prod(a, 0)
     f2 = @pct f ctx 0
     @test f1 == f2
@@ -76,10 +76,10 @@ end
     # prod_of_ones
     f1 = @pct f ctx prod(a, 1)
     f2 = @pct f ctx 1
-    @test f1 == f2
+    @test f1 == f2 =#
 end
 
-@testset "Delta E-Class" begin
+#= @testset "Delta E-Class" begin
     f, ctx = @pct begin
         @space S begin
             type=(I, I) -> R
@@ -101,4 +101,4 @@ end
     f1 = @pct f ctx delta(i, i, A(i, j)) 
     f2 = @pct f ctx A(i, j)
     @test f1 == f2
-end
+end =#

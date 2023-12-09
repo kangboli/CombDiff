@@ -52,7 +52,9 @@ export Var,
     delta,
     delta_not,
     conjugate,
-    APN
+    pullback,
+    APN,
+    signatures!
 
 
 term_start(n::APN) = 2
@@ -464,7 +466,8 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
 end
 
-abstract type Contraction <: APN end
+abstract type PermInv <: APN end
+abstract type Contraction <: PermInv end
 
 function pct_sum(terms::Vararg)
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
@@ -482,39 +485,43 @@ mutable struct Sum <: Contraction
     end
 end
 
-term_start(n::Contraction) = 3
-function signatures!(n::Contraction)
+term_start(n::PermInv) = 3
+function signatures!(n::PermInv)
     isempty(n.signatures) || return n.signatures
     from, summand = ff(n), fc(n)
     n.signatures = [SignatureTree(from[i], summand, content(from)[1:end .!= i]) for i in 1:length(from)]
     return n.signatures
 end
 
-struct Integral <: Contraction
+mutable struct Integral <: Contraction
     type::AbstractPCTType
+    signatures::Vector{AbstractSignatureTree}
     from::PCTVector
     content::APN
     function Integral(type, from::PCTVector, integrand::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        new(type, from, integrand)
+        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(from)]...)
+        signatures = Vector{AbstractSignatureTree}()
+        new(type, signatures, from, integrand)
     end
 end
 
-function pct_int(terms::Vararg{APN})
+function pct_int(terms::Vararg)
     return make_node(Integral, pct_vec(terms[1:end-1]...), last(terms))
 end
 
-struct Prod <: APN
+mutable struct Prod <: PermInv
     type::AbstractPCTType
+    signatures::Vector{AbstractSignatureTree}
     from::PCTVector
     content::APN
     function Prod(type, from::PCTVector, productant::APN)
         from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
-        new(type, from, productant)
+        signatures = Vector{AbstractSignatureTree}()
+        new(type, signatures, from, productant)
     end
 end
 
-function pct_product(terms::Vararg{APN})
+function pct_product(terms::Vararg)
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
 

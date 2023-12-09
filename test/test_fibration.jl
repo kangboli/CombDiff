@@ -95,12 +95,4 @@ cg = decompose(eval_all(g))
 pcg = pp(cg)
 pcg_1 = eval_all(propagate_k(pcg))
 pcg_2 = simplify(pcg_1) |> first
-pcg_3 = simplify(pcg_2; settings=symmetry_settings)
-
-g_2 = eval_all(call(g_1, first(ff(g_1)), constant(1)))
-@profview neighbors(fc(fc(g_2)))
-
-@time g_3 = simplify(g_2) |> first
-a, b = content(fc(first(fc(fc(g_3)))))
-b_s = simplify(b, settings=Dict(:symmetry=>true))
-g_4 = simplify(g_3, settings=Dict(:symmetry=>true))
+pcg_3 = simplify(pcg_2; settings=symmetry_settings) |> first

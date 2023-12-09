@@ -58,7 +58,7 @@ end
 
 neighbors(::Union{Var,Constant}; _...) = NeighborList()
 
-function sub_neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
+function sub_neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
     a = args(c)
 
@@ -72,7 +72,7 @@ function sub_neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
     return result
 end
 
-function neighbors(c::PrimitiveCall; settings=Dict{Symbol,Bool}())
+function neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
 
     function apply_symmetry(indices, op)
@@ -156,7 +156,7 @@ function add_delta_neighbors(terms::Vector)
     return result
 end
 
-function sub_neighbors(n::Union{Add,Mul}; settings=Dict{Symbol,Bool}())
+function sub_neighbors(n::Union{Add,Mul}; settings=default_settings)
     result = NeighborList()
     c = fc(n)
     for i = 1:length(c)
@@ -169,7 +169,7 @@ function sub_neighbors(n::Union{Add,Mul}; settings=Dict{Symbol,Bool}())
     return result
 end
 
-function neighbors(a::Add; settings=Dict{Symbol,Bool}())
+function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(fc(a))
     append!(result, gcd_neighbors(terms))
@@ -284,7 +284,7 @@ function relax_sum(terms)
     return result
 end
 
-function neighbors(m::Mul; settings=Dict{Symbol,Bool}())
+function neighbors(m::Mul; settings=default_settings)
     result = NeighborList()
     terms = content(fc(m))
     append!(result, mul_add_neighbors(terms))
@@ -315,7 +315,7 @@ function neighbors(m::Monomial; _...)
     result = NeighborList()
     b, p = base(m), power(m)
 
-    isa(p, Sum) && push!(result, pct_product(ff(p), monomial(b, fc(p))); name="sum_prod")
+    isa(p, Sum) && push!(result, pct_product(ff(p)..., monomial(b, fc(p))); name="sum_prod")
     append!(result, add_mul_neighbors(m))
     return result
 end
@@ -555,7 +555,7 @@ function set_at(v::Any, i::Integer, h)
     map(j -> j == i ? h : v[j], 1:length(v))
 end
 
-function sub_neighbors(n::APN; settings=Dict{Symbol,Bool}())
+function sub_neighbors(n::APN; settings=default_settings)
     result = NeighborList()
     sub_terms = terms(n)
     for (i, t) in enumerate(sub_terms)
@@ -576,7 +576,7 @@ end
 #     return delta(upper(delta), lower(delta), pct_sum(ff(s)..., fc(delta)))
 # end
 
-function neighbors(s::Sum; settings=Dict{Symbol,Bool}())
+function neighbors(s::Sum; settings=default_settings)
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
@@ -595,7 +595,7 @@ end
 function prod_ex_neighbors(p::Prod)
     result = NeighborList()
     i, j = ff(p), ff(fc(p))
-    push!(result, pct_product(j, pct_product(i, fc(fc(p)))); name="prod_ex")
+    push!(result, pct_product(j, i, fc(fc(p))); name="prod_ex")
     return result
 end
 
@@ -623,7 +623,7 @@ function prod_dist_neighbors(p::Prod)
     terms = content(fc(a))
     for (i, t) in enumerate(terms)
         new_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, mul(pct_product(ff(p), t), pct_product(ff(p), add(new_terms...))); name="prod_dist")
+        push!(result, mul(pct_product(ff(p)..., t), pct_product(ff(p)..., add(new_terms...))); name="prod_dist")
     end
     return result
 end
@@ -636,7 +636,7 @@ function prod_sum_neighbors(p::Prod)
 end
 
 
-function neighbors(p::Prod; settings=Dict{Symbol,Bool}())
+function neighbors(p::Prod; settings=default_settings)
     result = NeighborList()
 
     neighbor_list = neighbors(fc(p), settings=settings)
@@ -654,7 +654,7 @@ function neighbors(p::Prod; settings=Dict{Symbol,Bool}())
 end
 
 
-function neighbors(d::Delta; settings=Dict{Symbol,Bool}())
+function neighbors(d::Delta; settings=default_settings)
     result = NeighborList()
     neighbor_list = neighbors(fc(d); settings=settings)
     for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
@@ -676,13 +676,13 @@ function neighbors(d::Delta; settings=Dict{Symbol,Bool}())
     return result
 end
 
-function neighbors(c::Conjugate; settings=Dict{Symbol,Bool}())
+function neighbors(c::Conjugate; settings=default_settings)
     result = NeighborList()
     append!(result, sub_neighbors(c; settings=settings))
     return result
 end
 
-function neighbors(v::PCTVector; settings=Dict{Symbol,Bool}())
+function neighbors(v::PCTVector; settings=default_settings)
     all(t -> isa(t, Var), content(v)) && return NeighborList()
     return sub_neighbors(v; settings=settings)
 end

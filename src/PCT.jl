@@ -10,7 +10,7 @@ include("index_signature.jl")
 include("hash.jl")
 include("evaluation.jl")
 include("partialchain_fibration.jl")
-include("pullback.jl")
+#= include("pullback.jl") =#
 include("inference.jl")
 include("pretty.jl")
 include("syntax.jl")

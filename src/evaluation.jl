@@ -112,12 +112,6 @@ function new_hash(nodes...; num=1)
     return symbols
 end
 
-
-function subst(n::Var, old::Var, new::APN, ::Bool)
-    name(n) == name(old) || return n
-    return new
-end
-
 """
 
 Replacing `x(i)` with `x(j)` in `n`.
@@ -142,11 +136,20 @@ end =#
 subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c =#
 subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
 
+function subst(n::Var, old::Var, new::APN, ::Bool)
+    # The type of the variable is not compared.
+    name(n) == name(old) ? new : n
+end
+
+function subst(n::T, old::T, new::APN, ::Bool) where T <: APN
+    n == old ? new : n
+end
+
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
     if !replace_dummy
         _, dummies = free_and_dummy(n)
         name(old) in name.(dummies) && return n
-        n = resolve_conflict(n, old, new)
+        n = resolve_conflict(n, old, new, dummies)
     end
 
     return reconstruct(n, old, new, replace_dummy)
@@ -157,16 +160,16 @@ function reconstruct(n::APN, old::APN, new::APN, replace_dummy::Bool)
 end
 
 function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)
-    new_args = map(t->subst(t, old, new), content(args(n)))
+    new_args = map(t -> subst(t, old, new), content(args(n)))
     if name(mapp(n)) == name(old)
-        return call(new, map(t->subst(t, old, new, replace_dummy), new_args)...)
-    else 
+        return call(new, map(t -> subst(t, old, new, replace_dummy), new_args)...)
+    else
         return call(mapp(n), new_args...)
     end
 end
 
 
-"""
+#= """
 TODO: This must change
 The dummy variables are not allowed to be a `PrimitiveCall`, so
 we don't have to consider replacing the dummy variabless.
@@ -181,16 +184,16 @@ function subst(n::T, old::PrimitiveCall, new::APN, replace_dummy=false) where {T
 
     return set_terms(n, [subst(t, old, new, replace_dummy) for t in terms(n)]...)
 end
-
+ =#
 """
 If free variables of new collide with dummy variables in n
 replace the dummies with something new.
 sum(i, i * sum(j, A(i, j)))
 """
-function resolve_conflict(n::T, old::APN, new::APN) where {T<:APN}
+function resolve_conflict(n::T, old::APN, new::APN,
+    n_dummies=last(free_and_dummy(n))) where {T<:APN}
     conflict = Vector{Var}()
     new_free, _ = free_and_dummy(new)
-    n_dummies = last(free_and_dummy(n))
     for d in n_dummies
         name(d) in name.(new_free) && push!(conflict, d)
     end

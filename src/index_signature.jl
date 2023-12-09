@@ -2,7 +2,7 @@ export SignatureTree, subtrees, tree_dfs_vis, node_type
 
 struct SignatureTree <: AbstractSignatureTree
     node_type::Type  # I avoided parametric type of this intentionally.
-    extra::Union{Var, Constant, Nothing}
+    extra::Union{Var,Constant,Nothing}
     subtrees::Vector{Pair{SignatureTree,Int}}
 end
 
@@ -30,13 +30,13 @@ end
 function to_string(sig::SignatureTree, indent=0, i=nothing)
     str = "$(join(fill(" ", indent)))$(i===nothing ? "" : i): $(node_type(sig)) $(extra(sig) === nothing ? "" : pretty(extra(sig)))\n"
     for (t, i) in subtrees(sig)
-        str *= to_string(t, indent+4, i)
+        str *= to_string(t, indent + 4, i)
     end
     return str
 end
 
 
-function process_content!(sig::SignatureTree, index::S, c::Vector{T}, other_indices::Vector{R}) where {S <: Var, T <:APN, R <: Var}
+function process_content!(sig::SignatureTree, index::S, c::Vector{T}, other_indices::Vector{R}) where {S<:Var,T<:APN,R<:Var}
     for (i, t) in enumerate(c)
         if isa(t, Var)
             name(t) in name.(other_indices) && continue
@@ -53,21 +53,21 @@ function SignatureTree(index::S, summand::T, other_indices::Vector{R}) where {S<
     return sig
 end
 
-function SignatureTree(index::S, call::T, other_indices::Vector{R}) where {S <: Var, T <: AbstractCall, R <: Var}
+function SignatureTree(index::S, call::T, other_indices::Vector{R}) where {S<:Var,T<:AbstractCall,R<:Var}
     sig = SignatureTree(T, nothing, Vector{SignatureTree}())
     process_content!(sig, index, [mapp(call), content(args(call))...], other_indices)
     return sig
 end
 
-function SignatureTree(index::S, v::T, ::Vector{R}) where {S <: Var, T <: Var, R <: Var}
+function SignatureTree(index::S, v::T, ::Vector{R}) where {S<:Var,T<:Var,R<:Var}
     return SignatureTree(T, index == v ? nothing : v, Vector{SignatureTree}())
 end
 
-function SignatureTree(::S, c::Constant, ::Vector{R}) where {S <: Var, R <: Var}
+function SignatureTree(::S, c::Constant, ::Vector{R}) where {S<:Var,R<:Var}
     return SignatureTree(Constant, c, Vector{SignatureTree}())
 end
 
-const Commtative = Union{Mul, Add}
+const Commtative = Union{Mul,Add}
 
 function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     node_type(sig_1) == node_type(sig_2) || return false
@@ -83,8 +83,8 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
 
     # TODO: Change this to a sort based comparison
     for t in trees_to_compare_1
-        n_1 = count(x->x==t, trees_to_compare_1)
-        n_2 = count(x->x==t, trees_to_compare_2)
+        n_1 = count(x -> x == t, trees_to_compare_1)
+        n_2 = count(x -> x == t, trees_to_compare_2)
         n_1 == n_2 || return false
     end
 
@@ -92,21 +92,21 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
 
 end
 
-    #= dict_1 = Dict{Any, Int}()
-    for t in trees_to_compare_1
-        dict_1[t] = 1 + get(dict_1, t, 0)
-    end
+#= dict_1 = Dict{Any, Int}()
+for t in trees_to_compare_1
+    dict_1[t] = 1 + get(dict_1, t, 0)
+end
 
-    dict_2 = Dict{Any, Int}()
-    for t in trees_to_compare_2
-        dict_2[t] = 1 + get(dict_2, t, 0)
-    end
+dict_2 = Dict{Any, Int}()
+for t in trees_to_compare_2
+    dict_2[t] = 1 + get(dict_2, t, 0)
+end
 
-    for (k, v) in dict_1
-        if !(haskey(dict_2, k) && dict_2[k] == v) 
-            return false
-        end
-    end =#
+for (k, v) in dict_1
+    if !(haskey(dict_2, k) && dict_2[k] == v) 
+        return false
+    end
+end =#
 
 
 #= function Base.isless(t_1::SignatureTree, t_2::SignatureTree)
@@ -123,7 +123,7 @@ end
     return false
 end =#
 
-function trunc_hash(p::Pair{SignatureTree, Int}, level=3)
+function trunc_hash(p::Pair{SignatureTree,Int}, level=3)
     return trunc_hash(first(p), level) + hash(last(p))
 end
 
@@ -133,10 +133,10 @@ function trunc_hash(sig::SignatureTree, level=3)
     own_hash = sum(hash, (node_type(sig), hash(extra(sig))))
     level == 0 && return own_hash
     trees_to_hash = subtrees(sig)
-    if node_type(sig)  <: Commtative
+    if node_type(sig) <: Commtative
         trees_to_hash = first.(subtrees(first(first(trees_to_hash))))
     end
-    hashes = [trunc_hash(t, level-1)  for t in trees_to_hash]
+    hashes = [trunc_hash(t, level - 1) for t in trees_to_hash]
     return own_hash + sum(sort(hashes), init=0)
 end
 

@@ -1,6 +1,6 @@
 using GraphPlot, DataStructures
 
-export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings
+export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings, redux
 
 struct PCTGraph
     nodes::Vector{APN}
@@ -30,8 +30,9 @@ function PCTGraph(n::APN)
     return g
 end
 
-default_settings = Dict(:clench_sum=>false, :symmetry=>false)
-function custom_settings(custom::Vararg{Pair{Symbol, Bool}})
+const Settings = Dict{Symbol, Bool}
+default_settings = Settings(:clench_sum=>false, :symmetry=>false)
+function custom_settings(custom::Vararg{Pair{Symbol, Bool}})::Settings
     new_settings = deepcopy(default_settings)
     for (s, b) in custom
         new_settings[s] = b
@@ -96,19 +97,23 @@ function simplify(n::Map; settings=default_settings)
     map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
 end
 
+
+function redux(n::Map; settings=default_settings)
+    pct_map(ff(n)...,  redux(fc(n); settings=settings))
+end
+
+function redux(n::APN; settings=default_settings)
+    reduced = [redux(t, settings=settings) for t in content(n)]
+    simplify(set_content(n, reduced...); settings=settings) |> first
+end
+
+function redux(n::Union{Var, Constant}; _...)
+    return n
+end
+
 function propagate_k(n::Map, k=constant(1))
     return ecall(n, ff(n)[1:end-1]..., k)
 end
-#= function simplify(n::Add, recurse=true; settings=Dict{Symbol, Bool}())
-
-    if recurse
-        simplify(add([first(simplify(t; settings=settings)) for t in content(fc(n))]...), false; settings=settings)
-    else
-        invoke(simplify, Tuple{APN, Dict{Symbol, Bool}()}, n, settings)
-    end
-
-end =#
-
 
 function graphs_jl(g::PCTGraph)
     SimpleDiGraph(Edge.(edges(g)))
