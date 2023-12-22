@@ -76,7 +76,9 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
 
     function apply_symmetry(indices, op)
+        # Apply the permutation.
         new_term = set_content(c, mapp(c), args(c)[collect(indices)])
+        # Apply the symmetry operation.
         op == :conj && return conjugate(new_term)
         op == :neg && return mul(constant(-1), new_term)
         op == :ineg && return set_content(c, mapp(c),

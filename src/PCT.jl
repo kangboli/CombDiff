@@ -16,5 +16,6 @@ include("pretty.jl")
 include("syntax.jl")
 include("equivalent_set.jl")
 include("graph.jl")
+include("codegen.jl")
 
 end

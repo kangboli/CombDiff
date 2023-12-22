@@ -2,11 +2,11 @@ using PCT
 
 f, ctx = @pct begin
     @space V begin
-        type=(I,)->C
+        type = (I,) -> C
     end
 
     @space H begin
-        type=(I,I)->C
+        type = (I, I) -> C
         symmetries = (((2, 1), :conj),)
     end
     (A::H) -> _
@@ -16,6 +16,7 @@ g = fc(@pct f ctx (x::V) -> sum((i, j), x(i)' * A(i, j) * x(j)))
 cg = decompose(g)
 pcg = pp(cg)
 pcg_1 = propagate_k(pcg)
+
 pcg_2 = simplify(pcg_1) |> first
 simplify(pcg_2; settings=symmetry_settings) |> first
 
@@ -42,21 +43,23 @@ f, ctx = @pct begin
     (A::H, J::T) -> _
 end
 
-g = fc(@pct f ctx (C::U) -> sum((i,j,p,q,r,s), C(p,i)' * C(q,i) * C(r,j)' * C(s,j) * J(p,q,r,s)))
-cg = decompose(g)
+g = fc(@pct f ctx (C::U) -> sum((i, j, p, q, r, s),
+    C(p, i)' * C(q, i) * C(r, j)' * C(s, j) * J(p, q, r, s)))
 
+cg = decompose(g)
 pcg = pp(cg)
 pcg_1 = propagate_k(pcg)
+
 pcg_2 = simplify(pcg_1) |> first
 pcg_3 = simplify(pcg_2; settings=symmetry_settings) |> first
 
 
-f, ctx = @pct begin 
+f, ctx = @pct begin
 
     @domain P begin
         base = I
         lower = -N
-        upper = N-1
+        upper = N - 1
         periodic = true
     end
 
@@ -69,12 +72,12 @@ f, ctx = @pct begin
 
     @space Mmn begin
         type = (I, I, I, I) -> C
-        symmetries = (((2, 1, 4, 3), :conj), )
+        symmetries = (((2, 1, 4, 3), :conj),)
     end
 
     @space Sym begin
-        type = (I, ) -> C
-        symmetries = (((1, ), :ineg), )
+        type = (I,) -> C
+        symmetries = (((1,), :ineg),)
     end
 
     @space Gauge begin
@@ -89,7 +92,7 @@ f, ctx = @pct begin
 end
 
 g = fc(@pct f ctx (U::Gauge) -> ((ρ::Density) -> sum((n::I, b::Q), ρ(n, b)' * ρ(n, b)))(
-    (n::I, b::Q) -> sum((k::P, p, q), U(p, n, k)' * S(p,q,k,k+b) * U(q, n, k+b))))
+    (n::I, b::Q) -> sum((k::P, p, q), U(p, n, k)' * S(p, q, k, k + b) * U(q, n, k + b))))
 
 cg = decompose(eval_all(g))
 pcg = pp(cg)

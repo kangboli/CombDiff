@@ -6,8 +6,17 @@ end
 
 content(context::TypeContext) = context.content
 
+default_context = Dict{Symbol, Vector{<:AbstractPCTType}}(
+    :CV => [MapType(VecType([I()]), C())],
+    :RV => [MapType(VecType([I()]), R())],
+    :CM => [MapType(VecType([I(), I()]), C())],
+    :RM => [MapType(VecType([I(), I()]), R())],
+    :Her => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((1,2), :conj)),))],
+    :Sym => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((1,2), :id)),))],
+    ) |> TypeContext
+
 function TypeContext() 
-    context = TypeContext(Dict{Symbol, AbstractPCTType}())
+    context = default_context
     pct_push!(context, :_, UndeterminedPCTType())
     return context
 end
