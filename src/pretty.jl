@@ -32,7 +32,7 @@ end
 
 pretty(v::Var) = "$(name(v))"
 
-latex(v::Var) = startswith(string(name(v)), "_") ? "\\$(name(v))" : "$(name(v))"
+latex(v::Var) = startswith(string(name(v)), "_") ? "\\mathbb{$(string(name(v))[2:end])}" : "$(name(v))"
 
 verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
 
@@ -44,7 +44,10 @@ verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_ty
 
 pretty(c::Conjugate) = "$(pretty(fc(c)))'"
 
-latex(c::Conjugate) = "$(latex(fc(c)))^*"
+conj_symbol(::MapType) = "\\dagger"
+conj_symbol(::ElementType) = "*"
+
+latex(c::Conjugate) = "$(latex(fc(c)))^{$(conj_symbol(get_type(fc(c))))}"
 
 verbose(c::Conjugate) = "$(verbose(fc(c)))'"    
 
@@ -68,7 +71,7 @@ function latex(s::Sum)
         push!(indices, ff(s))
         s = fc(s)
     end
-    "\\sum_{$(join(latex.(indices),","))}\\left[$(latex(s))\\right]"
+    "\\sum_{$(join(latex.(indices),","))}\\left($(latex(s))\\right)"
 end
 
 function verbose(s::Sum)
@@ -119,7 +122,9 @@ end
 
 pretty(m::Mul) = "($(join(pretty.(content(fc(m))), "⋅")))"
 
-latex(m::Mul) = "($(join(latex.(content(fc(m))), "\\cdot ")))"
+function latex(m::Mul) 
+    "$(join(latex.(sort(content(fc(m)), by=is_negative, rev=true)), "\\cdot "))"
+end
 
 function verbose(m::Mul)
     "(*\n"*
@@ -130,7 +135,10 @@ end
 
 pretty(a::Add) = "($(join(pretty.(content(fc(a))), "+")))"
 
-latex(m::Add) = "\\left($(join(latex.(content(fc(m))), "+"))\\right)"
+function latex(m::Add) 
+    signed = map(t->is_negative(t) ? latex(t) : "+$(latex(t))", content(fc(m)))
+    return "\\left($(strip(join(signed, ""), '+'))\\right)"
+end
 
 function verbose(a::Add)
     "(+\n"*
@@ -141,10 +149,15 @@ end
 pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
 
 function latex(p::PrimitiveCall) 
+    if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
+        return "\\nabla \\left($(latex(fc(mapp(p))))\\right)\\left($(latex(args(p)[1:end-1]))\\right)"
+    end
+
+
     if all(a->a==I(), content(from(get_type(mapp(p)))))
-        "$(latex(mapp(p)))_{$(latex(args(p)))}"
+        return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
-        "$(latex(mapp(p)))($(latex(args(p))))"
+        return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
     end
 end
 
@@ -159,7 +172,14 @@ verbose(c::Constant) = "$(fc(c))::$(verbose(get_type(c)))"
 
 pretty(v::PCTVector) = join(pretty.(content(v)), ", ")
 
-latex(v::PCTVector) = join(latex.(content(v)), ", ")
+function latex(v::PCTVector) 
+    terms = latex.(content(v))
+    if any(t->length(t) > 30, terms)
+        return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
+    else
+        return join(terms, ", ")
+    end
+end
 
 verbose(v::PCTVector) = join(verbose.(content(v)), ", ") 
 
@@ -176,4 +196,15 @@ pretty(n::Negate) = "-$(pretty(fc(n)))"
 pretty(m::Monomial) = "$(pretty(base(m)))^($(pretty(power(m))))"
 verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
 latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
+
+pretty(l::Let) = "let $(join(map((f, a) -> "$(pretty(f)) = $(pretty(a))", ff(l), args(l)), "\n"))\n$(pretty(fc(l)))\nend"
+function verbose(l::Let)
+    "let $(join(map((f, a) -> "$(verbose(f)) = $(verbose(a))", ff(l), args(l)), "\n"))\n$(verbose(fc(l)))\nend"
+end
+latex(l::Let) = "\\mathrm{let} \\; $(join(map((f, a) -> "$(latex(f)) = $(latex(a))", ff(l), args(l)), "\\\\"))\\\\$(latex(fc(l)))\\\\\\mathrm{end}"
+
+# This function is only for the purpose of displaying the negative sign.
+is_negative(n::APN) = false
+is_negative(n::Mul) = any(t->is_negative(t), fc(n))
+is_negative(n::Constant) = fc(n) < 0
 

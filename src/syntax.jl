@@ -84,7 +84,7 @@ function parse_node(n::Expr)
         return parse_node(AbstractCall, n)
     end
     n.head == :block && return parse_node(n.args[1])
-    #= n.head == :let && return parse_node(Let, n) =#
+    n.head == :let && return parse_node(Let, n)
     n.head == Symbol("'") && return parse_node(Conjugate, n)
     return :()
     #= n.head == :tuple && return parse_tuple_node(n) =#
@@ -97,17 +97,19 @@ function parse_node(::Type{MapType}, s::Expr)
     block = s.args[3]
 
     parse_pair(::Val{:symmetries}, t::Expr) = t
+    parse_pair(::Val{:linear}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
         from_type(a::Symbol) = a in [:I, :R, :C] ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
         params = :(VecType([$([from_type(a) for a in t.args[1].args]...)]))
-        return_type = :($(first(t.args[2].args))())
+        return_type = :($(from_type(first(t.args[2].args))))
         return (params, return_type)
     end
 
     pairs = Dict(a.args[1] => parse_pair(Val(a.args[1]), a.args[2]) for a in block.args)
-    dict = haskey(pairs, :symmetries) ?
-           :(Dict(:name => $(QuoteNode(name)), :symmetries => $(pairs[:symmetries]))) :
-           :(Dict(:name => $(QuoteNode(name)),))
+
+    supported_properties = [:symmetries, :linear]
+    properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
+    dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
     return :(pct_push!(_ctx, $(QuoteNode(name)),
         MapType($(pairs[:type]...), $(dict),);
         replace=true))
@@ -120,8 +122,10 @@ function parse_node(::Type{Domain}, n::Expr)
     contractable = QuoteNode(true)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
-        base = pairs[:base]
-        lower, upper = parse_node(pairs[:lower]), parse_node(pairs[:upper])
+        base = haskey(pairs, :base) ? pairs[:base] : :I
+        #= lower, upper = parse_node(pairs[:lower]), parse_node(pairs[:upper]) =#
+        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : mul(constant(-1), var(:Infty))
+        upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : var(:Infty)
         periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
         contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
     else
@@ -223,24 +227,30 @@ function parse_node(::Type{Prod}, s::Expr)
     return :(pct_product($(param_nodes...), $(parse_node(s.args[3]))))
 end
 
-#= function parse_node(::Type{Let}, l::Expr)
+function parse_node(::Type{Let}, l::Expr)
     @assert l.head == Symbol("let")
 
     substitutions = l.args[1].head == :block ? l.args[1].args : [l.args[1]]
 
-    function parse_subst(a::Expr)
+    froms = []
+    args = []
+
+    function parse_subst!(a::Expr)
         @assert a.head == Symbol("=")
-        return :($(parse_node(a.args[1])) => $(parse_node(a.args[2])))
+        push!(froms, :($(parse_node(a.args[1]))))
+        push!(args, :($(parse_node(a.args[2]))))
     end
 
+    parse_subst!.(substitutions)
     content = parse_node(l.args[2])
+
     return :(make_node(
         Let,
-        make_node(PCTVector, $(parse_subst.(substitutions)...)),
+        pct_vec($(froms...)),
+        pct_vec($(args...)),
         $(content),
     ))
-
-end =#
+end
 
 function parse_node(::Type{Pullback}, p::Expr)
     @assert p.args[1] == :pullback

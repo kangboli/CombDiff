@@ -104,12 +104,19 @@ function symmetries(c::MapType)
     return c.meta[:symmetries]
 end
 
+linear(c::MapType) = get(c.meta, :linear, false)
 
-function escalate(element_types::Vararg) 
+function escalate(element_types::Vararg{T}) where T <: ElementType
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()
     any(t->type_based(t, C()), element_types) && return C()
     any(t->type_based(t, R()), element_types) && return R()
     any(t->type_based(t, I()), element_types) && return I()
     return UndeterminedPCTType()
 end
+
+function escalate(map_types::Vararg)
+    # TODO implement this properly
+    return first(map_types)
+end
+
 

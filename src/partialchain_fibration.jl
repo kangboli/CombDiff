@@ -288,21 +288,25 @@ end =#
 
 function pp(c::PComp)::Map
     zs = input(c)
-    # one can use zs instead of ys, but ys is mentally easier to deal with.
     ys, ks = zk_vars(c)
-    isempty(pfuncs(c)) && return pct_map(ys..., ks..., v_unwrap(ks))
+    # one can use either zs or ys.
+    ys = zs
+
+    isempty(pfuncs(c)) && return pct_map(ys..., ks..., v_unwrap(pct_vec(ks...)))
 
     f, x_expr = pop(c)
-    expr = v_wrap(eval_all(call(as_map(x_expr), zs...)))
+    expr = v_wrap(ecall(as_map(x_expr), ys...))
+    p_expr = pp(x_expr)
+    p_f = pp(f)
     #= p_f = pp(f)
     chain = v_wrap(eval_all(call(p_f, expr..., ks...)))
     p_expr = pp(x_expr)
     p_call = call(p_expr, zs..., chain...)
     chain = v_wrap(eval_all(p_call)) =#
-    chain = v_wrap(ecall(pp(x_expr), ys..., v_wrap(ecall(pp(f), expr..., ks...))...))
+    chain = v_wrap(ecall(p_expr, ys..., v_wrap(ecall(p_f, expr..., ks...))...))
     f_map = as_map(f)
     if any(s -> contains_name(f_map, s), name.(zs))
-        is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_i), v_wrap(get_type(expr)))
+        is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_d), v_wrap(get_type(expr)))
         #= deltas = ks
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)
@@ -311,7 +315,8 @@ function pp(c::PComp)::Map
         partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(deltas))))
         chain = pct_vec(map(add, chain, partial)...)
     end
-    return pct_map(ys..., ks..., v_unwrap(chain))
+    result = pct_map(ys..., ks..., v_unwrap(chain))
+    return result
 end
 
 
@@ -400,7 +405,7 @@ end
 param(b::BMap)::APN = b.param
 function maptype(b::BMap)::MapType
     result = get_type(param(b))
-    isa(result, VecType) && return MapType(VecType([I()]), get_type(first(content(result))))
+    isa(result, VecType) && return MapType(VecType([I()]), first(content(result)))
     return result
 end
 
@@ -420,11 +425,28 @@ function decompose(zs::PCTVector, ov::Var)::PComp
 end
 
 function pp(b::BMap)::AbstractMap
-    isa(param(b), Map) && return pp(decompose(param(b)))
-    isa(param(b), Union{Var,PCTVector}) && return pullback(param(b))
+    m = param(b)
+    process_param(p::Map) = pp(decompose(p))
+    # TODO: Implement the vector case.
+    process_param(p::APN) = primitive_pullback(p)
+    #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
+    function process_param(p::Var)
+        from_types = content(from(get_type(m)))
+        n_args = length(from_types)
+        zs, ks = zk_vars(b)
+        if n_args == 1 
+            linear(get_type(m)) || return pullback(p)
+            return pct_map(zs..., ks..., call(conjugate(m), ks...)) 
+        end
+        #= new_from = map(var, new_symbol(m, zs..., ks..., num=n_args), from_types) =#
+        pullbacks = map(z->call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
+        pct_map(zs..., ks..., pct_vec(pullbacks...))
+    end
+    return process_param(m)
 end
 
-decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, fc(map)) for t in content(ff(map))])
+#= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, fc(map)) for t in content(ff(map))]) =#
+decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(ff(map), fc(map))
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 

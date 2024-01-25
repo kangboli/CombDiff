@@ -24,6 +24,14 @@ Base.:(==)(t_1::T, t_2::T) where T <: ElementType = true
 trunc_hash(::T, ::Int) where T <: ElementType = T.hash
 trunc_hash(n::Constant, ::Int) = hash(fc(n))
     
+function Base.hash(v::VecType)
+    return sum(hash.(content(v)))
+end
+
+function Base.hash(m::MapType)
+    return sum(hash.(ff(m))) + hash(fc(m))
+end
+
 
 function Base.:(==)(d_1::Domain, d_2::Domain)
     d_1.base == d_2.base &&
@@ -106,6 +114,7 @@ function Base.:(==)(v_1::VecType, v_2::VecType)
     length(v_1) == length(v_2) &&
     all(i->content(v_1)[i] == content(v_2)[i], 1:length(v_1))
 end
+
 
 function Base.:(==)(m_1::MapType, m_2::MapType)
     objectid(m_1) == objectid(m_2) && return true

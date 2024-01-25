@@ -198,6 +198,37 @@ end
 name(v::Var) = v.content
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
 
+struct Conjugate <: APN
+    type::AbstractPCTType
+    content::APN
+end
+
+function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
+    t = get_type(term)
+    t in [I(), R()] && return T, terms(term), get_type(term)
+    if T == Mul
+        sub_terms = pct_vec(map(conjugate, content(fc(term)))...)
+        return Mul, [sub_terms], partial_inference(Mul, sub_terms)
+    end
+    if T == Constant
+        new_const = fc(term)'
+        return Constant, [new_const], partial_inference(Constant, new_const)
+    end
+    if T <: Contraction
+        new_terms = [ff(term), conjugate(fc(term))]
+        return T, new_terms, partial_inference(T, new_terms...) 
+    end
+
+    if T == Delta
+        new_terms = [lower(term), upper(term), conjugate(fc(term))]
+        return T, new_terms, partial_inference(T, new_terms...)
+    end
+    T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
+    return Conjugate, [term], get_type(term)
+end
+
+conjugate(term::APN) = make_node(Conjugate, term)
+
 struct PCTVector <: APN
     type::VecType
     content::Vector
@@ -296,6 +327,9 @@ struct PrimitivePullback <: AbstractPullback
 end
 
 pullback(map::Union{Var, PCTVector}) = make_node(PrimitivePullback, map)
+# TODO: Figure out the right pattern for a map to be a primitive one instead of 
+# asuuming that the caller knows it.
+primitive_pullback(n::APN) = make_node(PrimitivePullback, n)
 
 abstract type AbstractCall <: APN end
 
@@ -316,11 +350,11 @@ end
 
 struct PrimitiveCall <: AbstractCall
     type::AbstractPCTType
-    mapp::Union{Var,PrimitivePullback}
+    mapp::APN
     args::PCTVector
 end
 
-function call(mapp::Union{Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:APN})
+function call(mapp::Union{Conjugate, Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:APN})
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
@@ -408,8 +442,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
         if isa(a, Constant) 
             term_dict[constant(1)] = fc(a) + get(term_dict, constant(1), 0)
             continue
-        end
-        if isa(a, Mul) 
+        elseif isa(a, Mul) 
             constant_term = filter(t->isa(t, Constant), content(fc(a)))
             constant_term = isempty(constant_term) ? constant(1) : first(constant_term)
             rest = mul(filter(t->!isa(t, Constant), content(fc(a)))...)
@@ -420,19 +453,60 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     end
 
     new_terms = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+
+    if count(a->isa(a, Map), new_terms) > 1
+        map_dict = Dict{Int, Vector{APN}}()
+        remaining_terms = Vector{APN}()
+        for a in new_terms
+            if isa(a, Map) 
+                map_dict[length(ff(a))] = push!(get(map_dict, length(ff(a)), []), a)
+            else
+                push!(remaining_terms, a)
+            end
+        end
+        function process_kv(k, v)
+            have_common_names = all(i->name.(ff(v[i]))==name.(ff(v[1])), 1:length(v))
+            new_from = have_common_names ? ff(v[1]) : 
+            pct_vec(map(var, new_symbol(v...; num=length(ff(v[1])), symbol=:_a), get_type.(ff(v[1])))...)
+
+            return pct_map(new_from..., add([ecall(x, new_from...) for x in v]...))
+        end
+
+        new_maps = [process_kv(k, v) for (k, v) in map_dict]
+        new_terms = [remaining_terms..., new_maps...]
+    end
+
     sort!(new_terms)
     length(new_terms) == 0 && return Constant, [0], I()
     length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
 
-    if any(t->isa(t, MapType), get_type.(new_terms))
+    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...)) 
+
+    #= map_terms = filter(t->isa(t, Map), new_terms)
+    nonmap_terms = filter(t->!isa(t, Map), new_terms)
+    length(map_terms) <= 1 && return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
+    m = first(map_terms)
+    #= if all(t->ff(t) == ff(m), map_terms[2:end])
+        new_from = ff(m)
+    else
+    end =#
+    new_from = pct_vec(map(var, new_symbol(term; num=length(ff(m)), symbol=:_a), get_type.(ff(m)))...)
+    new_map = pct_map(new_from..., add(map(t->ecall(t, new_from...), map_terms)...))
+    return Add, [nonmap_terms..., new_map], partial_inference(Add, pct_vec(nonmap_terms..., new_map)) =#
+    
+    #= if any(t->isa(t, MapType), get_type.(new_terms))
         # allequal(get_type.(new_terms)) || error("adding tensors of different types")
         m = first(new_terms)
-        new_from = pct_vec(map(var, new_symbol(term; num=length(ff(m))), get_type.(ff(m)))...)
+        #= if all(t->ff(t) == ff(m), new_terms[2:end])
+            new_from = ff(m)
+        else
+        end =#
+        new_from = pct_vec(map(var, new_symbol(term; num=length(ff(m)), symbol=:_a), get_type.(ff(m)))...)
         new_terms = [new_from, add(map(t->ecall(t, new_from...), new_terms)...)]
         return Map, new_terms, partial_inference(Map, new_terms...)
     end
 
-    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
+    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...)) =#
 end
 
 
@@ -537,8 +611,24 @@ function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: C
     end
 
     if isa(summand, Map)
-        new_sum = pct_sum(from...,fc(summand))
-        return Map, [ff(summand), new_sum], partial_inference(Map, ff(summand), new_sum)
+        #= i = findfirst(t -> startswith(string(name(t)), "_"), content(ff(summand)))
+        j = findfirst(t -> !startswith(string(name(t)), "_"), content(from)) =#
+        fcsummand, ffsummand = fc(summand), ff(summand)
+        #= if i !== nothing && j !== nothing
+            tmp = var(first(new_symbol(from..., summand, num=1))) 
+            tmp_fcsummand = subst(fc(summand), ff(summand)[i], tmp)
+            tmp_fcsummand = subst(tmp_fcsummand, from[i], ff(summand)[i])
+            fcsummand = subst(tmp_fcsummand, tmp, from[i])
+            ffsummand = pct_vec(content(ff(summand))[1:end .!= i]...)
+            from = pct_vec(content(from)[1:end .!= i]..., ff(summand)[i])
+            new_sum = pct_sum(from..., fcsummand)
+            return Map, [from[i], ]
+        end
+ =#
+        new_sum = pct_sum(from..., fcsummand)
+        return Map, [ffsummand, new_sum], partial_inference(Map, ffsummand, new_sum)
+        #= new_from = pct_vec(from..., ff(summand)...)
+        return T, [new_from, fc(summand)], partial_inference(T, new_from, fc(summand)) =#
     end
 
     T, [from, summand], partial_inference(Sum, from, summand)
@@ -597,37 +687,6 @@ function delta_not(upper_lower::Vararg{APN})
 end
 
 
-struct Conjugate <: APN
-    type::AbstractPCTType
-    content::APN
-end
-
-function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
-    t = get_type(term)
-    if T == Mul
-        sub_terms = pct_vec(map(conjugate, content(fc(term)))...)
-        return Mul, [sub_terms], partial_inference(Mul, sub_terms)
-    end
-    if T == Constant
-        new_const = fc(term)'
-        return Constant, [new_const], partial_inference(Constant, new_const)
-    end
-    if T <: Contraction
-        new_terms = [ff(term), conjugate(fc(term))]
-        return T, new_terms, partial_inference(T, new_terms...) 
-    end
-
-    if T == Delta
-        new_terms = [lower(term), upper(term), conjugate(fc(term))]
-        return T, new_terms, partial_inference(T, new_terms...)
-    end
-    T == Conjugate && return typeof(fc(term)), terms(fc(term)), get_type(fc(term))
-    t in [I(), R()] && return T, terms(term), get_type(term)
-    return Conjugate, [term], get_type(term)
-end
-
-conjugate(term::APN) = make_node(Conjugate, term)
-
 
 struct Constant <: TerminalNode
     type::AbstractPCTType
@@ -646,11 +705,16 @@ end
 
 struct Let <: APN
     type::AbstractPCTType
-    substitutions::Vector{Pair{Var,<:APN}}
+    from::PCTVector
+    args::PCTVector
     content::APN
 end
 
-substitutions(l::Let) = l.substitutions
+args(l::Let) = l.args
+function pct_let(terms::Vararg{APN})
+    terms = collect(terms)
+    make_node(Let, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end]) 
+end
 
 
 struct Negate <: APN
@@ -658,51 +722,3 @@ struct Negate <: APN
     content::APN
 end
 
-
-#= function renaming(original::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    std_vars = Vector{Var}()
-    for (s, t) in zip(new_symbol(tmp, num=l), get_type.(tmp_vars))
-        push!(std_vars, make_node(Var, s; type=t))
-    end
-
-    for (o, d) in zip(tmp_vars, std_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    return std_vars, tmp
-end
-
-function renaming(original::Vector{Var}, new::Vector{Var}, n::APN)
-    l = length(original)
-
-    tmp_vars = Vector{Var}()
-    for (i, t) in zip(1:l, get_type.(original))
-        push!(tmp_vars, make_node(Var, Symbol(string("_tmp_", i)); type=t))
-    end
-
-    tmp = n
-    for (o, d) in zip(original, tmp_vars)
-        tmp = subst(tmp, o, d)
-    end
-
-    n = tmp
-    for (o, d) in zip(tmp_vars, new)
-        n = subst(n, o, d)
-    end
-
-    return n
-end
-
- =#

@@ -6,17 +6,23 @@ end
 
 content(context::TypeContext) = context.content
 
-default_context = Dict{Symbol, Vector{<:AbstractPCTType}}(
+default_context() = Dict{Symbol, Vector{<:AbstractPCTType}}(
     :CV => [MapType(VecType([I()]), C())],
     :RV => [MapType(VecType([I()]), R())],
+    :CF => [MapType(VecType([C()]), C())],
+    :RF => [MapType(VecType([R()]), R())],
     :CM => [MapType(VecType([I(), I()]), C())],
     :RM => [MapType(VecType([I(), I()]), R())],
-    :Her => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((1,2), :conj)),))],
-    :Sym => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((1,2), :id)),))],
+    :CO => [MapType(VecType([C(), C()]), C())],
+    :RO => [MapType(VecType([R(), R()]), R())],
+    :CT => [MapType(VecType([I(), I(), I()]), C())],
+    :RT => [MapType(VecType([I(), I(), I()]), R())],
+    :Her => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((2, 1), :conj),),))],
+    :Sym => [MapType(VecType([I(), I()]), R(), Dict(:symmetries=>(((2, 1), :id),),))],
     ) |> TypeContext
 
 function TypeContext() 
-    context = default_context
+    context = default_context()
     pct_push!(context, :_, UndeterminedPCTType())
     return context
 end
@@ -66,17 +72,34 @@ function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
     has_from = any(f->hasfield(T, f), from_fields(T))
     if has_from
         op_context!(ff(n), pct_push!, context)
+        # the following line may be redundant.
         n = set_from(n, map(t->inference(t, context), from(n))...)
     end
-
     n = set_content(n, map(t->inference(t, context), content(n))...)
     has_from && op_context!(ff(n), pct_pop!, context)
-    return set_type(n, partial_inference(T, terms(n)...))
+    # Setting the type may also be redundant.
+    return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
 
 function inference(v::Var, context::TypeContext)
     set_type(v, context[name(v)])
 end
+
+function inference(l::Let, context::TypeContext)
+    typed_from, typed_args = [], []
+    for (f, a) in zip(ff(l), args(l))
+        a = inference(a, context)
+        f = set_type(f, get_type(a))
+        push!(typed_from, f)
+        push!(typed_args, a)
+        op_context!(f, pct_push!, context)
+    end
+    
+    typed_content = inference(fc(l), context)
+    map(f -> op_context!(f, pct_pop!, context), typed_from)
+    return l = pct_let(typed_from..., typed_args..., typed_content) 
+end
+
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
@@ -97,6 +120,11 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: Abst
     return content(get_type(first(terms)))
 end
 
+function partial_inference(::Type{Let}, terms...)::AbstractPCTType
+    return get_type(last(terms))
+end
+
+
 function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where T <: Union{Add, Mul}
     @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
@@ -111,7 +139,10 @@ function partial_inference(::Type{Prod}, terms...)::AbstractPCTType
     return get_type(last(terms))
 end
 
-partial_inference(::Type{Conjugate}, terms...)::AbstractPCTType = get_type(last(terms))
+function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
+    isa(get_type(term), ElementType) && return get_type(term)
+    return MapType(content(get_type(term)), from(get_type(term)))
+end
 
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     from_type = from(get_type(mapp))
@@ -119,7 +150,7 @@ function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     MapType(add_content(from_type, content_type), fc(from_type))
 end
 
-function partial_inference(::Type{PrimitivePullback}, v::Union{Var, Map})::AbstractPCTType
+function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
     from_type = from(get_type(v))
     content_type = content(get_type(v))

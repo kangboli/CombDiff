@@ -75,7 +75,7 @@ end
 SymbolGenerator() = SymbolGenerator(:i)
 base_symbol(g::SymbolGenerator) = g.base_symbol
 
-Base.iterate(g::SymbolGenerator)::Tuple{Symbol,Int} = (Symbol(string(base_symbol(g)), "_", 0), 1)
+Base.iterate(g::SymbolGenerator)::Tuple{Symbol,Int} = (base_symbol(g), 1)
 
 Base.iterate(g::SymbolGenerator, state)::Tuple{Symbol,Int} = (Symbol(string(base_symbol(g), "_", state)), state + 1)
 
@@ -90,7 +90,7 @@ function new_symbol(nodes::Vararg{APN}; num=1, symbol=:_i)::Vector{Symbol}
             flag && break
         end
         flag && continue
-        length(symbols) == num && return symbols
+        length(symbols) == num && break
         push!(symbols, s)
     end
     return symbols
@@ -146,6 +146,7 @@ function subst(n::T, old::T, new::APN, ::Bool) where T <: APN
 end
 
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
+    new = R == Call ? eval_all(new) : new
     if !replace_dummy
         _, dummies = free_and_dummy(n)
         name(old) in name.(dummies) && return n
@@ -159,14 +160,20 @@ function reconstruct(n::APN, old::APN, new::APN, replace_dummy::Bool)
     return set_terms(n, [subst(t, old, new, replace_dummy) for t in terms(n)]...)
 end
 
-function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)
+function reconstruct(n::PrimitiveCall, old::APN, new::APN, replace_dummy::Bool)
+    new_args = map(t -> subst(t, old, new), content(args(n)))
+    new_map = subst(mapp(n), old, new, replace_dummy)
+    return call(new_map, new_args...)
+end
+
+#= function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)
     new_args = map(t -> subst(t, old, new), content(args(n)))
     if name(mapp(n)) == name(old)
         return call(new, map(t -> subst(t, old, new, replace_dummy), new_args)...)
     else
         return call(mapp(n), new_args...)
     end
-end
+end =#
 
 
 #= """
@@ -200,7 +207,8 @@ function resolve_conflict(n::T, old::APN, new::APN,
     isempty(conflict) && return n
 
     for c in conflict
-        tmp = set_content(c, first(new_symbol(new, n, old)))
+        new_prefix = filter(t->t != "", split(string(name(c)), "_")) |> first
+        tmp = set_content(c, first(new_symbol(new, n, old, symbol=Symbol("_$(new_prefix)"))))
         n = subst(n, c, tmp, true)
     end
     return n
@@ -214,25 +222,31 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
-    new_from = map(var, new_symbol(c, num=length(ff(mapp(c)))), get_type(ff(mapp(c))))
+    new_from = map(var, new_symbol(c, num=length(ff(mapp(c))), symbol=:_e), get_type(ff(mapp(c))))
+    @assert length(new_from) == length(args(c)) == length(ff(mapp(c)))
+
     n = evaluate(fc(mapp(c)))
     for (old, new) in zip(content(ff(mapp(c))), new_from)
         n = subst(n, old, new)
     end
-    for (old, new) in zip(new_from, args(c))
-        #= println("----->")
-        println(pretty(old))
-        println(pretty(new))
-        println(pretty(n)) =#
+    new_args = map(eval_all, args(c))
+
+    for (old, new) in zip(new_from, new_args)
         n = subst(n, old, new)
-        #= println(pretty(n)) =#
     end
+
     return n
+end
+
+function evaluate(l::Let)
+    new_call = call(pct_map(ff(l)..., fc(l)), args(l)...)
+    return evaluate(new_call)
 end
 
 has_call(n::APN) = any(has_call, content(n))
 has_call(::TerminalNode) = false
 has_call(::Call) = true
+has_call(::Let) = true
 
 function eval_all(n::APN)
     while has_call(n)

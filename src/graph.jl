@@ -1,6 +1,6 @@
 using GraphPlot, DataStructures
 
-export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings, redux
+export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings, redux, vdiff
 
 struct PCTGraph
     nodes::Vector{APN}
@@ -31,15 +31,15 @@ function PCTGraph(n::APN)
 end
 
 const Settings = Dict{Symbol, Bool}
-default_settings = Settings(:clench_sum=>false, :symmetry=>false)
-function custom_settings(custom::Vararg{Pair{Symbol, Bool}})::Settings
-    new_settings = deepcopy(default_settings)
+default_settings = Settings(:clench_sum=>false, :symmetry=>false, :logging=>false)
+function custom_settings(custom::Vararg{Pair{Symbol, Bool}}; preset=default_settings)::Settings
+    new_settings = deepcopy(preset)
     for (s, b) in custom
         new_settings[s] = b
     end
     return new_settings
 end
-const symmetry_settings = custom_settings(:clench_sum=>false, :symmetry=>true)
+const symmetry_settings = custom_settings(:clench_sum=>false, :symmetry=>true, :logging=>false)
 
 """
 
@@ -55,14 +55,14 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
     neighbor_list = neighbors(n; settings=settings)
     reduced_list = Vector{Tuple{APN, Bool, String}}()
-    @time for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+    for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         t in hashset(seen) || push!(reduced_list, (t, d, name))
     end
 
     for (t, d, name) in sort(reduced_list, by=e->-e[2])
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        log_edge(n, t, d, name, length(nodes(seen)))
+        haskey(settings, :logging) && settings[:logging] && log_edge(n, t, d, name, length(nodes(seen)))
         sink, tree = spanning_tree!(t, seen; settings=settings)
         (d || sink) && return (true, tree)
     end
@@ -112,7 +112,8 @@ function redux(n::Union{Var, Constant}; _...)
 end
 
 function propagate_k(n::Map, k=constant(1))
-    return ecall(n, ff(n)[1:end-1]..., k)
+    zs = ff(n)[1:end-1]
+    return pct_map(zs..., ecall(n, ff(n)[1:end-1]..., k))
 end
 
 function graphs_jl(g::PCTGraph)
@@ -125,3 +126,33 @@ function visualize(g::PCTGraph)
     gplothtml(h, nodesize=fill(80, length(nodes(g))), nodelabel=label.(nodes(g)))
 end
 
+function vdiff(n::APN; settings=default_settings)
+    set_content(n, vcat(map(t->vdiff(t; settings=settings), content(n))...)...)
+end
+
+function vdiff(p::Pullback; settings=default_settings)
+    #= vdiff(fc(p); settings=settings) =#
+    m = fc(p)
+
+    function vdiff_single(pcomp)
+        result = pcomp |> pp |> eval_all |> propagate_k |> simplify |> first
+        #= result = simplify(result, settings=custom_settings(:clench_sum=>true)) |> first =#
+        return simplify(result; settings=settings) |> first
+        #= if haskey(settings, :symmetry) && settings[:symmetry]
+            return simplify(result; settings=settings) |> first
+        else 
+            return result
+        end =#
+    end
+
+    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, fc(m)))), f), ff(m))...)
+    return pct_map(ff(m)..., result)
+    
+    #= return isa(pcomps, Vector) ? pct_vec(vdiff_single.(pcomps)...) : vdiff_single(pcomps) =#
+end
+
+#= function vdiff(m::AbstractMap; settings=default_settings)
+    result = m |> decompose |> pp |> eval_all |> propagate_k |> simplify |> first
+    return (haskey(settings, :symmetry) && settings[:symmetry]) ? simplify(result; settings=settings) |> first : result
+end
+ =#
