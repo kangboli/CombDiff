@@ -222,7 +222,7 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
-    new_from = map(var, new_symbol(c, num=length(ff(mapp(c))), symbol=:_e), get_type(ff(mapp(c))))
+    new_from = map(var, range.(ff(mapp(c))), new_symbol(c, num=length(ff(mapp(c))), symbol=:_e), get_type(ff(mapp(c))))
     @assert length(new_from) == length(args(c)) == length(ff(mapp(c)))
 
     n = evaluate(fc(mapp(c)))

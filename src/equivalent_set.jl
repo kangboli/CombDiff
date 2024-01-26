@@ -183,7 +183,7 @@ function combine_map_neighbors(terms::Vector)
             all(i->get_type(ff(x)[i]) == get_type(ff(y)[i]), 1:length(ff(x))) || continue
 
             new_from = ff(x) == ff(y) ? ff(x) :
-            pct_vec(map(var, new_symbol(x, y; num=length(ff(x)), symbol=:_a),  get_type.(ff(x))))
+            pct_vec(map(var, range.(ff(x)), new_symbol(x, y; num=length(ff(x)), symbol=:_a),  get_type.(ff(x))))
 
             new_map = pct_map(new_from..., add(ecall(x, new_from...), ecall(y, new_from...)))
 
@@ -241,7 +241,7 @@ function mul_product_neighbors(terms)
         for (j, y) in enumerate(terms)
             i < j || continue
             isa(x, Prod) && isa(y, Prod) && get_type(ff(x)) == get_type(ff(y)) || continue
-            z = make_node(Var, first(new_symbol(x, y)); type=get_type(ff(x)))
+            z = var(first(new_symbol(x, y)), get_type(ff(x)))
             new_prod = make_node(Prod, z, mul(subst(fc(x), ff(x), z), subst(fc(y), ff(y), z)))
             new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
             push!(result, mul(new_prod, new_terms...); name="mul_product")
@@ -357,7 +357,7 @@ function sum_sym_neighbors(s::Sum)
     result = NeighborList()
 
     for v in content(ff(s))
-        symmetric(get_type(v)) || continue
+        symmetric(v) || continue
         push!(result, pct_sum(content(ff(s))..., subst(fc(s), v, mul(constant(-1), v))); name="sum_sym")
     end
 
@@ -410,8 +410,9 @@ function contract_delta_neighbors(s::Sum)
             isa(p, Var) && contractable(p, s)
         end
         contractable(expr::Add, s::Symbol)::Bool = any(t->contractable(t, s), fc(expr))
-
-        is_contractable(get_type(v)) || continue
+        #= is_contractable(v) != isempty(range(v)) && error("bug alert! mismatch $(name(v)): $(range(v))") =#
+        is_contractable(v) || continue
+        #= isempty(range(v)) || continue =#
         indices = content(remove_i(new_from, i))
 
         this, other = if contractable(upper(d), name(v))
@@ -688,7 +689,7 @@ function neighbors(p::Prod; settings=default_settings)
     end
 
     isa(fc(p), Prod) && append!(result, prod_ex_neighbors(p))
-    symmetric(get_type(ff(p))) && append!(result, prod_sym_neighbors(p))
+    symmetric(ff(p)) && append!(result, prod_sym_neighbors(p))
     !contains_name(fc(p), name(ff(p))) && append!(result, prod_power_neighbors(p))
     append!(result, prod_dist_neighbors(p))
     append!(result, prod_sum_neighbors(p))

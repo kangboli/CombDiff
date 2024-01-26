@@ -179,10 +179,19 @@ end
 base(n::APN) = n
 power(::APN) = make_node(Constant, 1)
 
+struct PCTVector <: APN
+    type::VecType
+    content::Vector
+    function PCTVector(type::VecType, content::Vararg)
+        new(type, [content...])
+    end
+end
+
 abstract type TerminalNode <: APN end
 
 mutable struct Var{T<:AbstractPCTType} <: TerminalNode
     type::T
+    range::PCTVector
     content::Symbol
 end
 
@@ -196,7 +205,9 @@ end
 
 
 name(v::Var) = v.content
-var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, s; type=type)
+range(v::Var) = v.range
+var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
+var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
 
 struct Conjugate <: APN
     type::AbstractPCTType
@@ -205,7 +216,7 @@ end
 
 function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     t = get_type(term)
-    t in [I(), R()] && return T, terms(term), get_type(term)
+    t in [Z(), I(), R()] && return T, terms(term), get_type(term)
     if T == Mul
         sub_terms = pct_vec(map(conjugate, content(fc(term)))...)
         return Mul, [sub_terms], partial_inference(Mul, sub_terms)
@@ -228,14 +239,6 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
 end
 
 conjugate(term::APN) = make_node(Conjugate, term)
-
-struct PCTVector <: APN
-    type::VecType
-    content::Vector
-    function PCTVector(type::VecType, content::Vararg)
-        new(type, [content...])
-    end
-end
 
 function set_type(n::PCTVector, new_type)
     return make_node(PCTVector, terms(n)..., type=new_type)
@@ -290,6 +293,7 @@ function set_terms(v::PCTVector, new_terms...)
 end
 
 content(v::PCTVector) = v.content
+Base.isempty(v::PCTVector) = isempty(content(v))
 terms(v::PCTVector) = content(v)
 
 abstract type AbstractMap <: APN end
@@ -409,7 +413,7 @@ monomial(base::APN, power::APN) = make_node(Monomial, base, power)
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
-    is_zero(power) && return Constant, [1], I()
+    is_zero(power) && return Constant, [1], Z()
     is_one(power) && return T, terms(base), get_type(base)
     isa(base, Constant) && isa(power, Constant) && return Constant, [fc(base)^fc(power)], partial_inference(Constant, [fc(base)^fc(power)])
     return Monomial, [base, power], partial_inference(Monomial, base, power)
@@ -532,7 +536,7 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     args = [constant(prod(args_const, init=1.0)), filter(t -> !isa(t, Constant), args)...]
     args = filter(t -> !is_one(t), args)
     any(is_zero, args) && return Constant, [0], I()
-    isempty(args) && return Constant, [1], I()
+    isempty(args) && return Constant, [1], Z()
     sort!(args)
     if length(args) == 1
         return typeof(first(args)), terms(first(args)), get_type(first(args))
@@ -553,7 +557,7 @@ mutable struct Sum <: Contraction
     from::PCTVector
     content::APN
     function Sum(type, from::PCTVector, summand::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
+        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(from)]...)
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, from, summand)
     end
@@ -589,7 +593,7 @@ mutable struct Prod <: PermInv
     from::PCTVector
     content::APN
     function Prod(type, from::PCTVector, productant::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, I()) : t for t in content(from)]...)
+        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(from)]...)
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, from, productant)
     end
@@ -721,4 +725,17 @@ struct Negate <: APN
     type::AbstractPCTType
     content::APN
 end
+
+symmetric(d::Domain) = haskey(d.meta, :symmetric) && d.meta[:symmetric]
+symmetric(::ElementType) = false
+#= symmetric(v::Var) = symmetric(get_type(v)) || add(range(v)...) == constant(0) =#
+symmetric(v::Var) = symmetric(get_type(v)) 
+
+is_periodic(d::Domain) = haskey(d.meta, :periodic) && d.meta[:periodic]
+is_periodic(::ElementType) = false
+
+is_contractable(d::Domain) = !haskey(d.meta, :contractable) || d.meta[:contractable]
+is_contractable(::ElementType) = true
+#= is_contractable(v::Var) = is_contractable(get_type(v)) && isempty(range(v)) =#
+is_contractable(v::Var) = is_contractable(get_type(v))
 

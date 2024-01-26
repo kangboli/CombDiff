@@ -1,4 +1,4 @@
-export AbstractPCTType, MapType, VecType, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric
+export AbstractPCTType, MapType, VecType, Z, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric
 
 abstract type AbstractPCTType end
 abstract type AbstractSignatureTree end
@@ -17,6 +17,7 @@ from(::UndeterminedPCTType) = UndeterminedPCTType()
 struct I <: ElementType end
 struct R <: ElementType end
 struct C <: ElementType end
+struct Z <: ElementType end
 
 base(::T) where T <: ElementType = T()
 
@@ -30,29 +31,15 @@ end
 Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) = 
     Domain(base, lower, upper, meta) 
 
-function symmetric(d::Domain)
+#= function symmetric(d::Domain)
     #TODO: Use equivalence instead of equality.
     if isa(d.lower, Mul)
         return d.lower == mul(constant(-1), d.upper)
     else
         return mul(constant(-1), d.lower) == d.upper
     end
-end
+end =#
 
-symmetric(::ElementType) = false
-
-is_periodic(d::Domain) = haskey(d.meta, :periodic) && (d.meta[:periodic] == true)
-is_periodic(::ElementType) = false
-
-
-function is_contractable(d::Domain) 
-    if haskey(d.meta, :contractable) 
-        return d.meta[:contractable]
-    end
-    true
-end
-
-is_contractable(::ElementType) = true
 
 """
     name(d)
@@ -111,6 +98,7 @@ function escalate(element_types::Vararg{T}) where T <: ElementType
     any(t->type_based(t, C()), element_types) && return C()
     any(t->type_based(t, R()), element_types) && return R()
     any(t->type_based(t, I()), element_types) && return I()
+    any(t->type_based(t, Z()), element_types) && return Z()
     return UndeterminedPCTType()
 end
 

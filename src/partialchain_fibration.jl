@@ -256,9 +256,14 @@ struct PComp <: ABF
 end
 
 const Seg = Union{ABF,AbstractFibration}
-comp(z::APN, f::Vararg{Seg})::PComp = PComp(v_wrap(z),
-    [f...], MapType(v_wrap(get_type(z)), output_type(last(f))))
-comp(z::APN)::PComp = PComp(v_wrap(z), [], MapType(v_wrap(get_type(z)), get_type(z)))
+function comp(z::T, f::Vararg{Seg})::PComp where T <: APN
+    T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
+    PComp(v_wrap(z), [f...], MapType(v_wrap(get_type(z)), output_type(last(f))))
+end
+function comp(z::T)::PComp where T <: APN
+    T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
+    PComp(v_wrap(z), [], MapType(v_wrap(get_type(z)), get_type(z)))
+end
 
 input(c::PComp)::PCTVector = c.input
 pfuncs(c::PComp)::Vector{ABF} = c.pfuncs
@@ -421,7 +426,7 @@ function decompose(zs::PCTVector, ov::Var)::PComp
     const_type = MapType(get_type(zs), get_type(ov))
     i = findfirst(t -> t == ov, content(zs))
     i === nothing && return comp(zs, Pconst(ov, const_type))
-    return comp(zs, Pconst(constant(i), MapType(get_type(zs), I())), BMap(zs))
+    return comp(zs, Pconst(constant(i), MapType(get_type(zs), Z())), BMap(zs))
 end
 
 function pp(b::BMap)::AbstractMap

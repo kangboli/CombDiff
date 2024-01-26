@@ -6,6 +6,11 @@ function indent(s::AbstractString)
     join(indent.(split(s, "\n")), "\n")
 end
 
+function latex_indent(s::AbstractString)
+    contains(s, "\\\\") || return "\\quad " * s
+    join(latex_indent.(split(s, "\\\\")), "\\\\")
+end
+
 verbose(t::MapType) = "[$(verbose(from(t)))->$(verbose(content(t)))]"
 
 verbose(v::VecType) = "$(join(verbose.(content(v)), "×"))"
@@ -16,23 +21,34 @@ verbose(::T) where T <: ElementType = string(T)
 
 verbose(d::Domain) = "$(meta(d)[:name])"
 
-pretty(m::Map) = "($(pretty(ff(m)))) -> \n$(indent(pretty(fc(m))))"
+function pretty(m::Map) 
+    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
+    params = map(v->"$(pretty(v))$(range_str(range(v)))", content(ff(m)))
+    "($(join(params, ", "))) -> \n$(indent(pretty(fc(m))))"
+end
 
 function latex(m::Map) 
-    params = latex(ff(m))
-    params = length(ff(m)) == 1 ? params : "\\left($(params)\\right)"
+    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)"
+    params = map(v->"$(latex(v))$(range_str(range(v)))", content(ff(m)))
+    params = length(ff(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     return "$(params) \\to $(latex(fc(m)))"
 end
 
 function verbose(m::Map)
-    "($(join(verbose(ff(m))))->\n"*
+    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
+    params = map(v->"$(verbose(v))$(range_str(range(v)))", content(ff(m)))
+    "($(join(params, ", "))->\n"*
     "$(indent(verbose(fc(m)))))\n"*
     "::$(verbose(get_type(m)))"
 end
 
-pretty(v::Var) = "$(name(v))"
+function pretty(v::Var) 
+    "$(name(v))"
+end
 
-latex(v::Var) = startswith(string(name(v)), "_") ? "\\mathbb{$(string(name(v))[2:end])}" : "$(name(v))"
+function latex(v::Var) 
+    startswith(string(name(v)), "_") ? "\\mathbb{$(string(name(v))[2:end])}" : "$(name(v))"
+end
 
 verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
 
@@ -154,7 +170,7 @@ function latex(p::PrimitiveCall)
     end
 
 
-    if all(a->a==I(), content(from(get_type(mapp(p)))))
+    if all(a->a==Z(), content(from(get_type(mapp(p)))))
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
@@ -170,18 +186,27 @@ latex(c::Constant) = "$(fc(c))"
 
 verbose(c::Constant) = "$(fc(c))::$(verbose(get_type(c)))"
 
-pretty(v::PCTVector) = join(pretty.(content(v)), ", ")
+function pretty(v::PCTVector, paren=false)
+    terms = (t->isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
+    result = join(terms, ", ") 
+    return paren ? "($(result))" : result
+end
 
-function latex(v::PCTVector) 
-    terms = latex.(content(v))
-    if any(t->length(t) > 30, terms)
+function latex(v::PCTVector, paren=false) 
+    terms = (t->isa(t, PCTVector) ? latex(t, true) : latex(t)).(content(v))
+    if any(t->length(t) > 50, terms) && length(terms) > 1
         return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
     else
-        return join(terms, ", ")
+        result = join(terms, ", ")
+        return paren ? "\\left($(result)\\right)" : result
     end
 end
 
-verbose(v::PCTVector) = join(verbose.(content(v)), ", ") 
+function verbose(v::PCTVector, paren=false)
+    terms = (t->isa(t, PCTVector) ? verbose(t, true) : verbose(t)).(content(v))
+    result = join(terms, ", ") 
+    return paren ? "($(result))" : result
+end
 
 function Base.show(io::IO, ::MIME"text/latex", m::APN) 
     print(io, latexstring(latex(m)))
@@ -197,11 +222,11 @@ pretty(m::Monomial) = "$(pretty(base(m)))^($(pretty(power(m))))"
 verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
 latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
 
-pretty(l::Let) = "let $(join(map((f, a) -> "$(pretty(f)) = $(pretty(a))", ff(l), args(l)), "\n"))\n$(pretty(fc(l)))\nend"
+pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), ff(l), args(l)), "\n"))\n$(indent(pretty(fc(l))))\nend"
 function verbose(l::Let)
-    "let $(join(map((f, a) -> "$(verbose(f)) = $(verbose(a))", ff(l), args(l)), "\n"))\n$(verbose(fc(l)))\nend"
+    "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), ff(l), args(l)), "\n"))\n$(indent(verbose(fc(l))))\nend"
 end
-latex(l::Let) = "\\mathrm{let} \\; $(join(map((f, a) -> "$(latex(f)) = $(latex(a))", ff(l), args(l)), "\\\\"))\\\\$(latex(fc(l)))\\\\\\mathrm{end}"
+latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), ff(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(fc(l))))\\\\ \\mathrm{end}"
 
 # This function is only for the purpose of displaying the negative sign.
 is_negative(n::APN) = false

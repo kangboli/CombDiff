@@ -29,7 +29,7 @@ function Base.hash(v::VecType)
 end
 
 function Base.hash(m::MapType)
-    return sum(hash.(ff(m))) + hash(fc(m))
+    return sum(hash.(from(m))) + hash(content(m))
 end
 
 
@@ -51,6 +51,10 @@ end
 function trunc_hash(v::Var{T}, ::Int) where T <: AbstractPCTType
     return hash(name(v)) + T.hash
 end
+
+#= function hash(v::Var{T}) where T <: AbstractPCTType
+    return hash(name(v)) + T.hash + hash(get_type(v))
+end =#
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     objectid(n_1) == objectid(n_2) && return true

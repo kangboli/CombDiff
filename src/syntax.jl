@@ -1,5 +1,7 @@
 export parse_node, purge_line_numbers, @pit, @pct 
 
+const base_domains = [:Z, :I, :R, :C]
+
 macro pit(expr, ctx)
     expr = purge_line_numbers(expr)
     if isa(expr, Symbol) || isa(expr, Number) || expr.head != :block
@@ -8,11 +10,22 @@ macro pit(expr, ctx)
         top_level_nodes = map(parse_node, expr.args)
     end
 
+    statements = filter(n->isa(n, Statement), top_level_nodes)
+    non_statements = filter(n->!isa(n, Statement), top_level_nodes)
+
+    if isa(last(top_level_nodes), Statement)
+        return_node = statement_to_let(statements, :(var($(QuoteNode(:_)))))
+    else 
+        return_node = last(non_statements)
+        return_node = statement_to_let(statements, return_node)
+        non_statements = non_statements[1:end-1]
+    end
+
     return esc(:(
         begin
             _ctx = $(ctx)
-            $(top_level_nodes[1:end-1]...)
-            ($(last(top_level_nodes)), _ctx)
+            $(non_statements...)
+            ($(return_node), _ctx)
         end
     ))
 end
@@ -61,6 +74,18 @@ function parse_node(::LineNumberNode)
     return nothing
 end
 
+struct Statement
+    lhs::Expr
+    rhs::Expr
+end
+lhs(s::Statement) = s.lhs
+rhs(s::Statement) = s.rhs
+
+struct Block
+    statements::Vector{Statement}
+    return_value::Expr
+end
+
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
     n.head == Symbol(:quote) && return n.args[1]
@@ -83,9 +108,11 @@ function parse_node(n::Expr)
         func == :pullback && return parse_node(Pullback, n)
         return parse_node(AbstractCall, n)
     end
-    n.head == :block && return parse_node(n.args[1])
+    n.head == :block && return parse_node(Block, n)
     n.head == :let && return parse_node(Let, n)
     n.head == Symbol("'") && return parse_node(Conjugate, n)
+    n.head == :(=) && return parse_node(Statement, n)
+    n.head == :tuple && return parse_node(PCTVector, n)
     return :()
     #= n.head == :tuple && return parse_tuple_node(n) =#
 end
@@ -99,7 +126,7 @@ function parse_node(::Type{MapType}, s::Expr)
     parse_pair(::Val{:symmetries}, t::Expr) = t
     parse_pair(::Val{:linear}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
-        from_type(a::Symbol) = a in [:I, :R, :C] ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
+        from_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
         params = :(VecType([$([from_type(a) for a in t.args[1].args]...)]))
         return_type = :($(from_type(first(t.args[2].args))))
         return (params, return_type)
@@ -122,11 +149,11 @@ function parse_node(::Type{Domain}, n::Expr)
     contractable = QuoteNode(true)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
-        base = haskey(pairs, :base) ? pairs[:base] : :I
-        #= lower, upper = parse_node(pairs[:lower]), parse_node(pairs[:upper]) =#
+        base = haskey(pairs, :base) ? pairs[:base] : :Z
         lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : mul(constant(-1), var(:Infty))
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : var(:Infty)
         periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
+        symmetric = QuoteNode(haskey(pairs, :symmetric) && (pairs[:symmetric]))
         contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
     else
         base = n.args[3]
@@ -137,6 +164,7 @@ function parse_node(::Type{Domain}, n::Expr)
             $(base)(), $(lower), $(upper),
             meta = Dict(:name => $(QuoteNode(name)), 
             :periodic => $(periodic),
+            :symmetric => $(symmetric),
             :contractable => $(contractable)
             )
         )); replace=true))
@@ -160,11 +188,18 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 
     if p.head == Symbol("::")
         name, type = p.args
-        type = type in [:I, :R, :C] ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
+        type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
         isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
     end
-    if p.head == :call
-        return :(call($(parse_node(p.args[1])), $(parse_node.(p.args[2:end])...)))
+    if p.head == :call && p.args[1] == :∈
+        param = p.args[2]
+        domain = p.args[3]
+        if param.head == Symbol("::")
+            name, type = param.args
+            type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
+            return :(var($(parse_node(domain)), $(QuoteNode(name)), $(type)))
+        end
+        return :(var($(parse_node(param)), $(parse_node(domain))))
     end
 
 end
@@ -274,4 +309,25 @@ function parse_node(::Type{Conjugate}, c::Expr)
     return :(conjugate($(parse_node(c.args[1]))))
 end
 
+function parse_node(::Type{Statement}, n::Expr)
+    lhs = parse_node(n.args[1])
+    rhs = parse_node(n.args[2])
+    return Statement(lhs, rhs)
+end
 
+function parse_node(::Type{Block}, n::Expr)
+    parsed_body = parse_node.(n.args)
+    statements = parsed_body[1:end-1]
+    return_value = parsed_body[end]
+    return statement_to_let(statements, return_value)
+end
+
+function statement_to_let(statements::Vector, return_value::Expr)
+    isempty(statements) && return return_value
+    from, args = lhs.(statements), rhs.(statements)
+    return :(make_node(Let, pct_vec($(from...)), pct_vec($(args...)), $(return_value)))
+end
+
+function parse_node(::Type{PCTVector}, n::Expr)
+    return :(pct_vec($(map(parse_node, n.args)...)))
+end

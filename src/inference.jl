@@ -7,18 +7,18 @@ end
 content(context::TypeContext) = context.content
 
 default_context() = Dict{Symbol, Vector{<:AbstractPCTType}}(
-    :CV => [MapType(VecType([I()]), C())],
-    :RV => [MapType(VecType([I()]), R())],
+    :CV => [MapType(VecType([Z()]), C())],
+    :RV => [MapType(VecType([Z()]), R())],
     :CF => [MapType(VecType([C()]), C())],
     :RF => [MapType(VecType([R()]), R())],
-    :CM => [MapType(VecType([I(), I()]), C())],
-    :RM => [MapType(VecType([I(), I()]), R())],
+    :CM => [MapType(VecType([Z(), Z()]), C())],
+    :RM => [MapType(VecType([Z(), Z()]), R())],
     :CO => [MapType(VecType([C(), C()]), C())],
     :RO => [MapType(VecType([R(), R()]), R())],
-    :CT => [MapType(VecType([I(), I(), I()]), C())],
-    :RT => [MapType(VecType([I(), I(), I()]), R())],
-    :Her => [MapType(VecType([I(), I()]), C(), Dict(:symmetries=>(((2, 1), :conj),),))],
-    :Sym => [MapType(VecType([I(), I()]), R(), Dict(:symmetries=>(((2, 1), :id),),))],
+    :CT => [MapType(VecType([Z(), Z(), Z()]), C())],
+    :RT => [MapType(VecType([Z(), Z(), Z()]), R())],
+    :Her => [MapType(VecType([Z(), Z()]), C(), Dict(:symmetries=>(((2, 1), :conj),),))],
+    :Sym => [MapType(VecType([Z(), Z()]), R(), Dict(:symmetries=>(((2, 1), :id),),))],
     ) |> TypeContext
 
 function TypeContext() 
@@ -112,7 +112,7 @@ function partial_inference(::Type{Map}, terms...)::AbstractPCTType
     return MapType(get_type(from), get_type(content))
 end
 
-function partial_inference(::Type{T}, ::Symbol)::AbstractPCTType where T <: Var 
+function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where T <: Var 
     UndeterminedPCTType()
 end
 
@@ -163,6 +163,7 @@ end
 
 
 function partial_inference(::Type{Constant}, term)::AbstractPCTType
+    isa(term, Int) && term > 0 && return Z()
     isa(term, Int) && return I()
     isa(term, Real) && return R()
     isa(term, Complex) && return C()
