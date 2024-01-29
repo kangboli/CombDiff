@@ -1,6 +1,6 @@
 # PCT
 
-This package is a proof-of-principle implementation of functional automatic
+This package is a proof-of-concept implementation of variational
 differentiation for quantum chemistry.
 
 ## Usage

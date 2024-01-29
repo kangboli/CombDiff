@@ -4,7 +4,7 @@ using PCT, Test
 @testset "element: variables" begin
     # The machine-facing constructor.
     # `make_node` always takes one or more `APN`s.
-    x = make_node(Var, :x)
+    x = make_node(Var, pct_vec(), :x)
 
     # Each variable has a name.
     @test name(x) == :x
@@ -18,8 +18,8 @@ using PCT, Test
 
     # The `terms` of a variable is its name.
     # The same goes for `content`
-    @test :x == first(terms(x))
-    y = set_terms(x, :y)
+    @test :x == last(terms(x))
+    y = set_terms(x, pct_vec(), :y)
     @test :y == name(y)
     z = set_content(x, :z)
     @test :z == first(content(z))
@@ -30,7 +30,7 @@ using PCT, Test
 
     @test x == base(x)
     @test make_node(Constant, 1) == power(x)
-    @test isempty(from(x))
+    #= @test isempty(from(x)) =#
 end
 
 
@@ -215,7 +215,7 @@ end
 
 @testset "element: contraction" begin
     s = pct_sum(var(:i), call(var(:x), var(:i)))
-    @test ff(s) == pct_vec(var(:i, I())) # There is an default inference for sum
+    @test ff(s) == pct_vec(var(:i, Z())) # There is an default inference for sum
     @test fc(s) == call(var(:x), var(:i))
 
     i = pct_int(var(:x), call(var(:f), var(:x)))

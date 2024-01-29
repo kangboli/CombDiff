@@ -147,6 +147,7 @@ function parse_node(::Type{Domain}, n::Expr)
     block = n.args[3]
     periodic = QuoteNode(false)
     contractable = QuoteNode(true)
+    symmetric = QuoteNode(false)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :Z

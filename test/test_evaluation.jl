@@ -14,11 +14,11 @@ using PCT, Test
 
     f1 = @pct f ctx sum(a, A(a, j))
     vars = variables(f1)
-    @test var(:a, I()) in vars
+    @test var(:a, Z()) in vars
 
     # Dummy variables
     _, dummies = free_and_dummy(f1)
-    @test all(t -> t in dummies, [var(:A, ctx[:S]), var(:i, I()), var(:j, I()), var(:a, I())])
+    @test all(t -> t in dummies, [var(:A, ctx[:S]), var(:i, I()), var(:j, I()), var(:a, Z())])
 
     # Contains name
     @test all(t -> contains_name(f1, t), [:i, :j, :A, :a])

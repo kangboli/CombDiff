@@ -19,7 +19,7 @@ struct R <: ElementType end
 struct C <: ElementType end
 struct Z <: ElementType end
 
-base(::T) where T <: ElementType = T()
+base(::T) where {T<:ElementType} = T()
 
 struct Domain <: ElementType
     base::ElementType
@@ -28,18 +28,8 @@ struct Domain <: ElementType
     meta::Dict
 end
 
-Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) = 
-    Domain(base, lower, upper, meta) 
-
-#= function symmetric(d::Domain)
-    #TODO: Use equivalence instead of equality.
-    if isa(d.lower, Mul)
-        return d.lower == mul(constant(-1), d.upper)
-    else
-        return mul(constant(-1), d.lower) == d.upper
-    end
-end =#
-
+Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) =
+    Domain(base, lower, upper, meta)
 
 """
     name(d)
@@ -71,7 +61,7 @@ fc(v::VecType) = first(content(v))
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(content(v)), t))
 
 
-struct MapType <: AbstractPCTType 
+struct MapType <: AbstractPCTType
     from::VecType
     content::AbstractPCTType
     meta::Dict
@@ -86,19 +76,16 @@ MapType(from::APN, content::AbstractPCTType) = MapType(VecType([from]), content,
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b
 
-function symmetries(c::MapType)
-    haskey(c.meta, :symmetries) || return []
-    return c.meta[:symmetries]
-end
+symmetries(c::MapType) = get(c.meta, :symmetries, []) 
 
 linear(c::MapType) = get(c.meta, :linear, false)
 
-function escalate(element_types::Vararg{T}) where T <: ElementType
+function escalate(element_types::Vararg{T}) where {T<:ElementType}
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()
-    any(t->type_based(t, C()), element_types) && return C()
-    any(t->type_based(t, R()), element_types) && return R()
-    any(t->type_based(t, I()), element_types) && return I()
-    any(t->type_based(t, Z()), element_types) && return Z()
+    any(t -> type_based(t, C()), element_types) && return C()
+    any(t -> type_based(t, R()), element_types) && return R()
+    any(t -> type_based(t, I()), element_types) && return I()
+    any(t -> type_based(t, Z()), element_types) && return Z()
     return UndeterminedPCTType()
 end
 

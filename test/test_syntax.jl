@@ -125,11 +125,11 @@ end
 
 @testset "syntax: contractions" begin
     f, _ = @pct sum(i, 2*i)
-    @test f == pct_sum(var(:i, I()), mul(constant(2), var(:i, I())))
+    @test f == pct_sum(var(:i, Z()), mul(constant(2), var(:i, Z())))
 
     # Multiple indices gives multiple sums
     f, _ = @pct sum((i, j, k), i * j * k)
-    @test fc(f) == mul(var(:i, I()), var(:j, I()), var(:k, I()))
+    @test fc(f) == mul(var(:i, Z()), var(:j, Z()), var(:k, Z()))
 
     #= f, _ = @pct prod(i, i^2)
     @test f == pct_product(var(:i, I()), monomial(var(:i, I()), constant(2))) =#

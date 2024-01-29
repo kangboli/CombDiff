@@ -92,37 +92,6 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
 
 end
 
-#= dict_1 = Dict{Any, Int}()
-for t in trees_to_compare_1
-    dict_1[t] = 1 + get(dict_1, t, 0)
-end
-
-dict_2 = Dict{Any, Int}()
-for t in trees_to_compare_2
-    dict_2[t] = 1 + get(dict_2, t, 0)
-end
-
-for (k, v) in dict_1
-    if !(haskey(dict_2, k) && dict_2[k] == v) 
-        return false
-    end
-end =#
-
-
-#= function Base.isless(t_1::SignatureTree, t_2::SignatureTree)
-    T_1, T_2 = node_type(t_1), node_type(t_2)
-    T_1 == T_2  || return T_1.hash < T_2.hash
-
-    trees_1, trees_2 = subtrees(t_1), subtrees(t_2)
-    length(trees_1) == length(trees_2) || return length(trees_1) < length(trees_2)
-
-    for i = 1:length(trees_1)
-        trees_1[i] == trees_2[i] || return trees_1[i] < trees_2[i]
-    end
-
-    return false
-end =#
-
 function trunc_hash(p::Pair{SignatureTree,Int}, level=3)
     return trunc_hash(first(p), level) + hash(last(p))
 end

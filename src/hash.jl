@@ -52,25 +52,22 @@ function trunc_hash(v::Var{T}, ::Int) where T <: AbstractPCTType
     return hash(name(v)) + T.hash
 end
 
-#= function hash(v::Var{T}) where T <: AbstractPCTType
-    return hash(name(v)) + T.hash + hash(get_type(v))
-end =#
+remake_node(n::T) where T <: APN = make_node(T, terms(n)...; type=get_type(n))
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     objectid(n_1) == objectid(n_2) && return true
-
     length(ff(n_1)) == length(ff(n_2)) || return false
     Set(signatures!(n_1)) == Set(signatures!(n_2)) || return false
+
     symbols = new_symbol(fc(n_1), fc(n_2), num=length(signatures!(n_1)))
     variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols))
 
-    # The deepcopy is the performance bottle neck of this package.
+    # The deepcopy is the performance bottleneck of this package.
     replaced_expr_1 = deepcopy(fc(n_1))
     for (index, sig) in zip(content(ff(n_1)), signatures!(n_1))
         replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
     end
     replaced_expr_1 = remake_node(replaced_expr_1)
-
 
     replaced_expr_2 = deepcopy(fc(n_2))
     for (index, sig) in zip(content(ff(n_2)), signatures!(n_2))
@@ -79,12 +76,9 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     replaced_expr_2 = remake_node(replaced_expr_2)
 
     return replaced_expr_1 == replaced_expr_2
-    
 end
 
 function trunc_hash(n::T, level=3) where T <: Contraction
-
-
     level == 0 && return T.hash
 
     dummy_removed = deepcopy(fc(n))

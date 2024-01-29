@@ -198,7 +198,12 @@ end
 @testset "neighbors: constraction" begin
 
     f, ctx = @pct begin
-        @domain I1 I -N N
+        @domain I1 begin 
+            base=I
+            lower = -N
+            upper = N
+            symmetric=true
+        end
 
         @space S begin
             type = (I1, I1) -> R
@@ -210,9 +215,7 @@ end
     #= f1 = @pct f ctx sum(a, sum(b, a * b))
     f2 = @pct f ctx sum(b, sum(a, a * b))
     @test fc(f2) in nodes(PCT.neighbors(fc(f1))) =#
-
     # sum_sym
-
     f1 = @pct f ctx sum(a::I1, A(a, a))
     f2 = @pct f ctx sum(a::I1, A(-a, -a))
     @test fc(f2) in nodes(PCT.neighbors(fc(f1); settings=symmetry_settings))

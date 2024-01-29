@@ -267,7 +267,7 @@ function prod_in_neighbors(terms)
         rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
 
         if contains_name(rem_terms..., name(ff(t)))
-            t = set_from(t, first(new_symbol(rem_terms..., t)))
+            t = set_ff(t, first(new_symbol(rem_terms..., t)))
         end
 
         push!(result, set_content(t, mul(fc(t), rem_terms)); name="prod_in")
@@ -457,11 +457,18 @@ function clench_sum(s::Sum)
         end
     end
 
-    if isa(summand, PrimitiveCall)
+    if isa(summand, PrimitiveCall)  || (isa(summand, Conjugate)  && isa(fc(summand), PrimitiveCall))
         linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
         new_sum = call(mapp(summand), pct_sum(ff(s)..., first(args(summand))))
         push!(result, new_sum; dired=true, name="linear_sum_out")
     end
+
+    #= if isa(summand, Conjugate)  && isa(fc(summand), PrimitiveCall)
+        linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
+        new_sum = call(mapp(summand), pct_sum(ff(s)..., first(args(summand))))
+        push!(result, new_sum; dired=true, name="linear_sum_out")
+    end =#
+
 
     return result
 end
