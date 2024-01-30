@@ -325,8 +325,8 @@ end
 
 function statement_to_let(statements::Vector, return_value::Expr)
     isempty(statements) && return return_value
-    from, args = lhs.(statements), rhs.(statements)
-    return :(make_node(Let, pct_vec($(from...)), pct_vec($(args...)), $(return_value)))
+    bound, args = lhs.(statements), rhs.(statements)
+    return :(make_node(Let, pct_vec($(bound...)), pct_vec($(args...)), $(return_value)))
 end
 
 function parse_node(::Type{PCTVector}, n::Expr)

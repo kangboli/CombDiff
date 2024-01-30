@@ -97,7 +97,7 @@ abstract type AbstractMap <: APN end
 
 struct Map <: AbstractMap
     type::AbstractPCTType
-    from::PCTVector
+    bound::PCTVector
     content::APN
 end
 
@@ -204,32 +204,32 @@ end
 mutable struct Sum <: Contraction
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
-    from::PCTVector
+    bound::PCTVector
     content::APN
-    function Sum(type, from::PCTVector, summand::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(from)]...)
+    function Sum(type, bound::PCTVector, summand::APN)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
-        new(type, signatures, from, summand)
+        new(type, signatures, bound, summand)
     end
 end
 
 term_start(n::PermInv) = 3
 function signatures!(n::PermInv)
     isempty(n.signatures) || return n.signatures
-    from, summand = ff(n), fc(n)
-    n.signatures = [SignatureTree(from[i], summand, content(from)[1:end.!=i]) for i in 1:length(from)]
+    bound, summand = ff(n), fc(n)
+    n.signatures = [SignatureTree(bound[i], summand, content(bound)[1:end.!=i]) for i in 1:length(bound)]
     return n.signatures
 end
 
 mutable struct Integral <: Contraction
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
-    from::PCTVector
+    bound::PCTVector
     content::APN
-    function Integral(type, from::PCTVector, integrand::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(from)]...)
+    function Integral(type, bound::PCTVector, integrand::APN)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
-        new(type, signatures, from, integrand)
+        new(type, signatures, bound, integrand)
     end
 end
 
@@ -241,12 +241,12 @@ end
 mutable struct Prod <: PermInv
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
-    from::PCTVector
+    bound::PCTVector
     content::APN
-    function Prod(type, from::PCTVector, productant::APN)
-        from = set_content(from, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(from)]...)
+    function Prod(type, bound::PCTVector, productant::APN)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
-        new(type, signatures, from, productant)
+        new(type, signatures, bound, productant)
     end
 end
 
@@ -316,7 +316,7 @@ is_minus_one(t) = isa(t, Constant) && fc(t) == -1
 
 struct Let <: APN
     type::AbstractPCTType
-    from::PCTVector
+    bound::PCTVector
     args::PCTVector
     content::APN
 end

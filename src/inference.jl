@@ -108,8 +108,8 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: PCTV
 end
 
 function partial_inference(::Type{Map}, terms...)::AbstractPCTType
-    from, content = terms
-    return MapType(get_type(from), get_type(content))
+    bound, content = terms
+    return MapType(get_type(bound), get_type(content))
 end
 
 function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where T <: Var 

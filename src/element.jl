@@ -95,9 +95,9 @@ end
 """
     from_fields(T)
 
-Return the names of fields in `T` that is considered part of `from`.
+Return the names of fields in `T` that is considered part of `bound`.
 """
-from_fields(::Type{T}) where {T<:APN} = [:from]
+from_fields(::Type{T}) where {T<:APN} = [:bound]
 
 """
     content_fields(T)
@@ -107,9 +107,9 @@ Return the names of fields in `T` that is considered part of `content`.
 content_fields(::Type{T}) where {T<:APN} = [:content]
 
 #= from(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, f), from_fields(T))) =#
-from(n::T) where {T<:APN} = [n.from]
+from(n::T) where {T<:APN} = [n.bound]
 from(::Var{T}) where {T<:AbstractPCTType} = []
-ff(n::T) where T <: APN = n.from
+ff(n::T) where T <: APN = n.bound
 
 # """
 #     ff(n)

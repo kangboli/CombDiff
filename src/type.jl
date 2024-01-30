@@ -12,7 +12,7 @@ const APN = AbstractPCTNode
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
 content(::UndeterminedPCTType) = UndeterminedPCTType()
-from(::UndeterminedPCTType) = UndeterminedPCTType()
+bound(::UndeterminedPCTType) = UndeterminedPCTType()
 
 struct I <: ElementType end
 struct R <: ElementType end
@@ -62,16 +62,16 @@ add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(content(v)), t)
 
 
 struct MapType <: AbstractPCTType
-    from::VecType
+    bound::VecType
     content::AbstractPCTType
     meta::Dict
 end
 
-from(m::MapType) = m.from
+from(m::MapType) = m.bound
 content(m::MapType) = m.content
 
-MapType(from::VecType, content::AbstractPCTType) = MapType(from, content, Dict())
-MapType(from::APN, content::AbstractPCTType) = MapType(VecType([from]), content, Dict())
+MapType(bound::VecType, content::AbstractPCTType) = MapType(bound, content, Dict())
+MapType(bound::APN, content::AbstractPCTType) = MapType(VecType([bound]), content, Dict())
 
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b
