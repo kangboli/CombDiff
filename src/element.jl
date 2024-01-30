@@ -111,12 +111,12 @@ from(n::T) where {T<:APN} = [n.from]
 from(::Var{T}) where {T<:AbstractPCTType} = []
 ff(n::T) where T <: APN = n.from
 
-"""
-    ff(n)
+# """
+#     ff(n)
 
-Get the first field that is considered from.
-"""
-ff(n::APN) = first(from(n))
+# Get the first field that is considered from.
+# """
+# ff(n::APN) = first(from(n))
 
 content(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, f), content_fields(T)))
 

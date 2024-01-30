@@ -1,4 +1,4 @@
-using PCT, GraphPlot, Graphs
+using PCT
 
 function graphical_test()
     g_1 = @pct f ctx i * (A(i, j) + A(j, i))

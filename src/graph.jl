@@ -1,4 +1,4 @@
-using GraphPlot, DataStructures
+using DataStructures
 
 export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings, redux, vdiff
 
@@ -81,13 +81,13 @@ function log_edge(n, t, d, name, i)
     println()
 end
 
-function graphs_jl(g::PCTGraph)
-    SimpleDiGraph(Edge.(edges(g)))
-end
+# function graphs_jl(g::PCTGraph)
+#     SimpleDiGraph(Edge.(edges(g)))
+# end
 
-function visualize(g::PCTGraph)
-    h = graphs_jl(g)
-    label(n::APN) = "$(pretty(n))\n$(pct_size(n))"
-    gplothtml(h, nodesize=fill(80, length(nodes(g))), nodelabel=label.(nodes(g)))
-end
+# function visualize(g::PCTGraph)
+#     h = graphs_jl(g)
+#     label(n::APN) = "$(pretty(n))\n$(pct_size(n))"
+#     gplothtml(h, nodesize=fill(80, length(nodes(g))), nodelabel=label.(nodes(g)))
+# end
 

@@ -1,10 +1,6 @@
 module PCT
 
-using Accessors
-using Graphs
-using GraphPlot
-using SplitApplyCombine
-
+include("misc.jl")
 include("type.jl")
 include("nodes.jl")
 include("element.jl")
