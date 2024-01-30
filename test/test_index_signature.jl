@@ -2,7 +2,7 @@ using PCT
 
 function graphical_test()
     g_1 = @pct f ctx i * (A(i, j) + A(j, i))
-    i_tree = SignatureTree(Var(I(), :i), fc(g_1), [Var(I(), :j)])
+    i_tree = SignatureTree(Var(I(), :i), get_body(g_1), [Var(I(), :j)])
     nodes, edges = tree_dfs_vis(i_tree)
     g = SimpleDiGraph(Edge.(edges))
     gplothtml(g, nodelabel=["$(node_label(n, e)): $(i)" for ((n, e), i) in nodes])
@@ -33,9 +33,9 @@ end
     g_1 = @pct f ctx i * A(i, j)
     g_2 = @pct f ctx j * A(j, i)
 
-    i_tree = SignatureTree(var(:i, I()), fc(g_1), [var(:j, I())])
-    j_tree = SignatureTree(var(:j, I()), fc(g_2), [var(:i, I())])
-    other_tree = SignatureTree(var(:i, I()), fc(g_2), [var(:j, I())])
+    i_tree = SignatureTree(var(:i, I()), get_body(g_1), [var(:j, I())])
+    j_tree = SignatureTree(var(:j, I()), get_body(g_2), [var(:i, I())])
+    other_tree = SignatureTree(var(:i, I()), get_body(g_2), [var(:j, I())])
 
     @test hash(i_tree) == hash(j_tree)
 

@@ -110,13 +110,13 @@ end
 function Base.:(==)(v_1::VecType, v_2::VecType)
     objectid(v_1) == objectid(v_2) && return true
     length(v_1) == length(v_2) &&
-    all(i->content(v_1)[i] == content(v_2)[i], 1:length(v_1))
+    all(i->get_body_type(v_1)[i] == get_body_type(v_2)[i], 1:length(v_1))
 end
 
 
 function Base.:(==)(m_1::MapType, m_2::MapType)
     objectid(m_1) == objectid(m_2) && return true
-    bound_type(m_1) == bound_type(m_2) && content(m_1) == content(m_2)
+    bound_type(m_1) == bound_type(m_2) && get_body_type(m_1) == get_body_type(m_2)
 end
 
 function Base.:(==)(d_1::T, d_2::T) where T <: AbstractDelta

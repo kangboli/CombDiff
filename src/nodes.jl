@@ -19,7 +19,8 @@ export
     Constant,
     Add,
     PCTVector,
-    Negate
+    Negate,
+    get_body
 
 abstract type TerminalNode <: APN end
 

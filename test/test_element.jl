@@ -77,7 +77,7 @@ end
 @testset "element: maps" begin
     m = make_node(Map, pct_vec(var(:x, I())), var(:x, I()))
 
-    @test content(get_type(m)) == I()
+    @test get_body_type(get_type(m)) == I()
 
     # `from` gives the list of argument as a PCTVector.
     @test bound_type(get_type(m)) == VecType([I()])
@@ -116,9 +116,9 @@ end
     # Constructing a pullback is just wrapping 
     # a map in a struct called pullback.
     p = make_node(Pullback, m)
-    @test fc(p) == m
+    @test get_body(p) == m
     p2 = set_content(p, m2)
-    @test fc(p2) == m2
+    @test get_body(p2) == m2
     @test set_terms(p, m2) == p2
 
     # non-generic constructor
@@ -126,7 +126,7 @@ end
 
     # Primitive pullbacks
     p = pullback(var(:f))
-    @test fc(p) == var(:f)
+    @test get_body(p) == var(:f)
 
     # Test calls
 
@@ -161,12 +161,12 @@ end
 # Test Add
 @testset "element: add" begin
     a = make_node(Add, pct_vec(var(:x), var(:y)))
-    @test fc(a) == pct_vec(sort([var(:x), var(:y)])...)
+    @test get_body(a) == pct_vec(sort([var(:x), var(:y)])...)
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(sort([var(:p), var(:q)])...)
+    @test get_body(a2) == pct_vec(sort([var(:p), var(:q)])...)
 
-    @test flatten_add(a) == content(fc(a))
+    @test flatten_add(a) == content(get_body(a))
 
     # An `Add` with a single term is 
     # reduces in the e-class to the term.
@@ -188,12 +188,12 @@ end
 
 @testset "element: mul" begin
     a = make_node(Mul, pct_vec(var(:x), var(:y)))
-    @test fc(a) == pct_vec(sort([var(:x), var(:y)])...)
+    @test get_body(a) == pct_vec(sort([var(:x), var(:y)])...)
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test fc(a2) == pct_vec(sort([var(:p), var(:q)])...)
+    @test get_body(a2) == pct_vec(sort([var(:p), var(:q)])...)
 
-    @test flatten_mul(a) == content(fc(a))
+    @test flatten_mul(a) == content(get_body(a))
 
     # An `Mul` with a single term is 
     # reduces in the e-class to the term.
@@ -216,11 +216,11 @@ end
 @testset "element: contraction" begin
     s = pct_sum(var(:i), call(var(:x), var(:i)))
     @test get_bound(s) == pct_vec(var(:i, Z())) # There is an default inference for sum
-    @test fc(s) == call(var(:x), var(:i))
+    @test get_body(s) == call(var(:x), var(:i))
 
     i = pct_int(var(:x), call(var(:f), var(:x)))
     @test get_bound(i) == pct_vec(var(:x, R()))
-    @test fc(i) == call(var(:f), var(:x))
+    @test get_body(i) == call(var(:f), var(:x))
 
     # non-generic constructor.
     @test s == pct_sum(var(:i), call(var(:x), var(:i)))
@@ -233,7 +233,7 @@ end
 #= @testset "product" begin
     p = pct_product(var(:i), call(var(:x), var(:i)))
     @test get_bound(p) == pct_vec(var(:i, I()))
-    @test fc(p) == call(var(:x), var(:i))
+    @test get_body(p) == call(var(:x), var(:i))
     @test p == pct_product(var(:i), call(var(:x), var(:i)))
 end =#
 
@@ -241,25 +241,25 @@ end =#
     d = make_node(Delta, var(:i), var(:j), call(var(:x), var(:i), var(:j)))
     @test upper(d) == var(:i)
     @test lower(d) == var(:j)
-    @test fc(d) == call(var(:x), var(:i), var(:j))
+    @test get_body(d) == call(var(:x), var(:i), var(:j))
 
     d2 = set_content(d, var(:p), var(:q), call(var(:x), var(:p), var(:q)))
     @test upper(d2) == var(:p)
     @test lower(d2) == var(:q)
-    @test fc(d2) == call(var(:x), var(:p), var(:q))
+    @test get_body(d2) == call(var(:x), var(:p), var(:q))
 
     d = delta(var(:i), var(:p), var(:j), var(:q), call(var(:A), var(:i), var(:j)))
 
     @test upper(d) == var(:p)
     @test lower(d) == var(:q)
 
-    @test upper(fc(d)) == var(:i)
-    @test lower(fc(d)) == var(:j)
+    @test upper(get_body(d)) == var(:i)
+    @test lower(get_body(d)) == var(:j)
 end
 
 @testset "element: conjugate" begin
     c = make_node(Conjugate, var(:x, C()))
-    @test fc(c) == var(:x, C())
+    @test get_body(c) == var(:x, C())
 
     c2 = make_node(Conjugate, c)
     @test c2 == var(:x, C())
@@ -270,7 +270,7 @@ end
     c4 = conjugate(var(:y, C()))
 
     @test isa(c4, Conjugate)
-    @test fc(c4) == var(:y, C())
+    @test get_body(c4) == var(:y, C())
 end
 
 

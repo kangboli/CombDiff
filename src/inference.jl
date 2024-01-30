@@ -117,7 +117,7 @@ function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType wh
 end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
-    return content(get_type(first(terms)))
+    return get_body_type(get_type(first(terms)))
 end
 
 function partial_inference(::Type{Let}, terms...)::AbstractPCTType
@@ -141,20 +141,20 @@ end
 
 function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
     isa(get_type(term), ElementType) && return get_type(term)
-    return MapType(VecType([content(get_type(term))]), bound_type(get_type(term)), meta(get_type(term)))
+    return MapType(VecType([get_body_type(get_type(term))]), bound_type(get_type(term)), meta(get_type(term)))
 end
 
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     from_type = bound_type(get_type(mapp))
-    content_type = content(get_type(mapp))
-    MapType(add_content(from_type, content_type), first(content(from_type)))
+    body_type = get_body_type(get_type(mapp))
+    MapType(add_content(from_type, body_type), first(get_body_type(from_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
     from_type = bound_type(get_type(v))
-    content_type = content(get_type(v))
-    MapType(add_content(from_type, content_type), first(content(from_type)))
+    body_type = get_body_type(get_type(v))
+    MapType(add_content(from_type, body_type), first(get_body_type(from_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCTType

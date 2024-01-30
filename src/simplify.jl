@@ -4,7 +4,7 @@ function vdiff(n::APN; settings=default_settings)
 end
 
 function vdiff(p::Pullback; settings=default_settings)
-    m = fc(p)
+    m = get_body(p)
 
     function vdiff_single(pcomp)
         result = pcomp |> pp |> eval_all |> propagate_k |> simplify |> first
@@ -17,7 +17,7 @@ function vdiff(p::Pullback; settings=default_settings)
         end =#
     end
 
-    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, fc(m)))), f), get_bound(m))...)
+    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, get_body(m)))), f), get_bound(m))...)
     return pct_map(get_bound(m)..., result)
     
 end
@@ -29,7 +29,7 @@ end
 
 
 function redux(n::Map; settings=default_settings)
-    pct_map(get_bound(n)...,  redux(fc(n); settings=settings))
+    pct_map(get_bound(n)...,  redux(get_body(n); settings=settings))
 end
 
 function redux(n::APN; settings=default_settings)
@@ -54,5 +54,5 @@ function simplify(n::APN; settings=default_settings)
 end
 
 function simplify(n::Map; settings=default_settings)
-    map(t->make_node(Map, get_bound(n), t), simplify(fc(n); settings=settings))
+    map(t->make_node(Map, get_bound(n), t), simplify(get_body(n); settings=settings))
 end

@@ -28,7 +28,7 @@ using PCT, Test
     @test d2 == ctx[:I2]
 
     d3 = @pct _ ctx (x::I1) -> x
-    @test fc(d3) == var(:x, ctx[:I1])
+    @test get_body(d3) == var(:x, ctx[:I1])
 end
 
 @testset "syntax: space" begin
@@ -39,7 +39,7 @@ end
     end
 
     @test bound_type(s) == VecType([I()])
-    @test content(s) == R()
+    @test get_body_type(s) == R()
     @test ctx[:V] == s
 
     s2 = @pct _ ctx begin
@@ -49,11 +49,11 @@ end
     end
 
     @test bound_type(s2) == VecType([I(), I()])
-    @test content(s2) == R()
+    @test get_body_type(s2) == R()
     @test ctx[:M] == s2
 
     f = @pct _ ctx (x::M) -> x
-    @test fc(f) == var(:x, ctx[:M])
+    @test get_body(f) == var(:x, ctx[:M])
 
     s3 = @pct _ ctx begin
         @space S begin
@@ -68,7 +68,7 @@ end
 
 @testset "syntax: map" begin
     f, _ = @pct (x::I) -> x
-    @test fc(f) == var(:x, I())
+    @test get_body(f) == var(:x, I())
     @test get_bound(f) == pct_vec(var(:x, I()))
 
     f, ctx = @pct begin
@@ -79,13 +79,13 @@ end
         (x::M) -> (i::I, j::I) -> x(i, j)
     end
 
-    @test fc(fc(f)) == call(var(:x, MapType(VecType([I(), I()]), R())), var(:i, I()), var(:j, I()))
+    @test get_body(get_body(f)) == call(var(:x, MapType(VecType([I(), I()]), R())), var(:i, I()), var(:j, I()))
     @test get_bound(f) == pct_vec(var(:x, ctx[:M]))
 
     g = @pct _ ctx begin
         (x::M) -> (i::I) -> x(i)
     end
-    @test first(content(get_bound(fc(g)))) == var(:i, I())
+    @test first(content(get_bound(get_body(g)))) == var(:i, I())
 
     h = @pct _ ctx begin
         (j::I) -> ((i::I) -> 2 * i)(j)
@@ -101,24 +101,24 @@ end
     end
 
     f, _ = @pct (i::I) -> i + i + 2
-    @test fc(f) == add(var(:i, I()), var(:i, I()), constant(2))
+    @test get_body(f) == add(var(:i, I()), var(:i, I()), constant(2))
 
     f, _ = @pct (i::I, j::I) -> i * j * 2
-    @test fc(f) == mul(var(:i, I()), var(:j, I()), constant(2))
+    @test get_body(f) == mul(var(:i, I()), var(:j, I()), constant(2))
 
     f, _ = @pct (i::I) -> -i + 2
-    @test fc(f) == add(mul(constant(-1), var(:i, I())), constant(2))
+    @test get_body(f) == add(mul(constant(-1), var(:i, I())), constant(2))
 
     f, _ = @pct (i::I) -> i^(-1)
-    @test fc(f) == monomial(var(:i, I()), constant(-1))
+    @test get_body(f) == monomial(var(:i, I()), constant(-1))
 
     f, _ = @pct (i::I, j::I) -> (i * j) * (2 + 1)
-    @test fc(f) == mul(var(:i, I()), var(:j, I()), add(constant(2), constant(1)))
+    @test get_body(f) == mul(var(:i, I()), var(:j, I()), add(constant(2), constant(1)))
 
     f = @pct _ ctx begin
         (x::M, i::I, j::I) -> x(i, j) * x(j, i) + j
     end
-    @test fc(f) == add(mul(call(var(:x, ctx[:M]), var(:i, I()), var(:j, I())),
+    @test get_body(f) == add(mul(call(var(:x, ctx[:M]), var(:i, I()), var(:j, I())),
             call(var(:x, ctx[:M]), var(:j, I()), var(:i, I()))), var(:j, I()))
 
 end
@@ -129,7 +129,7 @@ end
 
     # Multiple indices gives multiple sums
     f, _ = @pct sum((i, j, k), i * j * k)
-    @test fc(f) == mul(var(:i, Z()), var(:j, Z()), var(:k, Z()))
+    @test get_body(f) == mul(var(:i, Z()), var(:j, Z()), var(:k, Z()))
 
     #= f, _ = @pct prod(i, i^2)
     @test f == pct_product(var(:i, I()), monomial(var(:i, I()), constant(2))) =#
@@ -162,7 +162,7 @@ end
     end
 
     @test get_bound(g) == pct_vec(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
-    @test fc(g) == mul(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
+    @test get_body(g) == mul(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
 
     #= g = @pct _ ctx begin
         prod(i::I1, int(j::R1, i * j))
@@ -172,7 +172,7 @@ end
 @testset "syntax: pullback" begin
     # Pullback
     f, _ = @pct pullback((i::I) -> i * 2)
-    @test fc(f) == pct_map(var(:i, I()), mul(var(:i, I()), constant(2)))
+    @test get_body(f) == pct_map(var(:i, I()), mul(var(:i, I()), constant(2)))
 
     # Short syntax for domain.
     d, ctx = @pct begin
@@ -187,11 +187,11 @@ end
         end
     end
     f = @pct _ ctx (j::I) -> pullback((x::V) -> x(j))
-    @test isa(fc(f), Pullback)
+    @test isa(get_body(f), Pullback)
 
     # A primitive pullback.
     f = @pct _ ctx (x::V) -> pullback(x)
-    @test isa(fc(f), PrimitivePullback)
+    @test isa(get_body(f), PrimitivePullback)
 end
 
 @testset "syntax: other" begin
@@ -202,9 +202,9 @@ end
         (A::S) -> _
     end
     g = @pct f ctx (i::I, j::I) -> delta(i, j, A(i, j))
-    @test fc(fc(g)) == delta(var(:i, I()), var(:j, I()), call(var(:A, ctx[:S]), var(:i, I()), var(:j, I())))
+    @test get_body(get_body(g)) == delta(var(:i, I()), var(:j, I()), call(var(:A, ctx[:S]), var(:i, I()), var(:j, I())))
 
     f, _ = @pct (i::C) -> i'
-    @test fc(f) == conjugate(var(:i, C()))
+    @test get_body(f) == conjugate(var(:i, C()))
 end
 

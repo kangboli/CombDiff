@@ -24,7 +24,7 @@ using PCT, Test
         (A::H, J::T) -> _
     end
 
-    g = fc(@pct f ctx (C::U) -> sum((i, j, p, q, r, s), C(p, i)' * C(q, i) * C(r, j)' * C(s, j) * J(p, q, r, s)))
+    g = get_body(@pct f ctx (C::U) -> sum((i, j, p, q, r, s), C(p, i)' * C(q, i) * C(r, j)' * C(s, j) * J(p, q, r, s)))
     cg = decompose(g)
 
     pcg = pp(cg)

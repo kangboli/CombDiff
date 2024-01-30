@@ -1,4 +1,19 @@
-export AbstractPCTType, MapType, VecType, Z, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric, bound_type
+export AbstractPCTType,
+    get_body_type,
+    MapType,
+    VecType,
+    Z,
+    I,
+    R,
+    C,
+    Domain,
+    symmetries,
+    VecType,
+    lower,
+    upper,
+    UndeterminedPCTType,
+    symmetric,
+    bound_type
 
 abstract type AbstractPCTType end
 abstract type AbstractSignatureTree end
@@ -11,7 +26,7 @@ const APN = AbstractPCTNode
 
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
-content(::UndeterminedPCTType) = UndeterminedPCTType()
+get_body_type(::UndeterminedPCTType) = UndeterminedPCTType()
 
 struct I <: ElementType end
 struct R <: ElementType end
@@ -53,21 +68,20 @@ struct VecType <: AbstractPCTType
     content::Vector{AbstractPCTType}
 end
 
-content(v::VecType) = v.content
-Base.length(v::VecType) = length(content(v))
-Base.getindex(v::VecType, i::Int) = content(v)[i]
-fc(v::VecType) = first(content(v))
-add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(content(v)), t))
+get_body_type(v::VecType) = v.content
+Base.length(v::VecType) = length(get_body_type(v))
+Base.getindex(v::VecType, i::Int) = get_body_type(v)[i]
+add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_body_type(v)), t))
 
 
 struct MapType <: AbstractPCTType
     bound::VecType
-    content::AbstractPCTType
+    body::AbstractPCTType
     meta::Dict
 end
 
 bound_type(m::MapType) = m.bound
-content(m::MapType) = m.content
+get_body_type(m::MapType) = m.body
 
 MapType(bound::VecType, content::AbstractPCTType) = MapType(bound, content, Dict())
 MapType(bound::APN, content::AbstractPCTType) = MapType(VecType([bound]), content, Dict())
@@ -75,7 +89,7 @@ MapType(bound::APN, content::AbstractPCTType) = MapType(VecType([bound]), conten
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b
 
-symmetries(c::MapType) = get(c.meta, :symmetries, []) 
+symmetries(c::MapType) = get(c.meta, :symmetries, [])
 
 linear(c::MapType) = get(c.meta, :linear, false)
 

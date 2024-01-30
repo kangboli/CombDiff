@@ -12,7 +12,7 @@ f, ctx = @pct begin
     (A::H) -> _
 end
 
-g = fc(@pct f ctx (x::V) -> sum((i, j), x(i)' * A(i, j) * x(j)))
+g = get_body(@pct f ctx (x::V) -> sum((i, j), x(i)' * A(i, j) * x(j)))
 cg = decompose(g)
 pcg = pp(cg)
 pcg_1 = propagate_k(pcg)
@@ -43,7 +43,7 @@ f, ctx = @pct begin
     (A::H, J::T) -> _
 end
 
-g = fc(@pct f ctx (C::U) -> sum((i, j, p, q, r, s),
+g = get_body(@pct f ctx (C::U) -> sum((i, j, p, q, r, s),
     C(p, i)' * C(q, i) * C(r, j)' * C(s, j) * J(p, q, r, s)))
 
 cg = decompose(g)
@@ -91,7 +91,7 @@ f, ctx = @pct begin
     (S::Mmn, w::Sym) -> _
 end
 
-g = fc(@pct f ctx (U::Gauge) -> ((ρ::Density) -> sum((n::I, b::Q), ρ(n, b)' * ρ(n, b)))(
+g = get_body(@pct f ctx (U::Gauge) -> ((ρ::Density) -> sum((n::I, b::Q), ρ(n, b)' * ρ(n, b)))(
     (n::I, b::Q) -> sum((k::P, p, q), U(p, n, k)' * S(p, q, k, k + b) * U(q, n, k + b))))
 
 cg = decompose(eval_all(g))
