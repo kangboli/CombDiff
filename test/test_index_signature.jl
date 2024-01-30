@@ -30,8 +30,8 @@ end
         (A, i::I, j::I) -> _
     end
 
-    g_1 = @pct f ctx i * A(i, j)
-    g_2 = @pct f ctx j * A(j, i)
+    g_1, _ = @pct f ctx i * A(i, j)
+    g_2, _ = @pct f ctx j * A(j, i)
 
     i_tree = SignatureTree(var(:i, I()), get_body(g_1), [var(:j, I())])
     j_tree = SignatureTree(var(:j, I()), get_body(g_2), [var(:i, I())])
@@ -44,8 +44,8 @@ end
     @test i_tree != other_tree
     @test j_tree != other_tree
 
-    x = @pct f ctx sum((i, j), A(i, j))
-    y = @pct f ctx sum((j, i), A(j, i))
+    x, _ = @pct f ctx sum((i, j), A(i, j))
+    y, _ = @pct f ctx sum((j, i), A(j, i))
     @test x == x
     @test x == y
 end

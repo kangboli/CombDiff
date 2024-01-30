@@ -82,9 +82,9 @@ function combine_maps(terms::Vector)
     function process_kv(v)
         vs = get_bound(v[1])
         have_common_names = all(i->name.(get_bound(v[i]))==name.(vs), 1:length(v))
-        new_from = have_common_names ? vs : pct_vec(map(var, 
+        new_bound = have_common_names ? vs : pct_vec(map(var, 
         new_symbol(v...; num=length(vs), symbol=:_a), get_type.(vs))...)
-        return pct_map(new_from..., add([ecall(x, new_from...) for x in v]...))
+        return pct_map(new_bound..., add([ecall(x, new_bound...) for x in v]...))
     end
 
     new_maps = [process_kv(v) for (_, v) in map_dict]
@@ -119,8 +119,8 @@ function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T <: 
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
     isempty(content(bound)) && return S, terms(summand), get_type(summand)
     if T == S 
-        new_from = pct_vec(content(bound)..., content(get_bound(summand))...)
-        return T, [new_from, get_body(summand)], partial_inference(Sum, new_from, get_body(summand))
+        new_bound = pct_vec(content(bound)..., content(get_bound(summand))...)
+        return T, [new_bound, get_body(summand)], partial_inference(Sum, new_bound, get_body(summand))
     end
 
     if isa(summand, Map)

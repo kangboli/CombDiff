@@ -56,7 +56,7 @@ op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v),
 
 function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext) 
     map_type = context[name(mapp(v))]
-    for (a, t) in zip(content(args(v)), content(bound_type(map_type)))
+    for (a, t) in zip(content(args(v)), content(get_bound_type(map_type)))
         a.type = t
         op!(context, name(a), t)
     end
@@ -69,14 +69,14 @@ end
 inference(n::Any) = n
 
 function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
-    has_from = any(f->hasfield(T, f), bound_fields(T))
-    if has_from
+    has_bound = any(f->hasfield(T, f), bound_fields(T))
+    if has_bound
         op_context!(get_bound(n), pct_push!, context)
         # the following line may be redundant.
-        n = set_from(n, map(t->inference(t, context), [get_bound(n)])...)
+        n = set_bound(n, map(t->inference(t, context), [get_bound(n)])...)
     end
     n = set_content(n, map(t->inference(t, context), content(n))...)
-    has_from && op_context!(get_bound(n), pct_pop!, context)
+    has_bound && op_context!(get_bound(n), pct_pop!, context)
     # Setting the type may also be redundant.
     return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
@@ -86,18 +86,18 @@ function inference(v::Var, context::TypeContext)
 end
 
 function inference(l::Let, context::TypeContext)
-    typed_from, typed_args = [], []
+    typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
         f = set_type(f, get_type(a))
-        push!(typed_from, f)
+        push!(typed_bound, f)
         push!(typed_args, a)
         op_context!(f, pct_push!, context)
     end
     
     typed_content = inference(get_body(l), context)
-    map(f -> op_context!(f, pct_pop!, context), typed_from)
-    return l = pct_let(typed_from..., typed_args..., typed_content) 
+    map(f -> op_context!(f, pct_pop!, context), typed_bound)
+    return l = pct_let(typed_bound..., typed_args..., typed_content) 
 end
 
 
@@ -141,20 +141,20 @@ end
 
 function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
     isa(get_type(term), ElementType) && return get_type(term)
-    return MapType(VecType([get_body_type(get_type(term))]), bound_type(get_type(term)), meta(get_type(term)))
+    return MapType(VecType([get_body_type(get_type(term))]), get_bound_type(get_type(term)), meta(get_type(term)))
 end
 
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
-    from_type = bound_type(get_type(mapp))
+    bound_type = get_bound_type(get_type(mapp))
     body_type = get_body_type(get_type(mapp))
-    MapType(add_content(from_type, body_type), first(get_body_type(from_type)))
+    MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
-    from_type = bound_type(get_type(v))
+    bound_type = get_bound_type(get_type(v))
     body_type = get_body_type(get_type(v))
-    MapType(add_content(from_type, body_type), first(get_body_type(from_type)))
+    MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCTType

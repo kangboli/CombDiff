@@ -49,14 +49,24 @@ Base.last(v::PCTVector) = last(content(v))
 Base.length(v::PCTVector) = length(content(v))
 
 
-function Base.iterate(v::Union{PCTVector,VecType})
+function Base.iterate(v::PCTVector)
     isempty(content(v)) && return nothing
     return content(v)[1], 2
 end
 
-function Base.iterate(v::Union{PCTVector,VecType}, state::Int)
+function Base.iterate(v::VecType)
+    isempty(get_content_type(v)) && return nothing
+    return get_content_type(v)[1], 2
+end
+
+function Base.iterate(v::PCTVector, state::Int)
     state > length(v) && return nothing
     return content(v)[state], state + 1
+end
+
+function Base.iterate(v::VecType, state::Int)
+    state > length(v) && return nothing
+    return get_content_type(v)[state], state + 1
 end
 
 function set_i(v::PCTVector, i::Integer, new_item::APN)

@@ -222,16 +222,16 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
-    new_from = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    @assert length(new_from) == length(args(c)) == length(get_bound(mapp(c)))
+    new_bound = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
+    @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
 
     n = evaluate(get_body(mapp(c)))
-    for (old, new) in zip(content(get_bound(mapp(c))), new_from)
+    for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
         n = subst(n, old, new)
     end
     new_args = map(eval_all, args(c))
 
-    for (old, new) in zip(new_from, new_args)
+    for (old, new) in zip(new_bound, new_args)
         n = subst(n, old, new)
     end
 

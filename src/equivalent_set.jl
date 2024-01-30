@@ -124,8 +124,8 @@ function gcd(a::APN, b::APN)
     fill_one(x) = isempty(x) ? Set([make_node(Constant, 1)]) : x
     a_rem, b_rem, c = map(fill_one, (a_rem, b_rem, c))
 
-    node_from_set(s) = length(s) > 1 ? mul(s...) : first(collect(s))
-    return map(node_from_set, (a_rem, b_rem, c))
+    node_bound_set(s) = length(s) > 1 ? mul(s...) : first(collect(s))
+    return map(node_bound_set, (a_rem, b_rem, c))
 end
 
 function gcd_neighbors(terms::Vector)
@@ -182,10 +182,10 @@ function combine_map_neighbors(terms::Vector)
             length(get_bound(x)) == length(get_bound(y)) || continue
             all(i->get_type(get_bound(x)[i]) == get_type(get_bound(y)[i]), 1:length(get_bound(x))) || continue
 
-            new_from = get_bound(x) == get_bound(y) ? get_bound(x) :
+            new_bound = get_bound(x) == get_bound(y) ? get_bound(x) :
             pct_vec(map(var, range.(get_bound(x)), new_symbol(x, y; num=length(get_bound(x)), symbol=:_a),  get_type.(get_bound(x))))
 
-            new_map = pct_map(new_from..., add(ecall(x, new_from...), ecall(y, new_from...)))
+            new_map = pct_map(new_bound..., add(ecall(x, new_bound...), ecall(y, new_bound...)))
 
             push!(result, add(new_map, terms[(k -> k != i && k != j).(1:end)]...); dired=true, name="combine_map")
         end
@@ -401,8 +401,8 @@ function contract_delta_neighbors(s::Sum)
     d = get_body(s)
     isa(d, Delta) || return result
 
-    new_from = pct_vec(sort(content(get_bound(s)), by=t->startswith(string(name(t)), "_"), rev=true)...)
-    for (i, v) in enumerate(new_from)
+    new_bound = pct_vec(sort(content(get_bound(s)), by=t->startswith(string(name(t)), "_"), rev=true)...)
+    for (i, v) in enumerate(new_bound)
         contractable(expr::APN, s::Symbol)::Bool = false
         contractable(expr::Var, s::Symbol)::Bool = name(expr) == s
         function contractable(expr::Mul, s::Symbol)::Bool 
@@ -413,7 +413,7 @@ function contract_delta_neighbors(s::Sum)
         #= is_contractable(v) != isempty(range(v)) && error("bug alert! mismatch $(name(v)): $(range(v))") =#
         is_contractable(v) || continue
         #= isempty(range(v)) || continue =#
-        indices = content(remove_i(new_from, i))
+        indices = content(remove_i(new_bound, i))
 
         this, other = if contractable(upper(d), name(v))
             upper(d), lower(d)

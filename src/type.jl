@@ -13,7 +13,7 @@ export AbstractPCTType,
     upper,
     UndeterminedPCTType,
     symmetric,
-    bound_type
+    get_bound_type
 
 abstract type AbstractPCTType end
 abstract type AbstractSignatureTree end
@@ -68,10 +68,10 @@ struct VecType <: AbstractPCTType
     content::Vector{AbstractPCTType}
 end
 
-get_body_type(v::VecType) = v.content
-Base.length(v::VecType) = length(get_body_type(v))
-Base.getindex(v::VecType, i::Int) = get_body_type(v)[i]
-add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_body_type(v)), t))
+get_content_type(v::VecType) = v.content
+Base.length(v::VecType) = length(get_content_type(v))
+Base.getindex(v::VecType, i::Int) = get_content_type(v)[i]
+add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_content_type(v)), t))
 
 
 struct MapType <: AbstractPCTType
@@ -80,7 +80,7 @@ struct MapType <: AbstractPCTType
     meta::Dict
 end
 
-bound_type(m::MapType) = m.bound
+get_bound_type(m::MapType) = m.bound
 get_body_type(m::MapType) = m.body
 
 MapType(bound::VecType, content::AbstractPCTType) = MapType(bound, content, Dict())

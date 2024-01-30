@@ -30,7 +30,7 @@ using PCT, Test
 
     @test x == base(x)
     @test make_node(Constant, 1) == power(x)
-    #= @test isempty(from(x)) =#
+    #= @test isempty(bound(x)) =#
 end
 
 
@@ -79,8 +79,8 @@ end
 
     @test get_body_type(get_type(m)) == I()
 
-    # `from` gives the list of argument as a PCTVector.
-    @test bound_type(get_type(m)) == VecType([I()])
+    # `bound` gives the list of argument as a PCTVector.
+    @test get_bound_type(get_type(m)) == VecType([I()])
     @test first(content(get_bound(m))) == var(:x, I())
 
     # `content` gives the output of the map.
@@ -89,8 +89,8 @@ end
     # `terms` gives both.
     @test length(terms(m)) == 2
 
-    # One can set the `from`, the `content`, or both.
-    m2 = set_from(m, pct_vec(var(:y, I())))
+    # One can set the `bound`, the `content`, or both.
+    m2 = set_bound(m, pct_vec(var(:y, I())))
     @test first(content(get_bound(m2))) == var(:y, I())
 
     m3 = set_content(m2, var(:y, I()))
@@ -112,7 +112,7 @@ end
 
 @testset "element: pullbacks" begin
     m = make_node(Map, pct_vec(var(:x, I())), var(:x, I()))
-    m2 = set_from(m, pct_vec(var(:y, I())))
+    m2 = set_bound(m, pct_vec(var(:y, I())))
     # Constructing a pullback is just wrapping 
     # a map in a struct called pullback.
     p = make_node(Pullback, m)

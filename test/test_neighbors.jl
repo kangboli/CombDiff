@@ -10,8 +10,8 @@ using PCT, Test
         (A::S, i::I, j::I) -> _
     end
 
-    f1 = @pct f ctx A(i, j)
-    f2 = @pct f ctx A(j, i)
+    f1, _ = @pct f ctx A(i, j)
+    f2, _ = @pct f ctx A(j, i)
 
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1); settings=symmetry_settings))
 
@@ -23,8 +23,8 @@ using PCT, Test
         (A::H, i::I, j::I) -> _
     end
 
-    f1 = @pct f ctx A(i, j)
-    f2 = @pct f ctx A(j, i)'
+    f1, _ = @pct f ctx A(i, j)
+    f2, _ = @pct f ctx A(j, i)'
 
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1); settings=symmetry_settings))
 
@@ -36,10 +36,10 @@ using PCT, Test
         (T::T, i::I, j::I, p::I, q::I) -> _
     end
 
-    f1 = @pct f ctx T(i, j, p, q)
-    f2 = @pct f ctx T(j, i, p, q)
-    f3 = @pct f ctx T(i, j, q, p)
-    f4 = @pct f ctx T(p, q, i, j)
+    f1, _ = @pct f ctx T(i, j, p, q)
+    f2, _ = @pct f ctx T(j, i, p, q)
+    f3, _ = @pct f ctx T(i, j, q, p)
+    f4, _ = @pct f ctx T(p, q, i, j)
     @test all(f -> get_body(f) in nodes(PCT.neighbors(get_body(f1); settings=symmetry_settings)), [f2, f3, f4])
 
 
@@ -52,9 +52,9 @@ using PCT, Test
         (A::S, B::S, i::I, j::I) -> _
     end
 
-    f1 = @pct f ctx A(i, B(i, j))
-    f2 = @pct f ctx -A(B(i, j), i)
-    f3 = @pct f ctx A(i, -B(j, i))
+    f1, _ = @pct f ctx A(i, B(i, j))
+    f2, _ = @pct f ctx -A(B(i, j), i)
+    f3, _ = @pct f ctx A(i, -B(j, i))
 
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1); settings=symmetry_settings))
     @test get_body(f3) in nodes(PCT.neighbors(get_body(f1); settings=symmetry_settings))
@@ -70,16 +70,16 @@ end
     f2 = @pct f ctx i * (1 + 1)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1))) =#
 
-    f1 = @pct f ctx i + i * j
-    f2 = @pct f ctx i * (1 + j)
+    f1, _ = @pct f ctx i + i * j
+    f2, _ = @pct f ctx i * (1 + j)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i * k + i * j
-    f2 = @pct f ctx i * (k + j)
+    f1, _ = @pct f ctx i * k + i * j
+    f2, _ = @pct f ctx i * (k + j)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i * k + i * j * k
-    f2 = @pct f ctx i * k * (j + 1)
+    f1, _ = @pct f ctx i * k + i * j * k
+    f2, _ = @pct f ctx i * k * (j + 1)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     #= # add-sum edges
@@ -92,8 +92,8 @@ end
 
     # add-delta edges
 
-    f1 = @pct f ctx delta(i, j, k * i) + delta(i, j, k * j)
-    f2 = @pct f ctx delta(i, j, k * i + k * j)
+    f1, _ = @pct f ctx delta(i, j, k * i) + delta(i, j, k * j)
+    f2, _ = @pct f ctx delta(i, j, k * i + k * j)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # add-const PCT.neighbors
@@ -117,8 +117,8 @@ end
         (A::S, i::I, j::I) -> _
     end
 
-    f1 = @pct f ctx A(i, j) + A(i, j)
-    f2 = @pct f ctx A(i, j) + A(j, i)
+    f1, _ = @pct f ctx A(i, j) + A(i, j)
+    f2, _ = @pct f ctx A(i, j) + A(j, i)
     @test get_body(f1) in nodes(PCT.neighbors(get_body(f2); settings=symmetry_settings))
 end
 
@@ -136,25 +136,25 @@ end
 
     # swallow PCT.neighbors
 
-    f1 = @pct f ctx i * delta(j, k, j * k)
-    f2 = @pct f ctx delta(j, k, i * j * k)
+    f1, _ = @pct f ctx i * delta(j, k, j * k)
+    f2, _ = @pct f ctx delta(j, k, i * j * k)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i * j * delta(j, k, j * k)
-    f2 = @pct f ctx delta(j, k, j * i * j * k)
+    f1, _ = @pct f ctx i * j * delta(j, k, j * k)
+    f2, _ = @pct f ctx delta(j, k, j * i * j * k)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # mul_add PCT.neighbors
-    f1 = @pct f ctx i * i * i
-    f2 = @pct f ctx i^(1 + 1) * i
+    f1, _ = @pct f ctx i * i * i
+    f2, _ = @pct f ctx i^(1 + 1) * i
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i * i^2 * j
-    f2 = @pct f ctx i^(1 + 2) * j
+    f1, _ = @pct f ctx i * i^2 * j
+    f2, _ = @pct f ctx i^(1 + 2) * j
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i^j * i^k
-    f2 = @pct f ctx i^(j + k)
+    f1, _ = @pct f ctx i^j * i^k
+    f2, _ = @pct f ctx i^(j + k)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # mul_prod PCT.neighbors
@@ -177,22 +177,21 @@ end
     # sum_mul PCT.neighbors
     f, ctx = @pct (i::I, j::I, k::I) -> _
 
-    f1 = @pct f ctx i^(sum(a, a * j))
-    f2 = @pct f ctx prod(a, i^(a * j))
+    f1, _ = @pct f ctx i^(sum(a, a * j))
+    f2, _ = @pct f ctx prod(a, i^(a * j))
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # add_mul PCT.neighbors
 
-    f1 = @pct f ctx i^(j + k)
-    f2 = @pct f ctx i^j * i^k
+    f1, _ = @pct f ctx i^(j + k)
+    f2, _ = @pct f ctx i^j * i^k
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
-    f1 = @pct f ctx i^(j + k) * i
-    f2 = @pct f ctx i^j * i^k * i
-    f3 = @pct f ctx i^(j + k + 1)
+    f1, _ = @pct f ctx i^(j + k) * i
+    f2, _ = @pct f ctx i^j * i^k * i
+    f3, _ = @pct f ctx i^(j + k + 1)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
     @test get_body(f3) in nodes(PCT.neighbors(get_body(f1)))
-
 end
 
 #= @testset "Product Neighbors" begin
@@ -250,17 +249,17 @@ end
     end
 
     # delta-ex
-    f1 = @pct f ctx delta(i, j, delta(p, q, A(i, j)))
-    f2 = @pct f ctx delta(p, q, delta(i, j, A(i, j)))
+    f1, _ = @pct f ctx delta(i, j, delta(p, q, A(i, j)))
+    f2, _ = @pct f ctx delta(p, q, delta(i, j, A(i, j)))
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # double-delta
-    f1 = @pct f ctx delta(i, j, delta(j, i, A(i, j)))
-    f2 = @pct f ctx delta(i, j, A(i, j))
+    f1, _ = @pct f ctx delta(i, j, delta(j, i, A(i, j)))
+    f2, _ = @pct f ctx delta(i, j, A(i, j))
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 
     # delta-id
-    f1 = @pct f ctx delta(i, i, A(i, j)) 
-    f2 = @pct f ctx A(i, j)
+    f1, _ = @pct f ctx delta(i, i, A(i, j)) 
+    f2, _ = @pct f ctx A(i, j)
     @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
 end

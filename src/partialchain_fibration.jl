@@ -45,12 +45,12 @@ the input and output types can be obtained.
 """
 maptype(b::ABF)::MapType = b.maptype
 
-input_type(b::ABF)::VecType = bound_type(maptype(b))
+input_type(b::ABF)::VecType = get_bound_type(maptype(b))
 
-output_type(b::ABF)::AbstractPCTType = content(maptype(b))
+output_type(b::ABF)::AbstractPCTType = get_body_type(maptype(b))
 
 z_vars(b::ABF)::Vector{T} where {T<:Var} = map(var,
-    new_symbol(apns(b)...; num=length(input_type(b)), symbol=:_z), content(input_type(b)))
+    new_symbol(apns(b)...; num=length(input_type(b)), symbol=:_z), get_content_type(input_type(b)))
 
 """
     zk_vars(b::ABF)
@@ -436,14 +436,14 @@ function pp(b::BMap)::AbstractMap
     process_param(p::APN) = primitive_pullback(p)
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
     function process_param(p::Var)
-        from_types = content(bound_type(get_type(m)))
-        n_args = length(from_types)
+        bound_types = get_content_type(get_bound_type(get_type(m)))
+        n_args = length(bound_types)
         zs, ks = zk_vars(b)
         if n_args == 1 
             linear(get_type(m)) || return pullback(p)
             return pct_map(zs..., ks..., call(conjugate(m), ks...)) 
         end
-        #= new_from = map(var, new_symbol(m, zs..., ks..., num=n_args), from_types) =#
+        #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
         pullbacks = map(z->call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
         pct_map(zs..., ks..., pct_vec(pullbacks...))
     end

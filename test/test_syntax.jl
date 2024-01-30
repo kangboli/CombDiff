@@ -14,7 +14,7 @@ using PCT, Test
     @test upper(d) == var(:N, I())
     @test d == ctx[:I1]
 
-    d2 = @pct _ ctx begin
+    d2, _ = @pct _ ctx begin
         @domain I2 begin
             base = R
             lower = -X
@@ -27,7 +27,7 @@ using PCT, Test
     @test upper(d2) == var(:X, R())
     @test d2 == ctx[:I2]
 
-    d3 = @pct _ ctx (x::I1) -> x
+    d3, _ = @pct _ ctx (x::I1) -> x
     @test get_body(d3) == var(:x, ctx[:I1])
 end
 
@@ -38,24 +38,24 @@ end
         end
     end
 
-    @test bound_type(s) == VecType([I()])
+    @test get_bound_type(s) == VecType([I()])
     @test get_body_type(s) == R()
     @test ctx[:V] == s
 
-    s2 = @pct _ ctx begin
+    s2, _ = @pct _ ctx begin
         @space M begin
             type = (I, I) -> R
         end
     end
 
-    @test bound_type(s2) == VecType([I(), I()])
+    @test get_bound_type(s2) == VecType([I(), I()])
     @test get_body_type(s2) == R()
     @test ctx[:M] == s2
 
-    f = @pct _ ctx (x::M) -> x
+    f, _ = @pct _ ctx (x::M) -> x
     @test get_body(f) == var(:x, ctx[:M])
 
-    s3 = @pct _ ctx begin
+    s3, _ = @pct _ ctx begin
         @space S begin
             type = (I, I) -> R
             symmetries = (((2, 1), :id),)
@@ -82,12 +82,12 @@ end
     @test get_body(get_body(f)) == call(var(:x, MapType(VecType([I(), I()]), R())), var(:i, I()), var(:j, I()))
     @test get_bound(f) == pct_vec(var(:x, ctx[:M]))
 
-    g = @pct _ ctx begin
+    g, _ = @pct _ ctx begin
         (x::M) -> (i::I) -> x(i)
     end
     @test first(content(get_bound(get_body(g)))) == var(:i, I())
 
-    h = @pct _ ctx begin
+    h, _ = @pct _ ctx begin
         (j::I) -> ((i::I) -> 2 * i)(j)
     end
     @test get_bound(h) == pct_vec(var(:j, I()))
@@ -115,7 +115,7 @@ end
     f, _ = @pct (i::I, j::I) -> (i * j) * (2 + 1)
     @test get_body(f) == mul(var(:i, I()), var(:j, I()), add(constant(2), constant(1)))
 
-    f = @pct _ ctx begin
+    f, _ = @pct _ ctx begin
         (x::M, i::I, j::I) -> x(i, j) * x(j, i) + j
     end
     @test get_body(f) == add(mul(call(var(:x, ctx[:M]), var(:i, I()), var(:j, I())),
@@ -152,12 +152,12 @@ end
         end
     end
 
-    g = @pct _ ctx begin
+    g, _ = @pct _ ctx begin
         sum(i::I1, i*2)
     end
     @test get_bound(g) == pct_vec(var(:i, ctx[:I1]))
 
-    g = @pct _ ctx begin
+    g, _ = @pct _ ctx begin
         sum((i::I1, j::I2), i * j)
     end
 
@@ -186,11 +186,11 @@ end
             type=(I,)->R
         end
     end
-    f = @pct _ ctx (j::I) -> pullback((x::V) -> x(j))
+    f, _ = @pct _ ctx (j::I) -> pullback((x::V) -> x(j))
     @test isa(get_body(f), Pullback)
 
     # A primitive pullback.
-    f = @pct _ ctx (x::V) -> pullback(x)
+    f, _ = @pct _ ctx (x::V) -> pullback(x)
     @test isa(get_body(f), PrimitivePullback)
 end
 
@@ -201,7 +201,7 @@ end
         end
         (A::S) -> _
     end
-    g = @pct f ctx (i::I, j::I) -> delta(i, j, A(i, j))
+    g, _ = @pct f ctx (i::I, j::I) -> delta(i, j, A(i, j))
     @test get_body(get_body(g)) == delta(var(:i, I()), var(:j, I()), call(var(:A, ctx[:S]), var(:i, I()), var(:j, I())))
 
     f, _ = @pct (i::C) -> i'

@@ -55,8 +55,11 @@ mutated as more types are declared. The last expression of the section
 will be returned and put in `g`.
 """
 macro pct(f, ctx, expr)
-    f == :_ && return esc(:(first(@pct($(expr), $(ctx)))))
-    return esc(:(inference(set_content($(f), first(@pit($(expr), $(ctx)))))))
+    f == :_ && return esc(:(@pct($(expr), $(ctx))))
+    return esc(:(
+        let (content, ctx) = @pit($(expr), $(ctx))
+            inference(set_content($(f), content)), ctx
+        end))
 end
 
 
@@ -126,9 +129,9 @@ function parse_node(::Type{MapType}, s::Expr)
     parse_pair(::Val{:symmetries}, t::Expr) = t
     parse_pair(::Val{:linear}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
-        from_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
-        params = :(VecType([$([from_type(a) for a in t.args[1].args]...)]))
-        return_type = :($(from_type(first(t.args[2].args))))
+        bound_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
+        params = :(VecType([$([bound_type(a) for a in t.args[1].args]...)]))
+        return_type = :($(bound_type(first(t.args[2].args))))
         return (params, return_type)
     end
 
@@ -268,12 +271,12 @@ function parse_node(::Type{Let}, l::Expr)
 
     substitutions = l.args[1].head == :block ? l.args[1].args : [l.args[1]]
 
-    froms = []
+    bounds = []
     args = []
 
     function parse_subst!(a::Expr)
         @assert a.head == Symbol("=")
-        push!(froms, :($(parse_node(a.args[1]))))
+        push!(bounds, :($(parse_node(a.args[1]))))
         push!(args, :($(parse_node(a.args[2]))))
     end
 
@@ -282,7 +285,7 @@ function parse_node(::Type{Let}, l::Expr)
 
     return :(make_node(
         Let,
-        pct_vec($(froms...)),
+        pct_vec($(bounds...)),
         pct_vec($(args...)),
         $(content),
     ))

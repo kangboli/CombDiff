@@ -4,7 +4,7 @@ export
     set_content,
     terms,
     set_terms,
-    set_from,
+    set_bound,
     get_bound,
     mul,
     monomial,
@@ -91,7 +91,7 @@ end
 
 
 """
-    from_fields(T)
+    bound_fields(T)
 
 Return the names of fields in `T` that is considered part of `bound`.
 """
@@ -107,9 +107,9 @@ content_fields(::Type{T}) where {T<:APN} = [:body]
 # """
 #     ff(n)
 
-# Get the first field that is considered from.
+# Get the first field that is considered bound.
 # """
-# ff(n::APN) = first(from(n))
+# ff(n::APN) = first(bound(n))
 
 content(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, f), content_fields(T)))
 
@@ -124,8 +124,8 @@ function set_content(n::T, new_content...) where {T<:APN}
     set_pct_fields(n, content_fields(T), new_content...)
 end
 
-function set_from(n::T, new_from...) where {T<:APN}
-    set_pct_fields(n, bound_fields(T), new_from...)
+function set_bound(n::T, new_bound...) where {T<:APN}
+    set_pct_fields(n, bound_fields(T), new_bound...)
 end
 
 base(n::APN) = n

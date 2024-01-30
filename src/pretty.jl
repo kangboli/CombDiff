@@ -11,9 +11,9 @@ function latex_indent(s::AbstractString)
     join(latex_indent.(split(s, "\\\\")), "\\\\")
 end
 
-verbose(t::MapType) = "[$(verbose(bound_type(t)))->$(verbose(content(t)))]"
+verbose(t::MapType) = "[$(verbose(get_bound_type(t)))->$(verbose(get_body_type(t)))]"
 
-verbose(v::VecType) = "$(join(verbose.(content(v)), "×"))"
+verbose(v::VecType) = "$(join(verbose.(get_content_type(v)), "×"))"
 
 verbose(::UndeterminedPCTType) = "?"
 
@@ -170,7 +170,7 @@ function latex(p::PrimitiveCall)
     end
 
 
-    if all(a->a==Z(), content(bound_type(get_type(mapp(p)))))
+    if all(a->a==Z(), get_content_type(get_bound_type(get_type(mapp(p)))))
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
