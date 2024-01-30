@@ -17,19 +17,19 @@ function vdiff(p::Pullback; settings=default_settings)
         end =#
     end
 
-    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, fc(m)))), f), ff(m))...)
-    return pct_map(ff(m)..., result)
+    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, fc(m)))), f), get_bound(m))...)
+    return pct_map(get_bound(m)..., result)
     
 end
 
 function propagate_k(n::Map, k=constant(1))
-    zs = ff(n)[1:end-1]
-    return pct_map(zs..., ecall(n, ff(n)[1:end-1]..., k))
+    zs = get_bound(n)[1:end-1]
+    return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end
 
 
 function redux(n::Map; settings=default_settings)
-    pct_map(ff(n)...,  redux(fc(n); settings=settings))
+    pct_map(get_bound(n)...,  redux(fc(n); settings=settings))
 end
 
 function redux(n::APN; settings=default_settings)
@@ -54,5 +54,5 @@ function simplify(n::APN; settings=default_settings)
 end
 
 function simplify(n::Map; settings=default_settings)
-    map(t->make_node(Map, ff(n), t), simplify(fc(n); settings=settings))
+    map(t->make_node(Map, get_bound(n), t), simplify(fc(n); settings=settings))
 end

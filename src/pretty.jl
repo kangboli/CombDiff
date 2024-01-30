@@ -11,7 +11,7 @@ function latex_indent(s::AbstractString)
     join(latex_indent.(split(s, "\\\\")), "\\\\")
 end
 
-verbose(t::MapType) = "[$(verbose(from(t)))->$(verbose(content(t)))]"
+verbose(t::MapType) = "[$(verbose(bound_type(t)))->$(verbose(content(t)))]"
 
 verbose(v::VecType) = "$(join(verbose.(content(v)), "×"))"
 
@@ -23,20 +23,20 @@ verbose(d::Domain) = "$(meta(d)[:name])"
 
 function pretty(m::Map) 
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v->"$(pretty(v))$(range_str(range(v)))", content(ff(m)))
+    params = map(v->"$(pretty(v))$(range_str(range(v)))", content(get_bound(m)))
     "($(join(params, ", "))) -> \n$(indent(pretty(fc(m))))"
 end
 
 function latex(m::Map) 
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)"
-    params = map(v->"$(latex(v))$(range_str(range(v)))", content(ff(m)))
-    params = length(ff(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
+    params = map(v->"$(latex(v))$(range_str(range(v)))", content(get_bound(m)))
+    params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     return "$(params) \\to $(latex(fc(m)))"
 end
 
 function verbose(m::Map)
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v->"$(verbose(v))$(range_str(range(v)))", content(ff(m)))
+    params = map(v->"$(verbose(v))$(range_str(range(v)))", content(get_bound(m)))
     "($(join(params, ", "))->\n"*
     "$(indent(verbose(fc(m)))))\n"*
     "::$(verbose(get_type(m)))"
@@ -79,43 +79,43 @@ latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(fc(p)))\\right)"
 
 verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(fc(p))))::$(verbose(get_type(p)))"
 
-pretty(s::Sum) = "∑(($(pretty(ff(s)))), $(pretty(fc(s))))"
+pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(fc(s))))"
 
 function latex(s::Sum) 
     indices = []
     while isa(s, Sum) 
-        push!(indices, ff(s))
+        push!(indices, get_bound(s))
         s = fc(s)
     end
     "\\sum_{$(join(latex.(indices),","))}\\left($(latex(s))\\right)"
 end
 
 function verbose(s::Sum)
-    "∑(($(verbose(ff(s)))),\n" *
+    "∑(($(verbose(get_bound(s)))),\n" *
     indent("$(verbose(fc(s)))") * 
     "\n)::$(verbose(get_type(s)))"
 end
 
-pretty(i::Integral) = "∫ $(pretty(fc(i))) d$(pretty(ff(i)))"
+pretty(i::Integral) = "∫ $(pretty(fc(i))) d$(pretty(get_bound(i)))"
 
 function latex(i::Integral)
     indices = []
     while isa(i, Integral) 
-        push!(indices, ff(i))
+        push!(indices, get_bound(i))
         i = fc(i)
     end
     "\\int $(latex(i)) $(join((x->"\\mathrm{d}"*latex(x)).(indices), " "))"
 end
 
 function verbose(i::Integral)
-    "∫(($(verbose(ff(i)))),\n" * 
+    "∫(($(verbose(get_bound(i)))),\n" * 
     indent("$(verbose(fc(i)))") * 
     "\n)::$(verbose(get_type(i)))"
 end
 
-pretty(s::Prod) = "∏(($(pretty(ff(s)))), $(pretty(fc(s))))"
+pretty(s::Prod) = "∏(($(pretty(get_bound(s)))), $(pretty(fc(s))))"
 
-latex(s::Prod) = "\\prod_{$(latex(ff(s)))} $(latex(fc(s))))"
+latex(s::Prod) = "\\prod_{$(latex(get_bound(s)))} $(latex(fc(s))))"
 
 verbose(s::Prod) = invoke(verbose, Sum, s)
 
@@ -170,7 +170,7 @@ function latex(p::PrimitiveCall)
     end
 
 
-    if all(a->a==Z(), content(from(get_type(mapp(p)))))
+    if all(a->a==Z(), content(bound_type(get_type(mapp(p)))))
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
@@ -222,11 +222,11 @@ pretty(m::Monomial) = "$(pretty(base(m)))^($(pretty(power(m))))"
 verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
 latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
 
-pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), ff(l), args(l)), "\n"))\n$(indent(pretty(fc(l))))\nend"
+pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(fc(l))))\nend"
 function verbose(l::Let)
-    "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), ff(l), args(l)), "\n"))\n$(indent(verbose(fc(l))))\nend"
+    "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), get_bound(l), args(l)), "\n"))\n$(indent(verbose(fc(l))))\nend"
 end
-latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), ff(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(fc(l))))\\\\ \\mathrm{end}"
+latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(fc(l))))\\\\ \\mathrm{end}"
 
 # This function is only for the purpose of displaying the negative sign.
 is_negative(n::APN) = false

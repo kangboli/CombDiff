@@ -1,4 +1,4 @@
-export AbstractPCTType, MapType, VecType, Z, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric
+export AbstractPCTType, MapType, VecType, Z, I, R, C, Domain, symmetries, VecType, lower, upper, UndeterminedPCTType, symmetric, bound_type
 
 abstract type AbstractPCTType end
 abstract type AbstractSignatureTree end
@@ -12,7 +12,6 @@ const APN = AbstractPCTNode
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
 content(::UndeterminedPCTType) = UndeterminedPCTType()
-bound(::UndeterminedPCTType) = UndeterminedPCTType()
 
 struct I <: ElementType end
 struct R <: ElementType end
@@ -67,7 +66,7 @@ struct MapType <: AbstractPCTType
     meta::Dict
 end
 
-from(m::MapType) = m.bound
+bound_type(m::MapType) = m.bound
 content(m::MapType) = m.content
 
 MapType(bound::VecType, content::AbstractPCTType) = MapType(bound, content, Dict())

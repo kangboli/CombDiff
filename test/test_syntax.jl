@@ -38,7 +38,7 @@ end
         end
     end
 
-    @test from(s) == VecType([I()])
+    @test bound_type(s) == VecType([I()])
     @test content(s) == R()
     @test ctx[:V] == s
 
@@ -48,7 +48,7 @@ end
         end
     end
 
-    @test from(s2) == VecType([I(), I()])
+    @test bound_type(s2) == VecType([I(), I()])
     @test content(s2) == R()
     @test ctx[:M] == s2
 
@@ -69,7 +69,7 @@ end
 @testset "syntax: map" begin
     f, _ = @pct (x::I) -> x
     @test fc(f) == var(:x, I())
-    @test ff(f) == pct_vec(var(:x, I()))
+    @test get_bound(f) == pct_vec(var(:x, I()))
 
     f, ctx = @pct begin
         @space M begin
@@ -80,17 +80,17 @@ end
     end
 
     @test fc(fc(f)) == call(var(:x, MapType(VecType([I(), I()]), R())), var(:i, I()), var(:j, I()))
-    @test ff(f) == pct_vec(var(:x, ctx[:M]))
+    @test get_bound(f) == pct_vec(var(:x, ctx[:M]))
 
     g = @pct _ ctx begin
         (x::M) -> (i::I) -> x(i)
     end
-    @test fc(ff(fc(g))) == var(:i, I())
+    @test fc(get_bound(fc(g))) == var(:i, I())
 
     h = @pct _ ctx begin
         (j::I) -> ((i::I) -> 2 * i)(j)
     end
-    @test ff(h) == pct_vec(var(:j, I()))
+    @test get_bound(h) == pct_vec(var(:j, I()))
 end
 
 @testset "syntax: arithmatic" begin
@@ -155,13 +155,13 @@ end
     g = @pct _ ctx begin
         sum(i::I1, i*2)
     end
-    @test ff(g) == pct_vec(var(:i, ctx[:I1]))
+    @test get_bound(g) == pct_vec(var(:i, ctx[:I1]))
 
     g = @pct _ ctx begin
         sum((i::I1, j::I2), i * j)
     end
 
-    @test ff(g) == pct_vec(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
+    @test get_bound(g) == pct_vec(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
     @test fc(g) == mul(var(:i, ctx[:I1]), var(:j, ctx[:I2]))
 
     #= g = @pct _ ctx begin

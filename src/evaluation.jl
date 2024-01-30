@@ -24,13 +24,13 @@ free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
 own_dummy(::APN) = Set{Var}()
 
 function own_dummy(c::Contraction)
-    return Set{Var}(content(ff(c)))
+    return Set{Var}(content(get_bound(c)))
 end
 
 function own_dummy(m::Map)
     extract_var(n::Var) = [n]
     extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
-    return Set{Var}(vcat(map(extract_var, content(ff(m)))...))
+    return Set{Var}(vcat(map(extract_var, content(get_bound(m)))...))
 end
 
 variables(v::Var)::Vector{Var} = [v]
@@ -222,11 +222,11 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
-    new_from = map(var, range.(ff(mapp(c))), new_symbol(c, num=length(ff(mapp(c))), symbol=:_e), get_type(ff(mapp(c))))
-    @assert length(new_from) == length(args(c)) == length(ff(mapp(c)))
+    new_from = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
+    @assert length(new_from) == length(args(c)) == length(get_bound(mapp(c)))
 
     n = evaluate(fc(mapp(c)))
-    for (old, new) in zip(content(ff(mapp(c))), new_from)
+    for (old, new) in zip(content(get_bound(mapp(c))), new_from)
         n = subst(n, old, new)
     end
     new_args = map(eval_all, args(c))
@@ -239,7 +239,7 @@ function evaluate(c::Call)
 end
 
 function evaluate(l::Let)
-    new_call = call(pct_map(ff(l)..., fc(l)), args(l)...)
+    new_call = call(pct_map(get_bound(l)..., fc(l)), args(l)...)
     return evaluate(new_call)
 end
 

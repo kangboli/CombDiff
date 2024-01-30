@@ -45,7 +45,7 @@ the input and output types can be obtained.
 """
 maptype(b::ABF)::MapType = b.maptype
 
-input_type(b::ABF)::VecType = from(maptype(b))
+input_type(b::ABF)::VecType = bound_type(maptype(b))
 
 output_type(b::ABF)::AbstractPCTType = content(maptype(b))
 
@@ -218,8 +218,8 @@ maptype(b::BSum)::MapType = b.maptype
 
 
 function decompose(z::APN, ov::Sum)::PComp
-    inner_map = pct_map(content(ff(ov))..., fc(ov))
-    push(decompose(z, inner_map), BSum(ff(ov), MapType(v_wrap(get_type(inner_map)), get_type(ov))))
+    inner_map = pct_map(content(get_bound(ov))..., fc(ov))
+    push(decompose(z, inner_map), BSum(get_bound(ov), MapType(v_wrap(get_type(inner_map)), get_type(ov))))
 end
 
 function as_map(b::BSum, zs=z_vars(b))::Map
@@ -356,7 +356,7 @@ end
 # z -> f(z) => b -> z -> f(z)(b)
 # z -> f(z)(b) is then decomposed.
 function decompose(z::APN, ov::Map)::PComp
-    bs, fb = ff(ov), fc(ov)
+    bs, fb = get_bound(ov), fc(ov)
     comp(z, Fibration(bs, decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(ov))))
 end
 
@@ -436,7 +436,7 @@ function pp(b::BMap)::AbstractMap
     process_param(p::APN) = primitive_pullback(p)
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
     function process_param(p::Var)
-        from_types = content(from(get_type(m)))
+        from_types = content(bound_type(get_type(m)))
         n_args = length(from_types)
         zs, ks = zk_vars(b)
         if n_args == 1 
@@ -451,7 +451,7 @@ function pp(b::BMap)::AbstractMap
 end
 
 #= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, fc(map)) for t in content(ff(map))]) =#
-decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(ff(map), fc(map))
+decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(get_bound(map), fc(map))
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 

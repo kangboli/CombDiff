@@ -80,8 +80,8 @@ end
     @test content(get_type(m)) == I()
 
     # `from` gives the list of argument as a PCTVector.
-    @test from(get_type(m)) == VecType([I()])
-    @test fc(ff(m)) == var(:x, I())
+    @test bound_type(get_type(m)) == VecType([I()])
+    @test fc(get_bound(m)) == var(:x, I())
 
     # `content` gives the output of the map.
     @test fc(m) == var(:x, I())
@@ -91,7 +91,7 @@ end
 
     # One can set the `from`, the `content`, or both.
     m2 = set_from(m, pct_vec(var(:y, I())))
-    @test fc(ff(m2)) == var(:y, I())
+    @test fc(get_bound(m2)) == var(:y, I())
 
     m3 = set_content(m2, var(:y, I()))
     @test fc(m3) == var(:y, I())
@@ -215,11 +215,11 @@ end
 
 @testset "element: contraction" begin
     s = pct_sum(var(:i), call(var(:x), var(:i)))
-    @test ff(s) == pct_vec(var(:i, Z())) # There is an default inference for sum
+    @test get_bound(s) == pct_vec(var(:i, Z())) # There is an default inference for sum
     @test fc(s) == call(var(:x), var(:i))
 
     i = pct_int(var(:x), call(var(:f), var(:x)))
-    @test ff(i) == pct_vec(var(:x, R()))
+    @test get_bound(i) == pct_vec(var(:x, R()))
     @test fc(i) == call(var(:f), var(:x))
 
     # non-generic constructor.
@@ -232,7 +232,7 @@ end
 
 #= @testset "product" begin
     p = pct_product(var(:i), call(var(:x), var(:i)))
-    @test ff(p) == pct_vec(var(:i, I()))
+    @test get_bound(p) == pct_vec(var(:i, I()))
     @test fc(p) == call(var(:x), var(:i))
     @test p == pct_product(var(:i), call(var(:x), var(:i)))
 end =#

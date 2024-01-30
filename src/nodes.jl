@@ -23,6 +23,8 @@ export
 
 abstract type TerminalNode <: APN end
 
+get_bound(n::T) where T <: APN = n.bound
+
 struct PCTVector <: APN
     type::VecType
     content::Vector
@@ -107,7 +109,7 @@ function pct_map(from_content::Vararg{APN})
 end
 
 function is_univariate(m::AbstractMap)
-    params = ff(m)
+    params = get_bound(m)
     length(params) == 1 &&
         isa(get_type(fc(params)), ElementType)
 end
@@ -216,8 +218,8 @@ end
 term_start(n::PermInv) = 3
 function signatures!(n::PermInv)
     isempty(n.signatures) || return n.signatures
-    bound, summand = ff(n), fc(n)
-    n.signatures = [SignatureTree(bound[i], summand, content(bound)[1:end.!=i]) for i in 1:length(bound)]
+    bound_var, summand = get_bound(n), fc(n)
+    n.signatures = [SignatureTree(bound_var[i], summand, content(bound_var)[1:end.!=i]) for i in 1:length(bound_var)]
     return n.signatures
 end
 

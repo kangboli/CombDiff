@@ -5,9 +5,8 @@ export
     fc,
     terms,
     set_terms,
-    from,
     set_from,
-    ff,
+    get_bound,
     mul,
     monomial,
     add,
@@ -97,7 +96,7 @@ end
 
 Return the names of fields in `T` that is considered part of `bound`.
 """
-from_fields(::Type{T}) where {T<:APN} = [:bound]
+bound_fields(::Type{T}) where {T<:APN} = [:bound]
 
 """
     content_fields(T)
@@ -105,11 +104,6 @@ from_fields(::Type{T}) where {T<:APN} = [:bound]
 Return the names of fields in `T` that is considered part of `content`.
 """
 content_fields(::Type{T}) where {T<:APN} = [:content]
-
-#= from(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, f), from_fields(T))) =#
-from(n::T) where {T<:APN} = [n.bound]
-from(::Var{T}) where {T<:AbstractPCTType} = []
-ff(n::T) where T <: APN = n.bound
 
 # """
 #     ff(n)
@@ -139,7 +133,7 @@ function set_content(n::T, new_content...) where {T<:APN}
 end
 
 function set_from(n::T, new_from...) where {T<:APN}
-    set_pct_fields(n, from_fields(T), new_from...)
+    set_pct_fields(n, bound_fields(T), new_from...)
 end
 
 base(n::APN) = n

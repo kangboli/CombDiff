@@ -21,7 +21,7 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     t in [Z(), I(), R()] && return T, terms(term), get_type(term)
     process_type(::Type{Mul}) = Mul, [pct_vec(map(conjugate, content(fc(term)))...)]
     process_type(::Type{Constant}) = Constant, [fc(term)']
-    process_type(::Type{T}) where T <: Contraction = T, [ff(term), conjugate(fc(term))]
+    process_type(::Type{T}) where T <: Contraction = T, [get_bound(term), conjugate(fc(term))]
     process_type(::Type{Delta}) = Delta, [lower(term), upper(term), conjugate(fc(term))]
     process_type(::Type{Conjugate}) = typeof(fc(term)), terms(fc(term))
     process_type(::Type{<:APN}) = Conjugate, [term]
@@ -70,15 +70,15 @@ end
 function combine_maps(terms::Vector)
     map_dict, remaining_terms = Dict{Int, Vector{APN}}(), Vector{APN}()
     function process_term!(a::Map)
-        map_dict[length(ff(a))] = push!(get(map_dict, length(ff(a)), []), a)
+        map_dict[length(get_bound(a))] = push!(get(map_dict, length(get_bound(a)), []), a)
     end
 
     process_term!(a::APN) = push!(remaining_terms, a)
     map(process_term!, terms)
 
     function process_kv(v)
-        vs = ff(v[1])
-        have_common_names = all(i->name.(ff(v[i]))==name.(vs), 1:length(v))
+        vs = get_bound(v[1])
+        have_common_names = all(i->name.(get_bound(v[i]))==name.(vs), 1:length(v))
         new_from = have_common_names ? vs : pct_vec(map(var, 
         new_symbol(v...; num=length(vs), symbol=:_a), get_type.(vs))...)
         return pct_map(new_from..., add([ecall(x, new_from...) for x in v]...))
@@ -110,23 +110,23 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
 end
 
 
-function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T <: Contraction, S<:APN}
+function e_class_reduction(::Type{T}, bound_var::PCTVector, summand::S) where {T <: Contraction, S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
-    isempty(content(bound)) && return S, terms(summand), get_type(summand)
+    isempty(content(bound_var)) && return S, terms(summand), get_type(summand)
     if T == S 
-        new_from = pct_vec(content(bound)..., content(ff(summand))...)
+        new_from = pct_vec(content(bound_var)..., content(get_bound(summand))...)
         return T, [new_from, fc(summand)], partial_inference(Sum, new_from, fc(summand))
     end
 
     if isa(summand, Map)
-        fcsummand, ffsummand = fc(summand), ff(summand)
-        new_sum = pct_sum(bound..., fcsummand)
+        fcsummand, ffsummand = fc(summand), get_bound(summand)
+        new_sum = pct_sum(bound_var..., fcsummand)
         return Map, [ffsummand, new_sum], partial_inference(Map, ffsummand, new_sum)
     end
 
-    T, [bound, summand], partial_inference(Sum, bound, summand)
+    T, [bound_var, summand], partial_inference(Sum, bound_var, summand)
 end
 
 flatten_mul(a::Mul) = vcat(flatten_mul.(content(fc(a)))...)
