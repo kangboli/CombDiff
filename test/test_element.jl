@@ -44,7 +44,7 @@ end
 
     # The terms and the content of a vector are the elements.
     @test terms(v) == content(v)
-    @test fc(v) == var(:x, I())
+    @test first(content(v)) == var(:x, I())
 
     # To set the elements, use either of these. 
     m = set_content(v, var(:p, I()), var(:q, I()))
@@ -53,7 +53,7 @@ end
 
     # mapping over a pct vector gives a pct vector back
     m2 = map(t->set_type(t, R()), m)
-    @test get_type(fc(m2)) == R()
+    @test get_type(first(content(m2))) == R()
     #
     # So is indexing
     @test m2[1:2] == m2
@@ -81,20 +81,20 @@ end
 
     # `from` gives the list of argument as a PCTVector.
     @test bound_type(get_type(m)) == VecType([I()])
-    @test fc(get_bound(m)) == var(:x, I())
+    @test first(content(get_bound(m))) == var(:x, I())
 
     # `content` gives the output of the map.
-    @test fc(m) == var(:x, I())
+    @test first(content((m))) == var(:x, I())
 
     # `terms` gives both.
     @test length(terms(m)) == 2
 
     # One can set the `from`, the `content`, or both.
     m2 = set_from(m, pct_vec(var(:y, I())))
-    @test fc(get_bound(m2)) == var(:y, I())
+    @test first(content(get_bound(m2))) == var(:y, I())
 
     m3 = set_content(m2, var(:y, I()))
-    @test fc(m3) == var(:y, I())
+    @test first(content(m3)) == var(:y, I())
 
     m4 = set_terms(m, pct_vec(var(:y, I())), var(:y, I()))
     @test m3 == m4
@@ -131,7 +131,7 @@ end
     # Test calls
 
     c = make_node(Call, pct_map(var(:x), var(:y), var(:x)), pct_vec(var(:x), var(:y)))
-    @test mapp(c) == fc(c) == pct_map(var(:x), var(:y), var(:x))
+    @test mapp(c) == first(content(c)) == pct_map(var(:x), var(:y), var(:x))
     @test args(c) == last(content(c)) == pct_vec(var(:x), var(:y))
 
     @test m == mapp(set_content(c, m, pct_vec(var(:x), var(:z))))
@@ -147,11 +147,11 @@ end
     m = make_node(Monomial, var(:x), var(:y))
     @test base(m) == var(:x)
     @test power(m) == var(:y)
-    fc(m) == base(m)
+    first(content(m)) == base(m)
     last(content(m)) == power(m)
 
     m2 = set_content(m, var(:p), var(:q))
-    @test fc(m2) == var(:p)
+    @test first(content(m2)) == var(:p)
 
     # non-generic constructor
     @test monomial(var(:p), var(:q)) == m2

@@ -95,7 +95,7 @@ function inference(l::Let, context::TypeContext)
         op_context!(f, pct_push!, context)
     end
     
-    typed_content = inference(fc(l), context)
+    typed_content = inference(get_body(l), context)
     map(f -> op_context!(f, pct_pop!, context), typed_from)
     return l = pct_let(typed_from..., typed_args..., typed_content) 
 end
@@ -147,14 +147,14 @@ end
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     from_type = bound_type(get_type(mapp))
     content_type = content(get_type(mapp))
-    MapType(add_content(from_type, content_type), fc(from_type))
+    MapType(add_content(from_type, content_type), first(content(from_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
     from_type = bound_type(get_type(v))
     content_type = content(get_type(v))
-    MapType(add_content(from_type, content_type), fc(from_type))
+    MapType(add_content(from_type, content_type), first(content(from_type)))
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCTType

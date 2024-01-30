@@ -112,7 +112,7 @@ struct BConj <: ABF end
 param(::BConj)::Nothing = nothing
 maptype(::BConj)::MapType = MapType(VecType([C()]), C())
 
-decompose(z::APN, c::Conjugate)::PComp = push(decompose(z, fc(c)), BConj())
+decompose(z::APN, c::Conjugate)::PComp = push(decompose(z, get_body(c)), BConj())
 
 as_map(b::BConj, zs=z_vars(b))::Map = pct_map(zs..., conjugate(zs...))
 
@@ -139,9 +139,9 @@ end
 
 function avoid_overflow(zs::APN, ov::APN)::Tuple{APN,PCTVector}
     contains_zs(t) = any(z -> contains_name(t, name(z)), v_wrap(zs))
-    i = findfirst(contains_zs, content(fc(ov)))
+    i = findfirst(contains_zs, content(get_body(ov)))
     i === nothing && (i = 1)
-    target, rest = fc(ov)[i], fc(ov)[1:end.!=i]
+    target, rest = get_body(ov)[i], get_body(ov)[1:end.!=i]
     return target, rest
 end
 
@@ -218,7 +218,7 @@ maptype(b::BSum)::MapType = b.maptype
 
 
 function decompose(z::APN, ov::Sum)::PComp
-    inner_map = pct_map(content(get_bound(ov))..., fc(ov))
+    inner_map = pct_map(content(get_bound(ov))..., get_body(ov))
     push(decompose(z, inner_map), BSum(get_bound(ov), MapType(v_wrap(get_type(inner_map)), get_type(ov))))
 end
 
@@ -238,7 +238,7 @@ Exponentiation
 """
 struct BExp <: ABF end
 
-decompose(z::APN, ov::Exp)::PComp = push(decompose(z, fc(ov)), BExp())
+decompose(z::APN, ov::Exp)::PComp = push(decompose(z, get_body(ov)), BExp())
 
 as_map(::BExp) = error("Not yet supported")
 
@@ -278,7 +278,7 @@ Base.isempty(c::PComp)::Bool = isempty(pfuncs(c))
 pretty(c::PComp) = "$(pretty(input(c))): " * join([pretty.(reverse(pfuncs(c)))...], " ◀ ")
 Base.show(io::IO, c::PComp) = println(io, pretty(c))
 
-apns(fc::PComp)::Vector{APN} = vcat(content(input(fc)), apns.(pfuncs(fc))...)
+apns(c::PComp)::Vector{APN} = vcat(content(input(c)), apns.(pfuncs(c))...)
 
 function as_map(c::PComp)::Map
     result = foldl((r, f) -> ecall(as_map(f), v_wrap(r)...), pfuncs(c); init=input(c))
@@ -356,7 +356,7 @@ end
 # z -> f(z) => b -> z -> f(z)(b)
 # z -> f(z)(b) is then decomposed.
 function decompose(z::APN, ov::Map)::PComp
-    bs, fb = get_bound(ov), fc(ov)
+    bs, fb = get_bound(ov), get_body(ov)
     comp(z, Fibration(bs, decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(ov))))
 end
 
@@ -450,8 +450,8 @@ function pp(b::BMap)::AbstractMap
     return process_param(m)
 end
 
-#= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, fc(map)) for t in content(ff(map))]) =#
-decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(get_bound(map), fc(map))
+#= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, get_body(map)) for t in content(ff(map))]) =#
+decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(get_bound(map), get_body(map))
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 

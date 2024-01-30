@@ -85,7 +85,7 @@ end
     g = @pct _ ctx begin
         (x::M) -> (i::I) -> x(i)
     end
-    @test fc(get_bound(fc(g))) == var(:i, I())
+    @test first(content(get_bound(fc(g)))) == var(:i, I())
 
     h = @pct _ ctx begin
         (j::I) -> ((i::I) -> 2 * i)(j)

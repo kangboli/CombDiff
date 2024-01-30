@@ -103,7 +103,7 @@ bound_fields(::Type{T}) where {T<:APN} = [:bound]
 
 Return the names of fields in `T` that is considered part of `content`.
 """
-content_fields(::Type{T}) where {T<:APN} = [:content]
+content_fields(::Type{T}) where {T<:APN} = [:body]
 
 # """
 #     ff(n)
@@ -119,7 +119,8 @@ content(n::T) where {T<:APN} = map(f -> getfield(n, f), filter(f -> hasfield(T, 
 
 Get the first field that is considered content.
 """
-fc(n::APN)::Union{APN,Number,Symbol} = first(content(n))
+# fc(n::APN)::Union{APN,Number,Symbol} = first(content(n))
+fc(n::APN)::Union{APN,Number,Symbol} = get_body(n)
 
 function set_pct_fields(n::T, fields::Vector{Symbol}, values...) where {T<:APN}
     isempty(values) && return n

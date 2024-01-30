@@ -22,7 +22,7 @@ end
 
 Base.:(==)(t_1::T, t_2::T) where T <: ElementType = true
 trunc_hash(::T, ::Int) where T <: ElementType = T.hash
-trunc_hash(n::Constant, ::Int) = hash(fc(n))
+trunc_hash(n::Constant, ::Int) = hash(get_body(n))
     
 function Base.hash(v::VecType)
     return sum(hash.(content(v)))
@@ -59,17 +59,17 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     length(get_bound(n_1)) == length(get_bound(n_2)) || return false
     Set(signatures!(n_1)) == Set(signatures!(n_2)) || return false
 
-    symbols = new_symbol(fc(n_1), fc(n_2), num=length(signatures!(n_1)))
+    symbols = new_symbol(get_body(n_1), get_body(n_2), num=length(signatures!(n_1)))
     variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols))
 
     # The deepcopy is the performance bottleneck of this package.
-    replaced_expr_1 = deepcopy(fc(n_1))
+    replaced_expr_1 = deepcopy(get_body(n_1))
     for (index, sig) in zip(content(get_bound(n_1)), signatures!(n_1))
         replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
     end
     replaced_expr_1 = remake_node(replaced_expr_1)
 
-    replaced_expr_2 = deepcopy(fc(n_2))
+    replaced_expr_2 = deepcopy(get_body(n_2))
     for (index, sig) in zip(content(get_bound(n_2)), signatures!(n_2))
         replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
     end
@@ -81,14 +81,14 @@ end
 function trunc_hash(n::T, level=3) where T <: Contraction
     level == 0 && return T.hash
 
-    dummy_removed = deepcopy(fc(n))
+    dummy_removed = deepcopy(get_body(n))
     for index in content(get_bound(n))
         dummy_removed = fast_rename!(dummy_removed, index, :dummy)
     end
     symbols = new_symbol(dummy_removed, num=length(signatures!(n)))
     variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n), symbols))
 
-    replaced_expr = deepcopy(fc(n))
+    replaced_expr = deepcopy(get_body(n))
     for (index, sig) in zip(content(get_bound(n)), signatures!(n))
         replaced_expr = fast_rename!(replaced_expr, index, variable_map[sig])
     end
@@ -97,13 +97,13 @@ end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
     objectid(n_1) == objectid(n_2) && return true
-    c_1, c_2 = content(fc(n_1)), content(fc(n_2))
+    c_1, c_2 = content(get_body(n_1)), content(get_body(n_2))
     length(c_1) == length(c_2) || return false
     return c_1 == c_2
 end
 
 function Base.hash(n::T) where T <: Union{Mul, Add}
-    hashes = hash.(content(fc(n)))
+    hashes = hash.(content(get_body(n)))
     return sum(hashes) + T.hash
 end
 
@@ -129,7 +129,7 @@ function Base.:(==)(d_1::T, d_2::T) where T <: AbstractDelta
         return false
     end
 
-    fc(d_1) == fc(d_2)
+    get_body(d_1) == get_body(d_2)
 end
 
 

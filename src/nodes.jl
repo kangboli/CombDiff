@@ -24,6 +24,7 @@ export
 abstract type TerminalNode <: APN end
 
 get_bound(n::T) where T <: APN = n.bound
+get_body(n::T) where T <: APN = n.body
 
 struct PCTVector <: APN
     type::VecType
@@ -33,6 +34,7 @@ struct PCTVector <: APN
     end
 end
 
+content(v::PCTVector) = v.content
 pct_vec(content::Vararg{APN}) = make_node(PCTVector, content...)
 Base.lastindex(v::PCTVector) = lastindex(v.content)
 function Base.map(f::Function, v::PCTVector)
@@ -61,36 +63,25 @@ function set_i(v::PCTVector, i::Integer, new_item::APN)
     set_content(v, replace_item.(1:length(v))...)
 end
 
-# TODO: Get rid of this
-function remove_i(v::PCTVector, i::Integer)
+remove_i(v::PCTVector, i::Integer) = pct_vec(content(v)[1:end.!=i]...)
 
-    new = Vector{APN}()
-    for (j, t) in enumerate(content(v))
-        j == i && continue
-        push!(new, t)
-    end
-
-    return pct_vec(new...)
-end
-
-content(v::PCTVector) = v.content
 Base.isempty(v::PCTVector) = isempty(content(v))
 terms(v::PCTVector) = content(v)
 
 mutable struct Var{T<:AbstractPCTType} <: TerminalNode
     type::T
     range::PCTVector
-    content::Symbol
+    body::Symbol
 end
 
-name(v::Var) = v.content
+name(v::Var) = v.body
 range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
 
 struct Conjugate <: APN
     type::AbstractPCTType
-    content::APN
+    body::APN
 end
 
 conjugate(term::APN) = make_node(Conjugate, term)
@@ -100,32 +91,32 @@ abstract type AbstractMap <: APN end
 struct Map <: AbstractMap
     type::AbstractPCTType
     bound::PCTVector
-    content::APN
+    body::APN
 end
 
-function pct_map(from_content::Vararg{APN})
-    from_content = collect(from_content)
-    make_node(Map, pct_vec(from_content[1:end-1]...), last(from_content))
+function pct_map(terms::Vararg{APN})
+    terms = collect(terms)
+    make_node(Map, pct_vec(terms[1:end-1]...), last(terms))
 end
 
 function is_univariate(m::AbstractMap)
     params = get_bound(m)
     length(params) == 1 &&
-        isa(get_type(fc(params)), ElementType)
+        isa(get_type(first(content(params))), ElementType)
 end
 
 abstract type AbstractPullback <: AbstractMap end
 
 struct Pullback <: AbstractPullback
     type::AbstractPCTType
-    content::AbstractMap
+    body::AbstractMap
 end
 
 pullback(map::Map) = make_node(Pullback, map)
 
 struct PrimitivePullback <: AbstractPullback
     type::AbstractPCTType
-    content::APN
+    body::APN
 end
 
 pullback(map::Union{Var,PCTVector}) = make_node(PrimitivePullback, map)
@@ -162,7 +153,7 @@ end
 
 struct Exp <: APN
     type::AbstractPCTType
-    content::APN
+    body::APN
 end
 
 struct Monomial <: APN
@@ -179,7 +170,7 @@ monomial(base::APN, power::APN) = make_node(Monomial, base, power)
 
 struct Add <: APN
     type::AbstractPCTType
-    content::PCTVector
+    body::PCTVector
 end
 
 function add(args::Vararg)
@@ -188,7 +179,7 @@ end
 
 struct Mul <: APN
     type::AbstractPCTType
-    content::PCTVector
+    body::PCTVector
 end
 
 function mul(args::Vararg)
@@ -207,7 +198,7 @@ mutable struct Sum <: Contraction
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
     bound::PCTVector
-    content::APN
+    body::APN
     function Sum(type, bound::PCTVector, summand::APN)
         bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
@@ -218,7 +209,7 @@ end
 term_start(n::PermInv) = 3
 function signatures!(n::PermInv)
     isempty(n.signatures) || return n.signatures
-    bound_var, summand = get_bound(n), fc(n)
+    bound_var, summand = get_bound(n), get_body(n)
     n.signatures = [SignatureTree(bound_var[i], summand, content(bound_var)[1:end.!=i]) for i in 1:length(bound_var)]
     return n.signatures
 end
@@ -227,7 +218,7 @@ mutable struct Integral <: Contraction
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
     bound::PCTVector
-    content::APN
+    body::APN
     function Integral(type, bound::PCTVector, integrand::APN)
         bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, R()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
@@ -244,7 +235,7 @@ mutable struct Prod <: PermInv
     type::AbstractPCTType
     signatures::Vector{AbstractSignatureTree}
     bound::PCTVector
-    content::APN
+    body::APN
     function Prod(type, bound::PCTVector, productant::APN)
         bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
@@ -261,14 +252,14 @@ abstract type AbstractDelta <: APN end
 upper(d::AbstractDelta) = d.upper
 lower(d::AbstractDelta) = d.lower
 
-content_fields(::Type{T}) where {T<:AbstractDelta} = [:upper, :lower, :content]
-fc(d::AbstractDelta) = d.content
+content_fields(::Type{T}) where {T<:AbstractDelta} = [:upper, :lower, :body]
+fc(d::AbstractDelta) = d.body
 
 struct Delta <: AbstractDelta
     type::AbstractPCTType
     upper::APN
     lower::APN
-    content::APN
+    body::APN
 end
 
 function delta(upper_lower::Vararg{APN})
@@ -288,7 +279,7 @@ struct DeltaNot <: AbstractDelta
     type::AbstractPCTType
     upper::APN
     lower::APN
-    content::APN
+    body::APN
 end
 
 
@@ -307,20 +298,20 @@ end
 
 struct Constant <: TerminalNode
     type::AbstractPCTType
-    content::Number
+    body::Number
 end
 
 constant(n::Number) = make_node(Constant, n)
 
-is_zero(t) = isa(t, Constant) && fc(t) == 0
-is_one(t) = isa(t, Constant) && fc(t) == 1
-is_minus_one(t) = isa(t, Constant) && fc(t) == -1
+is_zero(t) = isa(t, Constant) && get_body(t) == 0
+is_one(t) = isa(t, Constant) && get_body(t) == 1
+is_minus_one(t) = isa(t, Constant) && get_body(t) == -1
 
 struct Let <: APN
     type::AbstractPCTType
     bound::PCTVector
     args::PCTVector
-    content::APN
+    body::APN
 end
 
 args(l::Let) = l.args
@@ -332,10 +323,10 @@ end
 
 struct Negate <: APN
     type::AbstractPCTType
-    content::APN
+    body::APN
 end
 
 function call(vec::PCTVector, c::Constant)
-    return content(vec)[fc(c)]
+    return content(vec)[get_body(c)]
 end
 

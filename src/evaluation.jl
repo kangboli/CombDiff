@@ -46,7 +46,7 @@ end
 
 function fast_rename!(n::Var, old::Var, new::Symbol)::Var
     if name(n) == name(old)
-        n.content = new
+        n.body = new
     end
     return n
 end
@@ -225,7 +225,7 @@ function evaluate(c::Call)
     new_from = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
     @assert length(new_from) == length(args(c)) == length(get_bound(mapp(c)))
 
-    n = evaluate(fc(mapp(c)))
+    n = evaluate(get_body(mapp(c)))
     for (old, new) in zip(content(get_bound(mapp(c))), new_from)
         n = subst(n, old, new)
     end
@@ -239,7 +239,7 @@ function evaluate(c::Call)
 end
 
 function evaluate(l::Let)
-    new_call = call(pct_map(get_bound(l)..., fc(l)), args(l)...)
+    new_call = call(pct_map(get_bound(l)..., get_body(l)), args(l)...)
     return evaluate(new_call)
 end
 
