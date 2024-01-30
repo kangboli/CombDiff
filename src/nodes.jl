@@ -144,7 +144,7 @@ struct Call <: AbstractCall
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback}, args::Vararg{<:APN})
+function call(mapp::Union{Map,Pullback}, args::Vararg) 
     make_node(Call, mapp, make_node(PCTVector, args...))
 end
 
@@ -154,7 +154,7 @@ struct PrimitiveCall <: AbstractCall
     args::PCTVector
 end
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall}, args::Vararg{<:APN})
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
@@ -180,7 +180,7 @@ struct Add <: APN
     content::PCTVector
 end
 
-function add(args::Vararg{<:APN})
+function add(args::Vararg)
     return make_node(Add, make_node(PCTVector, args...))
 end
 
@@ -189,7 +189,7 @@ struct Mul <: APN
     content::PCTVector
 end
 
-function mul(args::Vararg{<:APN})
+function mul(args::Vararg)
     return make_node(Mul, make_node(PCTVector, args...))
 end
 

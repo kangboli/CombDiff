@@ -110,23 +110,23 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
 end
 
 
-function e_class_reduction(::Type{T}, from::PCTVector, summand::S) where {T <: Contraction, S<:APN}
+function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T <: Contraction, S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
-    isempty(content(from)) && return S, terms(summand), get_type(summand)
+    isempty(content(bound)) && return S, terms(summand), get_type(summand)
     if T == S 
-        new_from = pct_vec(content(from)..., content(ff(summand))...)
+        new_from = pct_vec(content(bound)..., content(ff(summand))...)
         return T, [new_from, fc(summand)], partial_inference(Sum, new_from, fc(summand))
     end
 
     if isa(summand, Map)
         fcsummand, ffsummand = fc(summand), ff(summand)
-        new_sum = pct_sum(from..., fcsummand)
+        new_sum = pct_sum(bound..., fcsummand)
         return Map, [ffsummand, new_sum], partial_inference(Map, ffsummand, new_sum)
     end
 
-    T, [from, summand], partial_inference(Sum, from, summand)
+    T, [bound, summand], partial_inference(Sum, bound, summand)
 end
 
 flatten_mul(a::Mul) = vcat(flatten_mul.(content(fc(a)))...)
