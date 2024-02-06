@@ -1,8 +1,23 @@
-export parse_node, purge_line_numbers, @pit, @pct 
+using REPL
+export parse_node,
+ purge_line_numbers,
+ @pit,
+ @pct,
+ activate_interactive_mode!,
+ pct_ast_transform,
+ current_ast_transforms,
+ @pluto_support,
+ pct_ast_transform_pluto
 
 const base_domains = [:Z, :I, :R, :C]
 
-macro pit(expr, ctx)
+interactive_context = default_context()
+interactive_let = nothing
+interactive_result = nothing
+interactive_placeholder = nothing
+
+macro pit(expr, ctx=interactive_context, use_global_state=false)
+    !use_global_state && ctx == interactive_context && error("must give a context if not using the global context")
     expr = purge_line_numbers(expr)
     if isa(expr, Symbol) || isa(expr, Number) || expr.head != :block
         top_level_nodes = [parse_node(expr)]
@@ -10,25 +25,58 @@ macro pit(expr, ctx)
         top_level_nodes = map(parse_node, expr.args)
     end
 
-    statements = filter(n->isa(n, Statement), top_level_nodes)
-    non_statements = filter(n->!isa(n, Statement), top_level_nodes)
+    statements = filter(n -> isa(n, Statement), top_level_nodes)
+    domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
+    maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
+    return_node_list = filter(n -> isa(n, Expr), top_level_nodes)
 
-    if isa(last(top_level_nodes), Statement)
+    if !isempty(return_node_list)
+        return_node = statement_to_let(statements, first(return_node_list))
+        lhs = :(PCT.interactive_result, PCT.interactive_context)
+    elseif !isempty(statements)
         return_node = statement_to_let(statements, :(var($(QuoteNode(:_)))))
-    else 
-        return_node = last(non_statements)
-        return_node = statement_to_let(statements, return_node)
-        non_statements = non_statements[1:end-1]
+        lhs = :(PCT.interactive_let, PCT.interactive_context)
+    else
+        return_node = nothing
+        lhs = :(interactive_placeholder, PCT.interactive_context)
     end
 
-    return esc(:(
+    rhs = :(
         begin
             _ctx = $(ctx)
-            $(non_statements...)
+            $(domains...)
+            $(maps_types...)
             ($(return_node), _ctx)
         end
-    ))
+    )
+    !use_global_state && return esc(rhs)
+    return esc(:(
+        begin
+            $(lhs) = $(rhs)
+            first($(lhs)) 
+        end))
+
 end
+    # elseif return_node === nothing
+    #  esc(:(
+    #     _, PCT.interactive_context = begin
+    #         _ctx = $(ctx)
+    #         $(domains...)
+    #         $(maps_types...)
+    #         ($(return_node), _ctx)
+    #     end
+    # ))
+    # elseif !isempty(return_node_list)
+    #  esc(:(
+    #     PCT.interactive_result, PCT.interactive_context = begin
+    #         _ctx = $(ctx)
+    #         $(domains...)
+    #         $(maps_types...)
+    #         ($(return_node), _ctx)
+    #     end
+    # ))
+
+    # end
 
 """
     @pct(expr, [ctx = :(TypeContext())])
@@ -38,15 +86,17 @@ The syntax `f, ctx = @pct expr` is used for starting a pct program.
 be the context containing the types that have been declared.
 """
 macro pct(expr, ctx=:(TypeContext()))
-    esc(:(let (f, ctx) = @pit($(expr), $(ctx))
-        inference(f), ctx
-    end))
+    esc(:(
+        let (f, ctx) = @pit($(expr), $(ctx))
+            inference(f), ctx
+        end
+    ))
 end
 
 """
     @pct(f, ctx, expr)
 
-The syntax `g = @pct f ctx expr` is used for continuing a pct program.
+The syntax `g, _ = @pct f ctx expr` is used for continuing a pct program.
 `f` can be a unfinished function defined in a previous pct program section.
 An unfinished function serves the role of declaring variables.
 
@@ -62,6 +112,85 @@ macro pct(f, ctx, expr)
         end))
 end
 
+function pct_ast_transform(expr::Expr, repl=:cmd)
+    expr = purge_line_numbers(expr)
+    expr = purge_empty_exprs(expr)
+    # @show expr
+    # expr.args[2] = expr.args[2].args[1]
+    expr = repl == :cmd ? expr.args[1] : expr
+    expr = Expr(:macrocall, Symbol("@pct"), :(PCT.interactive_context), expr.args[1])
+    return :(
+        let (f, PCT.interactive_context) = $(expr)
+            process_directive(f), PCT.interactive_context
+        end
+    )
+end
+
+current_ast_transforms() = isdefined(Base, :active_repl_backend) ?
+                           Base.active_repl_backend.ast_transforms :
+                           REPL.repl_ast_transforms
+
+function pct_ast_transform_pluto(expr::Expr)
+    expr.head == :block && return expr
+    expr = purge_line_numbers(expr)
+    expr = purge_empty_exprs(expr)
+
+    expr = Expr(:macrocall, Symbol("@pct"), :(PCT.interactive_context), expr)
+    expr = :(
+        let (f, PCT.interactive_context) = $(expr)
+            process_directive(f), PCT.interactive_context
+        end
+    )
+
+    println(expr)
+    println("-------------")
+
+    return expr
+end
+
+macro pluto_support()
+    esc(:(function Pluto.preprocess_expr(expr::Expr) 
+        expr = pct_ast_transform_pluto(expr)
+        if expr.head === :toplevel
+            result = Expr(:block, expr.args...)
+        elseif expr.head === :module
+            result = Expr(:toplevel, expr)
+        elseif expr.head === :(=) && (expr.args[1] isa Expr && expr.args[1].head == :curly)
+            result = Expr(:const, expr)
+        elseif expr.head === :incomplete
+            result = Expr(:call, :(PlutoRunner.throw_syntax_error), expr.args...)
+        else
+            result = expr
+        end
+        
+        return result
+    end))
+end
+
+function activate_interactive_mode!()
+    if isdefined(Main, :Pluto)
+        eval(:(function Pluto.preprocess_expr(expr::Expr) 
+            if expr.head === :toplevel
+                result = Expr(:block, expr.args...)
+            elseif expr.head === :module
+                result = Expr(:toplevel, expr)
+            elseif expr.head === :(=) && (expr.args[1] isa Expr && expr.args[1].head == :curly)
+                result = Expr(:const, expr)
+            elseif expr.head === :incomplete
+                result = Expr(:call, :(PlutoRunner.throw_syntax_error), expr.args...)
+            else
+                result = expr
+            end
+            return pct_ast_transform(result)
+        end))
+    else
+        current_transforms = current_ast_transforms()
+        while !isempty(current_transforms)
+            pop!(current_transforms)
+        end
+        pushfirst!(current_transforms, pct_ast_transform)
+    end
+end
 
 # There are line number nodes in Julia's AST. They get in the way and are of no 
 # use to as for now, so we are purging them from the start.
@@ -70,6 +199,12 @@ purge_line_numbers(e::Any) = e
 function purge_line_numbers(expr::Expr)
     expr.args = filter(a -> !isa(a, LineNumberNode), expr.args)
     expr.args = map(purge_line_numbers, expr.args)
+    return expr
+end
+purge_empty_exprs(e::Any) = e
+function purge_empty_exprs(expr::Expr)
+    expr.args = filter(a -> a != :(), expr.args)
+    expr.args = map(purge_empty_exprs, expr.args)
     return expr
 end
 
@@ -108,7 +243,7 @@ function parse_node(n::Expr)
         func == :- && return parse_node(Negate, n)
         func == :* && return parse_node(Mul, n)
         func == :^ && return parse_node(Monomial, n)
-        func == :pullback && return parse_node(Pullback, n)
+        (func == :pullback || func == :𝒫) && return parse_node(Pullback, n)
         return parse_node(AbstractCall, n)
     end
     n.head == :block && return parse_node(Block, n)
@@ -119,6 +254,12 @@ function parse_node(n::Expr)
     return :()
     #= n.head == :tuple && return parse_tuple_node(n) =#
 end
+
+struct MapTypeNode
+    expr::Expr
+end
+
+get_expr(n::MapTypeNode) = n.expr
 
 function parse_node(::Type{MapType}, s::Expr)
     s = purge_line_numbers(s)
@@ -140,10 +281,16 @@ function parse_node(::Type{MapType}, s::Expr)
     supported_properties = [:symmetries, :linear]
     properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
     dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
-    return :(pct_push!(_ctx, $(QuoteNode(name)),
+    return MapTypeNode(:(pct_push!(_ctx, $(QuoteNode(name)),
         MapType($(pairs[:type]...), $(dict),);
-        replace=true))
+        replace=true)))
 end
+
+struct DomainNode
+    expr::Expr
+end
+
+get_expr(n::DomainNode) = n.expr
 
 function parse_node(::Type{Domain}, n::Expr)
     name = n.args[2]
@@ -163,15 +310,15 @@ function parse_node(::Type{Domain}, n::Expr)
         base = n.args[3]
         lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
     end
-    return :(
+    return DomainNode(:(
         pct_push!(_ctx, $(QuoteNode(name)), inference(Domain(
             $(base)(), $(lower), $(upper),
-            meta = Dict(:name => $(QuoteNode(name)), 
-            :periodic => $(periodic),
-            :symmetric => $(symmetric),
-            :contractable => $(contractable)
+            meta=Dict(:name => $(QuoteNode(name)),
+                :periodic => $(periodic),
+                :symmetric => $(symmetric),
+                :contractable => $(contractable)
             )
-        )); replace=true))
+        )); replace=true)))
 end
 
 struct Param <: APN end
@@ -209,6 +356,10 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 end
 
 parse_node(p::Symbol) = :(var($(QuoteNode(p))))
+function parse_node(p::QuoteNode)
+    name = "__" * string(p.value)
+    :(var(Symbol($(name))))
+end
 
 parse_node(i::Number) = :(constant($(i)))
 
@@ -292,14 +443,14 @@ function parse_node(::Type{Let}, l::Expr)
 end
 
 function parse_node(::Type{Pullback}, p::Expr)
-    @assert p.args[1] == :pullback
+    @assert p.args[1] == :pullback || p.args[1] == :𝒫
     mapp = parse_node(p.args[2])
     p = isa(p.args[2], Symbol) ? PrimitivePullback : Pullback
     return :(make_node($(p), $(mapp)))
 end
 
 
-function parse_node(::Type{T}, d::Expr) where T <: AbstractDelta
+function parse_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     @assert d.args[1] in [:delta, :delta_not]
     upper_params = isa(d.args[2], Symbol) ? [d.args[2]] : d.args[2].args
     lower_params = isa(d.args[3], Symbol) ? [d.args[3]] : d.args[3].args

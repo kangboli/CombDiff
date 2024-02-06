@@ -27,6 +27,8 @@ const APN = AbstractPCTNode
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
 get_body_type(::UndeterminedPCTType) = UndeterminedPCTType()
+get_bound_type(::UndeterminedPCTType) = VecType([])
+get_content_type(::UndeterminedPCTType) = UndeterminedPCTType()
 
 struct I <: ElementType end
 struct R <: ElementType end

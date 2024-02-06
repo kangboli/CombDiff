@@ -11,6 +11,20 @@ Coming soonish.
 
 ## Design notes
 
+
+### AST nodes as types
+
+Different AST nodes such as an addition or a multiplication are treated as
+different Julia types. The original purpose is to leverage multiple dispatch and
+abstract types to simulate the _sum type_ used to represent AST nodes in
+functional languages instead of having long if statements. In retrospect, this
+could have been a mistake because symbolic manipulation of the AST changes its
+type, and that causes type instability unless we are using a proper sum type.
+Type instability seems to be a performance killer in the long run for a Julia
+package, but the alternative is to through types out of the window and save the
+type of AST nodes as a field in the `struct`, which might work better but is
+damn ugly.
+
 ### `make_node`
 
 All nodes are constructed through `make_node(T, terms...)`. We use this instead

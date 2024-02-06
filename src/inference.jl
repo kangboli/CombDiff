@@ -82,6 +82,7 @@ function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
 end
 
 function inference(v::Var, context::TypeContext)
+    startswith(string(get_body(v)), "__") && return v
     set_type(v, context[name(v)])
 end
 
@@ -117,6 +118,11 @@ function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType wh
 end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
+    mapp = first(terms)
+    if startswith(string(get_body(mapp)), "__")
+        length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
+        return get_type(last(terms))
+    end
     return get_body_type(get_type(first(terms)))
 end
 

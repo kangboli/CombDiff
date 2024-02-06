@@ -1,6 +1,6 @@
 using DataStructures
 
-export PCTGraph, nodes, edges, spanning_tree!, graphs_jl, visualize, simplify, propagate_k, custom_settings, symmetry_settings, redux, vdiff
+export PCTGraph, nodes, edges, spanning_tree!, simplify, propagate_k, custom_settings, symmetry_settings, redux, vdiff
 
 struct PCTGraph
     nodes::Vector{APN}

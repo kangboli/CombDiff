@@ -100,6 +100,9 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
     return result
 end
 
+function neighbors(::PrimitivePullback; settings=default_settings)
+    return NeighborList()
+end
 
 
 """

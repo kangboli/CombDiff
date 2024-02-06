@@ -47,7 +47,13 @@ function pretty(v::Var)
 end
 
 function latex(v::Var) 
-    startswith(string(name(v)), "_") ? "\\mathbb{$(string(name(v))[2:end])}" : "$(name(v))"
+    if startswith(string(name(v)), "__") 
+        return "\\mathrm{$(string(name(v))[3:end])}" 
+    elseif startswith(string(name(v)), "_") 
+        return "\\mathbb{$(string(name(v))[2:end])}" 
+    else
+        return "$(name(v))"
+    end
 end
 
 verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
@@ -169,8 +175,8 @@ function latex(p::PrimitiveCall)
         return "\\nabla \\left($(latex(get_body(mapp(p))))\\right)\\left($(latex(args(p)[1:end-1]))\\right)"
     end
 
-
-    if all(a->a==Z(), get_content_type(get_bound_type(get_type(mapp(p)))))
+    bound_types = get_content_type(get_bound_type(get_type(mapp(p))))
+    if all(a->a==Z(), bound_types) && length(bound_types) > 0
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
@@ -194,12 +200,12 @@ end
 
 function latex(v::PCTVector, paren=false) 
     terms = (t->isa(t, PCTVector) ? latex(t, true) : latex(t)).(content(v))
-    if any(t->length(t) > 50, terms) && length(terms) > 1
-        return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
-    else
-        result = join(terms, ", ")
-        return paren ? "\\left($(result)\\right)" : result
-    end
+    # if any(t->length(t) > 50, terms) && length(terms) > 1
+    #     return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
+    # else
+    # end
+    result = join(terms, ", ")
+    return paren ? "\\left($(result)\\right)" : result
 end
 
 function verbose(v::PCTVector, paren=false)
