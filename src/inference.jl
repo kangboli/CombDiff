@@ -1,60 +1,67 @@
 export TypeContext, inference, partial_inference, pct_push!, pct_pop!
 
 struct TypeContext
-    content::Dict{Symbol, Vector{<:AbstractPCTType}}
+    name_to_type::Dict{Symbol,Vector{<:AbstractPCTType}}
+    name_to_variable::Dict{Symbol,Vector{<:Var}}
 end
 
-content(context::TypeContext) = context.content
+get_name_to_type(context::TypeContext) = context.name_to_type
+get_name_to_variable(context::TypeContext) = context.name_to_variable
 
-default_context() = Dict{Symbol, Vector{<:AbstractPCTType}}(
-    :CV => [MapType(VecType([Z()]), C())],
-    :RV => [MapType(VecType([Z()]), R())],
-    :CF => [MapType(VecType([C()]), C())],
-    :RF => [MapType(VecType([R()]), R())],
-    :CM => [MapType(VecType([Z(), Z()]), C())],
-    :RM => [MapType(VecType([Z(), Z()]), R())],
-    :CO => [MapType(VecType([C(), C()]), C())],
-    :RO => [MapType(VecType([R(), R()]), R())],
-    :CT => [MapType(VecType([Z(), Z(), Z()]), C())],
-    :RT => [MapType(VecType([Z(), Z(), Z()]), R())],
-    :Her => [MapType(VecType([Z(), Z()]), C(), Dict(:symmetries=>(((2, 1), :conj),),))],
-    :Sym => [MapType(VecType([Z(), Z()]), R(), Dict(:symmetries=>(((2, 1), :id),),))],
-    ) |> TypeContext
+default_context() = TypeContext(
+    Dict{Symbol,Vector{<:AbstractPCTType}}(
+        :CV => [MapType(VecType([Z()]), C())],
+        :RV => [MapType(VecType([Z()]), R())],
+        :CF => [MapType(VecType([C()]), C())],
+        :RF => [MapType(VecType([R()]), R())],
+        :CM => [MapType(VecType([Z(), Z()]), C())],
+        :RM => [MapType(VecType([Z(), Z()]), R())],
+        :CO => [MapType(VecType([C(), C()]), C())],
+        :RO => [MapType(VecType([R(), R()]), R())],
+        :CT => [MapType(VecType([Z(), Z(), Z()]), C())],
+        :RT => [MapType(VecType([Z(), Z(), Z()]), R())],
+        :Her => [MapType(VecType([Z(), Z()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
+        :Sym => [MapType(VecType([Z(), Z()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
+    ),
+    Dict{Symbol,Vector{<:Var}}(
+    :Infty => [infty()]
+    )
+)
 
-function TypeContext() 
+function TypeContext()
     context = default_context()
     pct_push!(context, :_, UndeterminedPCTType())
     return context
 end
 
-Base.haskey(c::TypeContext, k) = haskey(content(c), k)
-Base.getindex(c::TypeContext, k) = first(content(c)[k])
+Base.haskey(c::TypeContext, k) = haskey(get_name_to_type(c), k)
+Base.getindex(c::TypeContext, k) = first(get_name_to_type(c)[k])
 
 function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=false)
-    if haskey(content(c), key) 
+    if haskey(get_name_to_type(c), key)
         if replace
-            content(c)[key][1] = type
+            get_name_to_type(c)[key][1] = type
         else
-            pushfirst!(content(c)[key], type)
+            pushfirst!(get_name_to_type(c)[key], type)
         end
     else
-        content(c)[key] = Vector{AbstractPCTType}()
-        push!(content(c)[key], type)
+        get_name_to_type(c)[key] = Vector{AbstractPCTType}()
+        push!(get_name_to_type(c)[key], type)
     end
     return type
 end
 
 function pct_pop!(c::TypeContext, key::Symbol, value=nothing)
-    haskey(content(c), key) || error("variable $(key) is undefined.")
-    popped = popfirst!(content(c)[key])
+    haskey(get_name_to_type(c), key) || error("variable $(key) is undefined.")
+    popped = popfirst!(get_name_to_type(c)[key])
     value !== nothing && @assert value == popped
     return popped
 end
 
 
-op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v)) 
+op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v))
 
-function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext) 
+function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext)
     map_type = context[name(mapp(v))]
     for (a, t) in zip(content(args(v)), content(get_bound_type(map_type)))
         a.type = t
@@ -63,7 +70,7 @@ function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext)
 end
 
 function op_context!(vec::PCTVector, op!::Function, context::TypeContext)
-    map(t->op_context!(t, op!, context), content(vec))
+    map(t -> op_context!(t, op!, context), content(vec))
 end
 
 inference(n::Any) = n
@@ -183,9 +190,9 @@ function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCT
     escalate(get_type(base), get_type(power))
 end
 
-function inference(d::Domain)
+#= function inference(d::Domain)
     context = TypeContext()
-    vars = vcat(variables(lower(d)), variables(upper(d)))
+    vars = vcat(content(lower(d)), content(upper(d)))
     for v in vars
         pct_push!(context, name(v), base(d))
     end
@@ -196,4 +203,4 @@ function inference(d::Domain)
            meta(d))
 end
 
-
+ =#
