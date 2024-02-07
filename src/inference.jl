@@ -2,7 +2,7 @@ export TypeContext, inference, partial_inference, pct_push!, pct_pop!
 
 struct TypeContext
     name_to_type::Dict{Symbol,Vector{<:AbstractPCTType}}
-    name_to_variable::Dict{Symbol,Vector{<:Var}}
+    name_to_variable::Dict{Symbol,Vector}
 end
 
 get_name_to_type(context::TypeContext) = context.name_to_type
@@ -10,27 +10,28 @@ get_name_to_variable(context::TypeContext) = context.name_to_variable
 
 default_context() = TypeContext(
     Dict{Symbol,Vector{<:AbstractPCTType}}(
-        :CV => [MapType(VecType([Z()]), C())],
-        :RV => [MapType(VecType([Z()]), R())],
+        :CV => [MapType(VecType([N()]), C())],
+        :RV => [MapType(VecType([N()]), R())],
         :CF => [MapType(VecType([C()]), C())],
         :RF => [MapType(VecType([R()]), R())],
-        :CM => [MapType(VecType([Z(), Z()]), C())],
-        :RM => [MapType(VecType([Z(), Z()]), R())],
+        :CM => [MapType(VecType([N(), N()]), C())],
+        :RM => [MapType(VecType([N(), N()]), R())],
         :CO => [MapType(VecType([C(), C()]), C())],
         :RO => [MapType(VecType([R(), R()]), R())],
-        :CT => [MapType(VecType([Z(), Z(), Z()]), C())],
-        :RT => [MapType(VecType([Z(), Z(), Z()]), R())],
-        :Her => [MapType(VecType([Z(), Z()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
-        :Sym => [MapType(VecType([Z(), Z()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
+        :CT => [MapType(VecType([N(), N(), N()]), C())],
+        :RT => [MapType(VecType([N(), N(), N()]), R())],
+        :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
+        :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
     ),
     Dict{Symbol,Vector{<:Var}}(
-    :Infty => [infty()]
+    :Infty => [infty()],
+    #= :N => [var(pct_vec(constant(1), infty()), :N, N())] =#
     )
 )
 
 function TypeContext()
     context = default_context()
-    pct_push!(context, :_, UndeterminedPCTType())
+    push_var!(context, :_, var(:_, UndeterminedPCTType()))
     return context
 end
 
@@ -52,45 +53,52 @@ function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=f
 end
 
 function pct_pop!(c::TypeContext, key::Symbol, value=nothing)
-    haskey(get_name_to_type(c), key) || error("variable $(key) is undefined.")
+    haskey(get_name_to_type(c), key) || error("type $(key) is undefined.")
     popped = popfirst!(get_name_to_type(c)[key])
     value !== nothing && @assert value == popped
     return popped
 end
 
-
-op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v))
-
-function op_context!(v::PrimitiveCall, op!::Function, context::TypeContext)
-    map_type = context[name(mapp(v))]
-    for (a, t) in zip(content(args(v)), content(get_bound_type(map_type)))
-        a.type = t
-        op!(context, name(a), t)
-    end
+function push_var!(c::TypeContext, key::Symbol, v::Var)
+    list = get!(get_name_to_variable(c), key, [])
+    push!(list, v)
 end
+
+function pop_var!(c::TypeContext, key::Symbol)
+    haskey(get_name_to_variable(c), key) || error("variable $(key) is undefined")
+    return pop!(get_name_to_variable(c)[key])
+end
+
+function get_var(c::TypeContext, key::Symbol)
+    haskey(get_name_to_variable(c), key) || error("variable $(key) is undefined")
+    return last(get_name_to_variable(c)[key])
+end
+
+#= op_context!(v::Var, op!::Function, context::TypeContext) = op!(context, name(v), get_type(v))
 
 function op_context!(vec::PCTVector, op!::Function, context::TypeContext)
     map(t -> op_context!(t, op!, context), content(vec))
-end
+end =#
 
 inference(n::Any) = n
 
 function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
     has_bound = any(f->hasfield(T, f), bound_fields(T))
     if has_bound
-        op_context!(get_bound(n), pct_push!, context)
+        #= op_context!(get_bound(n), pct_push!, context) =#
+        map(b->push_var!(context, get_body(b), b), content(get_bound(n)))
         # the following line may be redundant.
         n = set_bound(n, map(t->inference(t, context), [get_bound(n)])...)
     end
     n = set_content(n, map(t->inference(t, context), content(n))...)
-    has_bound && op_context!(get_bound(n), pct_pop!, context)
+    has_bound && map(b->pop_var!(context, get_body(b)), content(get_bound(n)))
     # Setting the type may also be redundant.
     return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
 
 function inference(v::Var, context::TypeContext)
     startswith(string(get_body(v)), "__") && return v
-    set_type(v, context[name(v)])
+    set_type(v, get_type(last(get_name_to_variable(context)[name(v)])))
 end
 
 function inference(l::Let, context::TypeContext)
@@ -100,11 +108,11 @@ function inference(l::Let, context::TypeContext)
         f = set_type(f, get_type(a))
         push!(typed_bound, f)
         push!(typed_args, a)
-        op_context!(f, pct_push!, context)
+        pct_push!(context, get_body(f), f)
     end
     
     typed_content = inference(get_body(l), context)
-    map(f -> op_context!(f, pct_pop!, context), typed_bound)
+    map(f -> pct_pop!(context, get_body(f)), typed_bound)
     return l = pct_let(typed_bound..., typed_args..., typed_content) 
 end
 
@@ -176,7 +184,7 @@ end
 
 
 function partial_inference(::Type{Constant}, term)::AbstractPCTType
-    isa(term, Int) && term > 0 && return Z()
+    isa(term, Int) && term > 0 && return N()
     isa(term, Int) && return I()
     isa(term, Real) && return R()
     isa(term, Complex) && return C()
@@ -194,7 +202,7 @@ function inference(d::Domain)
     context = TypeContext()
     vars = vcat(variables(lower(d)), variables(upper(d)))
     for v in vars
-        pct_push!(context, name(v), base(d))
+        push_var!(context, name(v), set_type(v, base(d)))
     end
 
     return Domain(base(d), 

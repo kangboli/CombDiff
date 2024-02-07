@@ -426,7 +426,7 @@ function decompose(zs::PCTVector, ov::Var)::PComp
     const_type = MapType(get_type(zs), get_type(ov))
     i = findfirst(t -> t == ov, content(zs))
     i === nothing && return comp(zs, Pconst(ov, const_type))
-    return comp(zs, Pconst(constant(i), MapType(get_type(zs), Z())), BMap(zs))
+    return comp(zs, Pconst(constant(i), MapType(get_type(zs), N())), BMap(zs))
 end
 
 function pp(b::BMap)::AbstractMap

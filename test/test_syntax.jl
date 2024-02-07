@@ -17,14 +17,14 @@ using PCT, Test
     d2, ctx = @pct _ ctx begin
         @domain I2 begin
             base = R
-            lower = -X
-            upper = X
+            lower = -N
+            upper = N
         end
     end
 
     @test d2 === nothing
-    @test lower(ctx[:I2]) == mul(constant(-1), var(:X, R()))
-    @test upper(ctx[:I2]) == var(:X, R())
+    @test lower(ctx[:I2]) == mul(constant(-1), var(:N, R()))
+    @test upper(ctx[:I2]) == var(:N, R())
     # @test d2 == ctx[:I2]
 
     d3, _ = @pct _ ctx (x::I1) -> x
@@ -127,11 +127,11 @@ end
 
 @testset "syntax: contractions" begin
     f, _ = @pct sum(i, 2*i)
-    @test f == pct_sum(var(:i, Z()), mul(constant(2), var(:i, Z())))
+    @test f == pct_sum(var(:i, N()), mul(constant(2), var(:i, N())))
 
     # Multiple indices gives multiple sums
     f, _ = @pct sum((i, j, k), i * j * k)
-    @test get_body(f) == mul(var(:i, Z()), var(:j, Z()), var(:k, Z()))
+    @test get_body(f) == mul(var(:i, N()), var(:j, N()), var(:k, N()))
 
     #= f, _ = @pct prod(i, i^2)
     @test f == pct_product(var(:i, I()), monomial(var(:i, I()), constant(2))) =#

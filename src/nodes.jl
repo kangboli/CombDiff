@@ -20,12 +20,14 @@ export
     Add,
     PCTVector,
     Negate,
-    get_body
+    get_body,
+    minfty,
+    infty
 
 abstract type TerminalNode <: APN end
 
-get_bound(n::T) where T <: APN = n.bound
-get_body(n::T) where T <: APN = n.body
+get_bound(n::T) where {T<:APN} = n.bound
+get_body(n::T) where {T<:APN} = n.body
 
 struct PCTVector <: APN
     type::VecType
@@ -90,6 +92,7 @@ range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
 infty() = var(pct_vec(), :Infty)
+minfty() = mul(constant(-1), var(pct_vec(), :Infty))
 
 struct Conjugate <: APN
     type::AbstractPCTType
@@ -149,7 +152,7 @@ struct Call <: AbstractCall
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback}, args::Vararg) 
+function call(mapp::Union{Map,Pullback}, args::Vararg)
     make_node(Call, mapp, make_node(PCTVector, args...))
 end
 
@@ -212,7 +215,7 @@ mutable struct Sum <: Contraction
     bound::PCTVector
     body::APN
     function Sum(type, bound::PCTVector, summand::APN)
-        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, N()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, bound, summand)
     end
@@ -249,7 +252,7 @@ mutable struct Prod <: PermInv
     bound::PCTVector
     body::APN
     function Prod(type, bound::PCTVector, productant::APN)
-        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, Z()) : t for t in content(bound)]...)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, N()) : t for t in content(bound)]...)
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, bound, productant)
     end

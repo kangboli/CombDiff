@@ -87,7 +87,7 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
-    if all(t->get_type(t) == Z() || get_type(t) == I(), args(c))
+    if all(t->get_type(t) == N() || get_type(t) == I(), args(c))
         :($(codegen(mapp(c)))[$(codegen.(args(c))...)])
     else
         :($(codegen(mapp(c)))($(codegen.(args(c))...)))

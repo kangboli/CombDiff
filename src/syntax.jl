@@ -9,7 +9,7 @@ export parse_node,
  @pluto_support,
  pct_ast_transform_pluto
 
-const base_domains = [:Z, :I, :R, :C]
+const base_domains = [:N, :I, :R, :C]
 
 interactive_context = default_context()
 interactive_let = nothing
@@ -300,7 +300,7 @@ function parse_node(::Type{Domain}, n::Expr)
     symmetric = QuoteNode(false)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
-        base = haskey(pairs, :base) ? pairs[:base] : :Z
+        base = haskey(pairs, :base) ? pairs[:base] : :N
         lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : mul(constant(-1), var(:Infty))
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : var(:Infty)
         periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))

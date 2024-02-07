@@ -215,7 +215,7 @@ end
 
 @testset "element: contraction" begin
     s = pct_sum(var(:i), call(var(:x), var(:i)))
-    @test get_bound(s) == pct_vec(var(:i, Z())) # There is an default inference for sum
+    @test get_bound(s) == pct_vec(var(:i, N())) # There is an default inference for sum
     @test get_body(s) == call(var(:x), var(:i))
 
     i = pct_int(var(:x), call(var(:f), var(:x)))

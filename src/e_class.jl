@@ -18,7 +18,7 @@ end
 
 function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     t = get_type(term)
-    t in [Z(), I(), R()] && return T, terms(term), get_type(term)
+    t in [N(), I(), R()] && return T, terms(term), get_type(term)
     process_type(::Type{Mul}) = Mul, [pct_vec(map(conjugate, content(get_body(term)))...)]
     process_type(::Type{Constant}) = Constant, [get_body(term)']
     process_type(::Type{T}) where T <: Contraction = T, [get_bound(term), conjugate(get_body(term))]
@@ -42,7 +42,7 @@ end
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
-    is_zero(power) && return Constant, [1], Z()
+    is_zero(power) && return Constant, [1], N()
     is_one(power) && return T, terms(base), get_type(base)
     if isa(base, Constant) && isa(power, Constant) 
         new_const = [get_body(base)^get_body(power)]
@@ -142,7 +142,7 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     args = [constant(prod(get_body, args_const, init=1.0)), get(is_constant, false, [])...]
     args = filter(t -> !is_one(t), args)
     any(is_zero, args) && return Constant, [0], I()
-    isempty(args) && return Constant, [1], Z()
+    isempty(args) && return Constant, [1], N()
     sort!(args)
     if length(args) == 1
         return typeof(first(args)), terms(first(args)), get_type(first(args))

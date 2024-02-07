@@ -2,7 +2,7 @@ export AbstractPCTType,
     get_body_type,
     MapType,
     VecType,
-    Z,
+    N,
     I,
     R,
     C,
@@ -33,7 +33,7 @@ get_content_type(::UndeterminedPCTType) = UndeterminedPCTType()
 struct I <: ElementType end
 struct R <: ElementType end
 struct C <: ElementType end
-struct Z <: ElementType end
+struct N <: ElementType end
 
 base(::T) where {T<:ElementType} = T()
 
@@ -100,7 +100,7 @@ function escalate(element_types::Vararg{T}) where {T<:ElementType}
     any(t -> type_based(t, C()), element_types) && return C()
     any(t -> type_based(t, R()), element_types) && return R()
     any(t -> type_based(t, I()), element_types) && return I()
-    any(t -> type_based(t, Z()), element_types) && return Z()
+    any(t -> type_based(t, N()), element_types) && return N()
     return UndeterminedPCTType()
 end
 

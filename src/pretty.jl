@@ -176,7 +176,7 @@ function latex(p::PrimitiveCall)
     end
 
     bound_types = get_content_type(get_bound_type(get_type(mapp(p))))
-    if all(a->a==Z(), bound_types) && length(bound_types) > 0
+    if all(a->a==N(), bound_types) && length(bound_types) > 0
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
