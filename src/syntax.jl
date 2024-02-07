@@ -301,8 +301,8 @@ function parse_domain_node(n::Expr)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
-        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : mul(constant(-1), var(:Infty))
-        upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : var(:Infty)
+        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
+        upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
         periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
         symmetric = QuoteNode(haskey(pairs, :symmetric) && (pairs[:symmetric]))
         contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
@@ -345,10 +345,11 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
     if p.head == :call && p.args[1] == :∈
         param = p.args[2]
         domain = p.args[3]
+        lower, upper = parse_node(domain.args[1]), parse_node(domain.args[2])
         if param.head == Symbol("::")
             name, type = param.args
             type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-            return :(var($(parse_node(domain)), $(QuoteNode(name)), $(type)))
+            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper)))))
         end
         return :(var($(parse_node(param)), $(parse_node(domain))))
     end

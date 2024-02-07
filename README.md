@@ -32,6 +32,13 @@ assigned the base type of the domain. This is an ad-hoc treatment that
 nevertheless avoids a lot of boilerplates. It can be desirable to treat this more 
 properly and reduce the boilerplates with syntax sugars.
 
+### Conflicting simplifications
+
+Generally rewrites that non-uniquely simplify  the expression are problematic
+(as opposed to the ones that either do not simplify or are unique). Such rules
+include factorization (gcd based) and clench sum, which should be sometimes
+disabled depending on the context.
+
 ### `make_node`
 
 All nodes are constructed through `make_node(T, terms...)`. We use this instead

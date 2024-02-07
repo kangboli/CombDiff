@@ -19,7 +19,10 @@ verbose(::UndeterminedPCTType) = "?"
 
 verbose(::T) where T <: ElementType = string(T)
 
-verbose(d::Domain) = "$(meta(d)[:name])"
+function verbose(d::Domain) 
+    name = haskey(meta(d), :name) ? name : ""
+    "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
+end
 
 function pretty(m::Map) 
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"

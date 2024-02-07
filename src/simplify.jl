@@ -1,25 +1,18 @@
 export process_directive
 
-function vdiff(n::APN; settings=default_settings)
-    set_content(n, vcat(map(t->vdiff(t; settings=settings), content(n))...)...)
+function vdiff(n::APN)
+    set_content(n, vcat(map(t->vdiff(t), content(n))...)...)
 end
 
-function vdiff(p::Pullback; settings=default_settings)
+function vdiff(p::Pullback)
     m = get_body(p)
 
     function vdiff_single(pcomp)
-        return pcomp |> pp |> eval_all |> propagate_k |> redux 
-        #= result = simplify(result, settings=custom_settings(:clench_sum=>true)) |> first =#
-        # return simplify(result; settings=settings) |> first
-        #= if haskey(settings, :symmetry) && settings[:symmetry]
-            return simplify(result; settings=settings) |> first
-        else 
-            return result
-        end =#
+        return pcomp |> pp |> eval_all |> propagate_k |> simplify |> first
     end
 
     result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, get_body(m)))), f), get_bound(m))...)
-    return pct_map(get_bound(m)..., result)
+    return pct_map(get_bound(m)..., v_unwrap(result))
 end
 
 function propagate_k(n::Map, k=constant(1))
@@ -27,12 +20,20 @@ function propagate_k(n::Map, k=constant(1))
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end
 
+"""
+Redux will be a higher level interface to simplify to reduce the complexity.
+I haven't figured out how to go about this so it just calls simplify right now.
+"""
+redux(n::APN; settings=default_settings) = simplify(n::APN; settings=settings) |> first
 
-function redux(n::Map; settings=default_settings)
+#= function redux(n::Map; settings=default_settings)
     pct_map(get_bound(n)...,  redux(get_body(n); settings=settings))
 end
 
-function redux(n::APN; settings=default_settings)
+function redux(n::T; settings=default_settings) where T
+    if T == Sum
+        settings = custom_settings(:gcd=>false; preset=settings)
+    end
     reduced = [redux(t, settings=settings) for t in content(n)]
     simplify(set_content(n, reduced...); settings=settings) |> first
 end
@@ -40,7 +41,7 @@ end
 function redux(n::Union{Var, Constant}; _...)
     return n
 end
-
+ =#
 
 function simplify(n::APN; settings=default_settings)
     g = last(spanning_tree!(n; settings=settings))
@@ -54,7 +55,8 @@ function simplify(n::APN; settings=default_settings)
 end
 
 function simplify(n::Map; settings=default_settings)
-    map(t->make_node(Map, get_bound(n), t), simplify(get_body(n); settings=settings))
+    simplified_nodes = simplify(get_body(n); settings=settings)
+    map(t->make_node(Map, get_bound(n), t), simplified_nodes)
 end
 
 process_directive(n::APN) = set_content(n, map(process_directive, content(n))...)

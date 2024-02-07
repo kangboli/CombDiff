@@ -31,7 +31,7 @@ function PCTGraph(n::APN)
 end
 
 const Settings = Dict{Symbol, Bool}
-default_settings = Settings(:clench_sum=>false, :symmetry=>false, :logging=>false)
+default_settings = Settings(:clench_sum=>false, :symmetry=>false, :logging=>false, :gcd=>true)
 function custom_settings(custom::Vararg{Pair{Symbol, Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom
@@ -39,7 +39,7 @@ function custom_settings(custom::Vararg{Pair{Symbol, Bool}}; preset=default_sett
     end
     return new_settings
 end
-const symmetry_settings = custom_settings(:clench_sum=>false, :symmetry=>true, :logging=>false)
+const symmetry_settings = custom_settings(:symmetry=>true; preset=default_settings)
 
 """
 
@@ -62,7 +62,9 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     for (t, d, name) in sort(reduced_list, by=e->-e[2])
         push!(edges(seen), node_start=>1+length(nodes(seen)))
         !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        haskey(settings, :logging) && settings[:logging] && log_edge(n, t, d, name, length(nodes(seen)))
+        if haskey(settings, :logging) && settings[:logging] 
+            log_edge(n, t, d, name, length(nodes(seen)))
+        end
         sink, tree = spanning_tree!(t, seen; settings=settings)
         (d || sink) && return (true, tree)
     end
@@ -75,6 +77,7 @@ end
 function log_edge(n, t, d, name, i)
     println(i, " ", name)
     println(pretty(n))
+    println(typeof(t))
     println(pretty(t))
     d || println("<->")
     d && println("-->")

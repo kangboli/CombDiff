@@ -183,6 +183,7 @@ end
     d = ctx[:I1]
     @test name(d) == :I1
 
+    f, _ = @pct (i::I) -> (j::I ∈ (1, i)) -> i + j
     # Pullback of a primitive call.
     _, ctx = @pct begin
         @space V begin

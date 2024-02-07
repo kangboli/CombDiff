@@ -69,7 +69,7 @@ function pop_var!(c::TypeContext, key::Symbol)
 end
 
 function get_var(c::TypeContext, key::Symbol)
-    haskey(get_name_to_variable(c), key) || error("variable $(key) is undefined")
+    haskey(get_name_to_variable(c), key) || return nothing
     return last(get_name_to_variable(c)[key])
 end
 
@@ -108,11 +108,11 @@ function inference(l::Let, context::TypeContext)
         f = set_type(f, get_type(a))
         push!(typed_bound, f)
         push!(typed_args, a)
-        push_type!(context, get_body(f), f)
+        push_var!(context, get_body(f), f)
     end
     
     typed_content = inference(get_body(l), context)
-    map(f -> pop_type!(context, get_body(f)), typed_bound)
+    map(f -> pop_var!(context, get_body(f)), typed_bound)
     return l = pct_let(typed_bound..., typed_args..., typed_content) 
 end
 
@@ -134,7 +134,7 @@ end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
     mapp = first(terms)
-    if startswith(string(get_body(mapp)), "__")
+    if isa(mapp, Var) && startswith(string(get_body(mapp)), "__")
         length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
         return get_type(last(terms))
     end
@@ -202,7 +202,8 @@ function inference(d::Domain)
     context = TypeContext()
     vars = vcat(variables(lower(d)), variables(upper(d)))
     for v in vars
-        push_var!(context, name(v), set_type(v, base(d)))
+        get_var(context, get_body(v)) === nothing || continue
+        push_var!(context, get_body(v), set_type(v, base(d)))
     end
 
     return Domain(base(d), 

@@ -201,7 +201,10 @@ end
 function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(a))
-    append!(result, gcd_neighbors(terms))
+    
+    if settings[:gcd] 
+        append!(result, gcd_neighbors(terms))
+    end
     #= append!(result, combine_map_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
     append!(result, sub_neighbors(a; settings=settings))
@@ -642,7 +645,7 @@ function neighbors(s::Sum; settings=default_settings)
         append!(result, sum_sym_neighbors(s))
     end
     append!(result, sum_mul_neighbors(s))
-    append!(result, sub_neighbors(s; settings=settings))
+    append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false; preset=settings)))
     return result
 end
 
@@ -718,10 +721,10 @@ function neighbors(d::Delta; settings=default_settings)
     if isa(get_body(d), Delta)
         i, j = upper(d), lower(d)
         p, q = upper(get_body(d)), lower(get_body(d))
-        # delta-ex
-        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
         # double-delta
         Set([i, j]) == Set([p, q]) && push!(result, get_body(d); dired=true, name="double_delta")
+        # delta-ex
+        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
     end
 
     # TODO: use equivalence instead of equality

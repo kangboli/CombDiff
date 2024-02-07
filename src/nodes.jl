@@ -91,8 +91,8 @@ name(v::Var) = v.body
 range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
-infty() = var(pct_vec(), :Infty)
-minfty() = mul(constant(-1), var(pct_vec(), :Infty))
+infty() = var(:∞)
+minfty() = mul(constant(-1), infty())
 
 struct Conjugate <: APN
     type::AbstractPCTType
