@@ -190,9 +190,9 @@ function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCT
     escalate(get_type(base), get_type(power))
 end
 
-#= function inference(d::Domain)
+function inference(d::Domain)
     context = TypeContext()
-    vars = vcat(content(lower(d)), content(upper(d)))
+    vars = vcat(variables(lower(d)), variables(upper(d)))
     for v in vars
         pct_push!(context, name(v), base(d))
     end
@@ -203,4 +203,4 @@ end
            meta(d))
 end
 
- =#
+
