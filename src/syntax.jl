@@ -228,29 +228,29 @@ function parse_node(n::Expr)
     n = purge_line_numbers(n)
     n.head == Symbol(:quote) && return n.args[1]
     if n.head == :macrocall
-        n.args[1] == Symbol("@space") && return parse_node(MapType, n)
-        n.args[1] == Symbol("@domain") && return parse_node(Domain, n)
+        n.args[1] == Symbol("@space") && return parse_maptype_node(n)
+        n.args[1] == Symbol("@domain") && return parse_domain_node(n)
     end
-    n.head == Symbol("->") && return parse_node(Map, n)
+    n.head == Symbol("->") && return parse_map_node(n)
     if n.head == :call
         func = n.args[1]
-        (func == :∑ || func == :sum) && return parse_node(Sum, n)
-        (func == :∫ || func == :int) && return parse_node(Integral, n)
-        (func == :∏ || func == :prod) && return parse_node(Prod, n)
-        func == :delta && return parse_node(Delta, n)
-        func == :delta_not && return parse_node(DeltaNot, n)
-        func == :+ && return parse_node(Add, n)
-        func == :- && return parse_node(Negate, n)
-        func == :* && return parse_node(Mul, n)
-        func == :^ && return parse_node(Monomial, n)
-        (func == :pullback || func == :𝒫) && return parse_node(Pullback, n)
+        (func == :∑ || func == :sum) && return parse_contraction_node(Sum, n)
+        (func == :∫ || func == :int) && return parse_contraction_node(Integral, n)
+        (func == :∏ || func == :prod) && return parse_prod_node(n)
+        func == :delta && return parse_delta_node(Delta, n)
+        func == :delta_not && return parse_delta_node(DeltaNot, n)
+        func == :+ && return parse_add_node(n)
+        func == :- && return parse_negate_node(n)
+        func == :* && return parse_mul_node(n)
+        func == :^ && return parse_monomial_node(n)
+        (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         return parse_node(AbstractCall, n)
     end
-    n.head == :block && return parse_node(Block, n)
-    n.head == :let && return parse_node(Let, n)
-    n.head == Symbol("'") && return parse_node(Conjugate, n)
-    n.head == :(=) && return parse_node(Statement, n)
-    n.head == :tuple && return parse_node(PCTVector, n)
+    n.head == :block && return parse_block_node(n)
+    n.head == :let && return parse_let_node(n)
+    n.head == Symbol("'") && return parse_conjugate_node(n)
+    n.head == :(=) && return parse_statement_node(n)
+    n.head == :tuple && return parse_pctvector_node(n)
     return :()
     #= n.head == :tuple && return parse_tuple_node(n) =#
 end
@@ -261,7 +261,7 @@ end
 
 get_expr(n::MapTypeNode) = n.expr
 
-function parse_node(::Type{MapType}, s::Expr)
+function parse_maptype_node(s::Expr)
     s = purge_line_numbers(s)
     @assert s.args[1] == Symbol("@space")
     name = s.args[2]
@@ -281,7 +281,7 @@ function parse_node(::Type{MapType}, s::Expr)
     supported_properties = [:symmetries, :linear]
     properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
     dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
-    return MapTypeNode(:(pct_push!(_ctx, $(QuoteNode(name)),
+    return MapTypeNode(:(push_type!(_ctx, $(QuoteNode(name)),
         MapType($(pairs[:type]...), $(dict),);
         replace=true)))
 end
@@ -292,7 +292,7 @@ end
 
 get_expr(n::DomainNode) = n.expr
 
-function parse_node(::Type{Domain}, n::Expr)
+function parse_domain_node(n::Expr)
     name = n.args[2]
     block = n.args[3]
     periodic = QuoteNode(false)
@@ -311,7 +311,7 @@ function parse_node(::Type{Domain}, n::Expr)
         lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
     end
     return DomainNode(:(
-        pct_push!(_ctx, $(QuoteNode(name)), inference(Domain(
+        push_type!(_ctx, $(QuoteNode(name)), inference(Domain(
             $(base)(), $(lower), $(upper),
             meta=Dict(:name => $(QuoteNode(name)),
                 :periodic => $(periodic),
@@ -323,7 +323,7 @@ end
 
 struct Param <: APN end
 
-function parse_node(::Type{Map}, f::Expr)
+function parse_map_node(f::Expr)
     @assert f.head == Symbol("->")
     params = f.args[1].head == :tuple ? f.args[1].args : Vector{Expr}([f.args[1]])
     body = f.args[2]
@@ -370,29 +370,29 @@ function parse_node(::Type{AbstractCall}, c::Expr)
     return :(call($(parse_node(func)), $(parse_node.(c.args[2:end])...)))
 end
 
-function parse_node(::Type{Add}, a::Expr)
+function parse_add_node(a::Expr)
     @assert a.args[1] == :+
     return :(add($(parse_node.(a.args[2:end])...)))
 end
 
-function parse_node(::Type{Negate}, n::Expr)
+function parse_negate_node(n::Expr)
     @assert n.args[1] == :-
     length(n.args) == 2 && return :(mul(constant(-1), $(parse_node(n.args[2]))))
     return :(add($(parse_node(n.args[2])), mul(constant(-1), $(parse_node(n.args[3])))))
 end
 
-function parse_node(::Type{Mul}, m::Expr)
+function parse_mul_node(m::Expr)
     @assert m.args[1] == :*
     return :(mul($(parse_node.(m.args[2:end])...)))
 end
 
 
-function parse_node(::Type{Monomial}, m::Expr)
+function parse_monomial_node(m::Expr)
     @assert m.args[1] == :^
     return :(monomial($(parse_node.(m.args[2:end])...)))
 end
 
-function parse_node(::Type{T}, s::Expr) where {T<:Contraction}
+function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     @assert s.args[1] in [:sum, :int, :∑, :∫]
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
@@ -405,7 +405,7 @@ function parse_node(::Type{T}, s::Expr) where {T<:Contraction}
     return :($(constructor)($(param_nodes...), $(parse_node(s.args[3]))))
 end
 
-function parse_node(::Type{Prod}, s::Expr)
+function parse_prod_node(s::Expr)
     @assert s.args[1] in [:prod, :∏]
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
@@ -417,7 +417,7 @@ function parse_node(::Type{Prod}, s::Expr)
     return :(pct_product($(param_nodes...), $(parse_node(s.args[3]))))
 end
 
-function parse_node(::Type{Let}, l::Expr)
+function parse_let_node(l::Expr)
     @assert l.head == Symbol("let")
 
     substitutions = l.args[1].head == :block ? l.args[1].args : [l.args[1]]
@@ -442,7 +442,7 @@ function parse_node(::Type{Let}, l::Expr)
     ))
 end
 
-function parse_node(::Type{Pullback}, p::Expr)
+function parse_pullback_node(p::Expr)
     @assert p.args[1] == :pullback || p.args[1] == :𝒫
     mapp = parse_node(p.args[2])
     p = isa(p.args[2], Symbol) ? PrimitivePullback : Pullback
@@ -450,7 +450,7 @@ function parse_node(::Type{Pullback}, p::Expr)
 end
 
 
-function parse_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
+function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     @assert d.args[1] in [:delta, :delta_not]
     upper_params = isa(d.args[2], Symbol) ? [d.args[2]] : d.args[2].args
     lower_params = isa(d.args[3], Symbol) ? [d.args[3]] : d.args[3].args
@@ -460,17 +460,17 @@ function parse_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     return :($(constructor)($(upper_nodes...), $(lower_nodes...), $(parse_node(d.args[4]))))
 end
 
-function parse_node(::Type{Conjugate}, c::Expr)
+function parse_conjugate_node(c::Expr)
     return :(conjugate($(parse_node(c.args[1]))))
 end
 
-function parse_node(::Type{Statement}, n::Expr)
+function parse_statement_node(n::Expr)
     lhs = parse_node(n.args[1])
     rhs = parse_node(n.args[2])
     return Statement(lhs, rhs)
 end
 
-function parse_node(::Type{Block}, n::Expr)
+function parse_block_node(n::Expr)
     parsed_body = parse_node.(n.args)
     statements = parsed_body[1:end-1]
     return_value = parsed_body[end]
@@ -483,6 +483,6 @@ function statement_to_let(statements::Vector, return_value::Expr)
     return :(make_node(Let, pct_vec($(bound...)), pct_vec($(args...)), $(return_value)))
 end
 
-function parse_node(::Type{PCTVector}, n::Expr)
+function parse_pctvector_node(n::Expr)
     return :(pct_vec($(map(parse_node, n.args)...)))
 end

@@ -1,4 +1,4 @@
-export TypeContext, inference, partial_inference, pct_push!, pct_pop!
+export TypeContext, inference, partial_inference, push_type!, pop_type!
 
 struct TypeContext
     name_to_type::Dict{Symbol,Vector{<:AbstractPCTType}}
@@ -25,7 +25,6 @@ default_context() = TypeContext(
     ),
     Dict{Symbol,Vector{<:Var}}(
     :Infty => [infty()],
-    #= :N => [var(pct_vec(constant(1), infty()), :N, N())] =#
     )
 )
 
@@ -38,7 +37,7 @@ end
 Base.haskey(c::TypeContext, k) = haskey(get_name_to_type(c), k)
 Base.getindex(c::TypeContext, k) = first(get_name_to_type(c)[k])
 
-function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=false)
+function push_type!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=false)
     if haskey(get_name_to_type(c), key)
         if replace
             get_name_to_type(c)[key][1] = type
@@ -52,7 +51,7 @@ function pct_push!(c::TypeContext, key::Symbol, type::AbstractPCTType; replace=f
     return type
 end
 
-function pct_pop!(c::TypeContext, key::Symbol, value=nothing)
+function pop_type!(c::TypeContext, key::Symbol, value=nothing)
     haskey(get_name_to_type(c), key) || error("type $(key) is undefined.")
     popped = popfirst!(get_name_to_type(c)[key])
     value !== nothing && @assert value == popped
@@ -98,7 +97,8 @@ end
 
 function inference(v::Var, context::TypeContext)
     startswith(string(get_body(v)), "__") && return v
-    set_type(v, get_type(last(get_name_to_variable(context)[name(v)])))
+    return last(get_name_to_variable(context)[name(v)])
+    #= set_type(v, get_type(last(get_name_to_variable(context)[name(v)]))) =#
 end
 
 function inference(l::Let, context::TypeContext)
@@ -108,11 +108,11 @@ function inference(l::Let, context::TypeContext)
         f = set_type(f, get_type(a))
         push!(typed_bound, f)
         push!(typed_args, a)
-        pct_push!(context, get_body(f), f)
+        push_type!(context, get_body(f), f)
     end
     
     typed_content = inference(get_body(l), context)
-    map(f -> pct_pop!(context, get_body(f)), typed_bound)
+    map(f -> pop_type!(context, get_body(f)), typed_bound)
     return l = pct_let(typed_bound..., typed_args..., typed_content) 
 end
 

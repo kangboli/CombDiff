@@ -25,6 +25,13 @@ package, but the alternative is to through types out of the window and save the
 type of AST nodes as a field in the `struct`, which might work better but is
 damn ugly.
 
+### Domain Boundaries as Implicit Variables
+
+The variables used in the domain boundaries are implicitly declared and
+assigned the base type of the domain. This is an ad-hoc treatment that
+nevertheless avoids a lot of boilerplates. It can be desirable to treat this more 
+properly and reduce the boilerplates with syntax sugars.
+
 ### `make_node`
 
 All nodes are constructed through `make_node(T, terms...)`. We use this instead
