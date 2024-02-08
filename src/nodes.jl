@@ -22,7 +22,9 @@ export
     Negate,
     get_body,
     minfty,
-    infty
+    infty,
+    composite,
+    Composition
 
 abstract type TerminalNode <: APN end
 
@@ -343,5 +345,14 @@ end
 
 function call(vec::PCTVector, c::Constant)
     return content(vec)[get_body(c)]
+end
+
+struct Composition <: APN
+    type::AbstractPCTType
+    body::PCTVector
+end
+
+function composite(funcs::Vararg)
+    make_node(Composition, pct_vec(funcs...))
 end
 

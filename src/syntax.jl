@@ -1,13 +1,13 @@
 using REPL
 export parse_node,
- purge_line_numbers,
- @pit,
- @pct,
- activate_interactive_mode!,
- pct_ast_transform,
- current_ast_transforms,
- @pluto_support,
- pct_ast_transform_pluto
+    purge_line_numbers,
+    @pit,
+    @pct,
+    activate_interactive_mode!,
+    pct_ast_transform,
+    current_ast_transforms,
+    @pluto_support,
+    pct_ast_transform_pluto
 
 const base_domains = [:N, :I, :R, :C]
 
@@ -19,7 +19,8 @@ interactive_placeholder = nothing
 macro pit(expr, ctx=interactive_context, use_global_state=false)
     !use_global_state && ctx == interactive_context && error("must give a context if not using the global context")
     expr = purge_line_numbers(expr)
-    if isa(expr, Symbol) || isa(expr, Number) || expr.head != :block
+    if isa(expr, Symbol) || isa(expr, Number) ||
+       isa(expr, QuoteNode) || expr.head != :block
         top_level_nodes = [parse_node(expr)]
     else
         top_level_nodes = map(parse_node, expr.args)
@@ -53,30 +54,30 @@ macro pit(expr, ctx=interactive_context, use_global_state=false)
     return esc(:(
         begin
             $(lhs) = $(rhs)
-            first($(lhs)) 
+            first($(lhs))
         end))
 
 end
-    # elseif return_node === nothing
-    #  esc(:(
-    #     _, PCT.interactive_context = begin
-    #         _ctx = $(ctx)
-    #         $(domains...)
-    #         $(maps_types...)
-    #         ($(return_node), _ctx)
-    #     end
-    # ))
-    # elseif !isempty(return_node_list)
-    #  esc(:(
-    #     PCT.interactive_result, PCT.interactive_context = begin
-    #         _ctx = $(ctx)
-    #         $(domains...)
-    #         $(maps_types...)
-    #         ($(return_node), _ctx)
-    #     end
-    # ))
+# elseif return_node === nothing
+#  esc(:(
+#     _, PCT.interactive_context = begin
+#         _ctx = $(ctx)
+#         $(domains...)
+#         $(maps_types...)
+#         ($(return_node), _ctx)
+#     end
+# ))
+# elseif !isempty(return_node_list)
+#  esc(:(
+#     PCT.interactive_result, PCT.interactive_context = begin
+#         _ctx = $(ctx)
+#         $(domains...)
+#         $(maps_types...)
+#         ($(return_node), _ctx)
+#     end
+# ))
 
-    # end
+# end
 
 """
     @pct(expr, [ctx = :(TypeContext())])
@@ -149,7 +150,7 @@ function pct_ast_transform_pluto(expr::Expr)
 end
 
 macro pluto_support()
-    esc(:(function Pluto.preprocess_expr(expr::Expr) 
+    esc(:(function Pluto.preprocess_expr(expr::Expr)
         expr = pct_ast_transform_pluto(expr)
         if expr.head === :toplevel
             result = Expr(:block, expr.args...)
@@ -162,14 +163,14 @@ macro pluto_support()
         else
             result = expr
         end
-        
+
         return result
     end))
 end
 
 function activate_interactive_mode!()
     if isdefined(Main, :Pluto)
-        eval(:(function Pluto.preprocess_expr(expr::Expr) 
+        eval(:(function Pluto.preprocess_expr(expr::Expr)
             if expr.head === :toplevel
                 result = Expr(:block, expr.args...)
             elseif expr.head === :module
@@ -226,7 +227,7 @@ end
 
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
-    n.head == Symbol(:quote) && return n.args[1]
+    #= n.head == Symbol(:quote) && return parse_quantum_field_node(n) =#
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
         n.args[1] == Symbol("@domain") && return parse_domain_node(n)
@@ -243,6 +244,7 @@ function parse_node(n::Expr)
         func == :- && return parse_negate_node(n)
         func == :* && return parse_mul_node(n)
         func == :^ && return parse_monomial_node(n)
+        func == :∘ && return parse_composite_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         return parse_node(AbstractCall, n)
     end
@@ -252,8 +254,27 @@ function parse_node(n::Expr)
     n.head == :(=) && return parse_statement_node(n)
     n.head == :tuple && return parse_pctvector_node(n)
     return :()
-    #= n.head == :tuple && return parse_tuple_node(n) =#
 end
+
+function parse_quantum_field_node(n::QuoteNode)
+    #= @assert n.head == Symbol(:quote) =#
+    field = n.value
+    if field == :<
+        return :(conjugate(FermiVacuum()))
+    elseif field == :>
+        return :(FermiVacuum())
+    else
+        return :(f_annihilation($(QuoteNode(field))))
+    end
+end
+
+function parse_composite_node(n::Expr)
+    f1 = parse_node(n.args[2])
+    f2 = parse_node(n.args[3])
+
+    return :(composite($(f1), $(f2)))
+end
+
 
 struct MapTypeNode
     expr::Expr
@@ -358,8 +379,9 @@ end
 
 parse_node(p::Symbol) = :(var($(QuoteNode(p))))
 function parse_node(p::QuoteNode)
-    name = "__" * string(p.value)
-    :(var(Symbol($(name))))
+    parse_quantum_field_node(p)
+    #= name = "__" * string(p.value)
+    :(var(Symbol($(name)))) =#
 end
 
 parse_node(i::Number) = :(constant($(i)))

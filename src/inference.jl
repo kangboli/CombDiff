@@ -212,4 +212,27 @@ function inference(d::Domain)
            meta(d))
 end
 
+function partial_inference(::Type{Composition}, term::PCTVector)
+    bound_type = get_bound_type(get_type(first(content(term))))
+    body_type = get_body_type(get_type(last(content(term))))
+    return MapType(bound_type, body_type)
+end
 
+function inference(n::T)  where T <: FermionicField
+    return set_type(n, partial_inference(T, get_body(n)))
+end
+
+function partial_inference(::Type{FermionicFieldCreation}, ::Symbol) 
+    bound_type = ProductType(hilbert_space(), var(:_N_e, N()))
+    body_type = ProductType(hilbert_space(), add(var(:_N_e, N()), constant(1)))
+    operator_type = MapType(VecType([bound_type]), body_type)
+    return MapType(VecType([N()]), operator_type)
+end
+
+
+function partial_inference(::Type{FermionicFieldAnnihilation}, ::Symbol) 
+    bound_type = ProductType(hilbert_space(), var(:_N_e, N()))
+    body_type = ProductType(hilbert_space(), add(var(:_N_e, N()), constant(-1)))
+    operator_type = MapType(VecType([bound_type]), body_type)
+    return MapType(VecType([N()]), operator_type)
+end

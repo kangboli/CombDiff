@@ -463,21 +463,41 @@ function clench_sum(s::Sum)
         end
     end
 
+    return result
+end
+
+
+function obvious_clench(s::Sum)
+    result = NeighborList()
+
+    summand = get_body(s)
+    if isa(summand, Mul) 
+        interior, exterior = Vector{APN}(), Vector{APN}()
+
+        for t in content(get_body(summand))
+            target = any(v->contains_name(t, name(v)), content(get_bound(s))) ? interior : exterior
+            push!(target, t)
+        end
+        
+        new_sum = mul(exterior..., pct_sum(content(get_bound(s))..., mul(interior...)))
+        push!(result, new_sum; dired=true, name="sum_out")
+    end
+
+
+    return result
+end
+
+function sum_out_linear_op(s::Sum)
+    result = NeighborList()
+    summand = get_body(s)
     if isa(summand, PrimitiveCall)  || (isa(summand, Conjugate)  && isa(get_body(summand), PrimitiveCall))
         linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
         new_sum = call(mapp(summand), pct_sum(get_bound(s)..., first(args(summand))))
         push!(result, new_sum; dired=true, name="linear_sum_out")
     end
-
-    #= if isa(summand, Conjugate)  && isa(get_body(summand), PrimitiveCall)
-        linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
-        new_sum = call(mapp(summand), pct_sum(ff(s)..., first(args(summand))))
-        push!(result, new_sum; dired=true, name="linear_sum_out")
-    end =#
-
-
     return result
 end
+
 
 """
 sum(i, i * sum(j, A(i, j) * j)) = sum(j, j * sum(i, i * A(i, j)))
@@ -638,7 +658,9 @@ function neighbors(s::Sum; settings=default_settings)
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
+    append!(result, obvious_clench(s))
     settings[:clench_sum] && append!(result, clench_sum(s))
+    append!(result, sum_out_linear_op(s))
     append!(result, sum_out_delta(s))
     if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))

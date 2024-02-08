@@ -53,7 +53,13 @@ function latex(v::Var)
     if startswith(string(name(v)), "__") 
         return "\\mathrm{$(string(name(v))[3:end])}" 
     elseif startswith(string(name(v)), "_") 
-        return "\\mathbb{$(string(name(v))[2:end])}" 
+        components = split(string(name(v))[2:end], "_")
+        if length(components) > 1
+            rest = "_{$(join(components[2:end]))}"
+        else 
+            rest = ""
+        end
+        return "\\mathbb{$(components[1])}$(rest)" 
     else
         return "$(name(v))"
     end
@@ -90,13 +96,14 @@ verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(v
 
 pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(get_body(s))))"
 
-function latex(s::Sum) 
+function latex(s::Sum, paren=false) 
     indices = []
     while isa(s, Sum) 
         push!(indices, get_bound(s))
         s = get_body(s)
     end
-    "\\sum_{$(join(latex.(indices),","))}\\left($(latex(s))\\right)"
+    result = "\\sum_{$(join(latex.(indices),","))}$(latex(s))"
+    return paren ? "\\left($(result)\\right)" : result
 end
 
 function verbose(s::Sum)
@@ -148,7 +155,10 @@ end
 pretty(m::Mul) = "($(join(pretty.(content(get_body(m))), "⋅")))"
 
 function latex(m::Mul) 
-    "$(join(latex.(sort(content(get_body(m)), by=is_negative, rev=true)), "\\cdot "))"
+    negative_first = sort(content(get_body(m)), by=is_negative, rev=true)
+    latex_str(m::APN) = latex(m)
+    latex_str(m::Sum) = latex(m, true)
+    "$(join(latex_str.(negative_first), "\\cdot "))"
 end
 
 function verbose(m::Mul)
@@ -236,6 +246,14 @@ function verbose(l::Let)
     "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), get_bound(l), args(l)), "\n"))\n$(indent(verbose(get_body(l))))\nend"
 end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
+
+function pretty(c::Composition)
+    join(map(f->pretty(f), content(get_body(c))), "∘")
+end
+
+function latex(c::Composition)
+    join(map(f->latex(f), content(get_body(c))), "∘")
+end
 
 # This function is only for the purpose of displaying the negative sign.
 is_negative(n::APN) = false
