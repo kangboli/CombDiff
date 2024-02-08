@@ -167,4 +167,16 @@ function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
         return Delta, [lower, upper, body], partial_inference(Delta, lower, upper, body)
     end
 end
+is_inv(::Type{Exp}, ::Type{Log}) = true
+is_inv(::Type{Log}, ::Type{Exp}) = true
+is_inv(::Type{T}, ::Type{S}) where {T <: APN, S <: APN} = false
+
+function e_class_reduction(::Type{T}, body::S) where {T <: Univariate, S <: APN}
+    if is_inv(T, S)
+        stripped = get_body(S)
+        return typeof(strip), get_body(stripped), get_type(stripped)
+    else
+        return T, [body], partial_inference(T, body)
+    end
+end
 

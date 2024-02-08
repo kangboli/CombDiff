@@ -236,3 +236,8 @@ function partial_inference(::Type{FermionicFieldAnnihilation}, ::Symbol)
     operator_type = MapType(VecType([bound_type]), body_type)
     return MapType(VecType([N()]), operator_type)
 end
+
+function partial_inference(::Type{T}, body::APN) where T <: Univariate
+    return get_type(body)
+end
+

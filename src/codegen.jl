@@ -57,7 +57,7 @@ end
 function codegen(m::Map)
     sizes = map(b -> find_dimensions(b, get_body(m)), content(get_bound(m)))
     # print(sizes)
-    if any(isempty, sizes) || any(b -> get_type(b) != I(), content(get_bound(m)))
+    if any(isempty, sizes) || any(b -> get_type(b) != N(), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
             begin
                 $(codegen(get_body(m)))
@@ -110,4 +110,12 @@ function codegen(d::Delta)
             0
         end
     )
+end
+
+function codegen(n::Exp)
+    return :(exp($(codegen(get_body(n)))))
+end
+
+function codegen(n::Log)
+    return :(log($(codegen(get_body(n)))))
 end

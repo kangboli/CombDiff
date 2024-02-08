@@ -17,49 +17,49 @@ verbose(v::VecType) = "$(join(verbose.(get_content_type(v)), "×"))"
 
 verbose(::UndeterminedPCTType) = "?"
 
-verbose(::T) where T <: ElementType = string(T)
+verbose(::T) where {T<:ElementType} = string(T)
 
-function verbose(d::Domain) 
+function verbose(d::Domain)
     name = haskey(meta(d), :name) ? name : ""
     "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
 
-function pretty(m::Map) 
+function pretty(m::Map)
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v->"$(pretty(v))$(range_str(range(v)))", content(get_bound(m)))
+    params = map(v -> "$(pretty(v))$(range_str(range(v)))", content(get_bound(m)))
     "($(join(params, ", "))) -> \n$(indent(pretty(get_body(m))))"
 end
 
-function latex(m::Map) 
+function latex(m::Map)
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)"
-    params = map(v->"$(latex(v))$(range_str(range(v)))", content(get_bound(m)))
+    params = map(v -> "$(latex(v))$(range_str(range(v)))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     return "$(params) \\to $(latex(get_body(m)))"
 end
 
 function verbose(m::Map)
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v->"$(verbose(v))$(range_str(range(v)))", content(get_bound(m)))
-    "($(join(params, ", "))->\n"*
-    "$(indent(verbose(get_body(m)))))\n"*
+    params = map(v -> "$(verbose(v))$(range_str(range(v)))", content(get_bound(m)))
+    "($(join(params, ", "))->\n" *
+    "$(indent(verbose(get_body(m)))))\n" *
     "::$(verbose(get_type(m)))"
 end
 
-function pretty(v::Var) 
+function pretty(v::Var)
     "$(name(v))"
 end
 
-function latex(v::Var) 
-    if startswith(string(name(v)), "__") 
-        return "\\mathrm{$(string(name(v))[3:end])}" 
-    elseif startswith(string(name(v)), "_") 
+function latex(v::Var)
+    if startswith(string(name(v)), "__")
+        return "\\mathrm{$(string(name(v))[3:end])}"
+    elseif startswith(string(name(v)), "_")
         components = split(string(name(v))[2:end], "_")
         if length(components) > 1
             rest = "_{$(join(components[2:end]))}"
-        else 
+        else
             rest = ""
         end
-        return "\\mathbb{$(components[1])}$(rest)" 
+        return "\\mathbb{$(components[1])}$(rest)"
     else
         return "$(name(v))"
     end
@@ -80,7 +80,7 @@ conj_symbol(::ElementType) = "*"
 
 latex(c::Conjugate) = "$(latex(get_body(c)))^{$(conj_symbol(get_type(get_body(c))))}"
 
-verbose(c::Conjugate) = "$(verbose(get_body(c)))'"    
+verbose(c::Conjugate) = "$(verbose(get_body(c)))'"
 
 pretty(p::Pullback) = "𝒫($(pretty(get_body(p))))"
 
@@ -96,9 +96,9 @@ verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(v
 
 pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(get_body(s))))"
 
-function latex(s::Sum, paren=false) 
+function latex(s::Sum, paren=false)
     indices = []
-    while isa(s, Sum) 
+    while isa(s, Sum)
         push!(indices, get_bound(s))
         s = get_body(s)
     end
@@ -108,7 +108,7 @@ end
 
 function verbose(s::Sum)
     "∑(($(verbose(get_bound(s)))),\n" *
-    indent("$(verbose(get_body(s)))") * 
+    indent("$(verbose(get_body(s)))") *
     "\n)::$(verbose(get_type(s)))"
 end
 
@@ -116,7 +116,7 @@ pretty(i::Integral) = "∫ $(pretty(get_body(i))) d$(pretty(get_bound(i)))"
 
 function latex(i::Integral)
     indices = []
-    while isa(i, Integral) 
+    while isa(i, Integral)
         push!(indices, get_bound(i))
         i = get_body(i)
     end
@@ -124,8 +124,8 @@ function latex(i::Integral)
 end
 
 function verbose(i::Integral)
-    "∫(($(verbose(get_bound(i)))),\n" * 
-    indent("$(verbose(get_body(i)))") * 
+    "∫(($(verbose(get_bound(i)))),\n" *
+    indent("$(verbose(get_body(i)))") *
     "\n)::$(verbose(get_type(i)))"
 end
 
@@ -138,58 +138,71 @@ verbose(s::Prod) = invoke(verbose, Sum, s)
 delta_symbol(::Type{Delta}, latex=false) = latex ? "\\delta" : "δ"
 delta_symbol(::Type{DeltaNot}, latex=false) = latex ? "\\top" : "δ̸"
 
-function pretty(d::T) where T <: AbstractDelta
+function pretty(d::T) where {T<:AbstractDelta}
     "$(delta_symbol(T))($(pretty(upper(d))), $(pretty(lower(d))), $(pretty(last(content(d)))))"
 end
 
-function latex(d::T) where T <: AbstractDelta
+function latex(d::T) where {T<:AbstractDelta}
     "$(delta_symbol(T, true))_{$(latex(lower(d)))}^{$(latex(upper(d)))}$(latex(last(content(d))))"
 end
 
 
-function verbose(d::T) where T <: AbstractDelta
-    "$(delta_symbol(T))($(verbose(upper(d))), $(verbose(lower(d))),\n"*
+function verbose(d::T) where {T<:AbstractDelta}
+    "$(delta_symbol(T))($(verbose(upper(d))), $(verbose(lower(d))),\n" *
     indent("$(verbose(last(content(d)))))::$(verbose(get_type(d)))")
 end
 
 pretty(m::Mul) = "($(join(pretty.(content(get_body(m))), "⋅")))"
 
-function latex(m::Mul) 
+function latex(m::Mul)
     negative_first = sort(content(get_body(m)), by=is_negative, rev=true)
     latex_str(m::APN) = latex(m)
     latex_str(m::Sum) = latex(m, true)
-    "$(join(latex_str.(negative_first), "\\cdot "))"
+
+    d = group(t -> isa(t, Monomial) && power(t) == constant(-1), negative_first)
+    nominators = get(d, false, [constant(1)])
+    denominators = map(base, get(d, true, []))
+
+    if isempty(denominators)
+        return "$(join(latex_str.(negative_first), "\\cdot "))"
+    else
+        return "\\frac{$(join(latex_str.(nominators), "\\cdot "))}
+        {$(join(latex_str.(denominators), "\\cdot "))}"
+    end
 end
 
 function verbose(m::Mul)
-    "(*\n"*
-    indent("$(join(verbose.(content(get_body(m))), ",\n"))") * 
+    "(*\n" *
+    indent("$(join(verbose.(content(get_body(m))), ",\n"))") *
     "\n)::$(verbose(get_type(m)))"
 end
 
 
-pretty(a::Add) = "($(join(pretty.(content(get_body(a))), "+")))"
+function pretty(m::Add)
+    signed = map(t -> is_negative(t) ? pretty(t) : "+$(pretty(t))", content(get_body(m)))
+    return "($(strip(join(signed, ""), '+')))"
+end
 
-function latex(m::Add) 
-    signed = map(t->is_negative(t) ? latex(t) : "+$(latex(t))", content(get_body(m)))
+function latex(m::Add)
+    signed = map(t -> is_negative(t) ? latex(t) : "+$(latex(t))", content(get_body(m)))
     return "\\left($(strip(join(signed, ""), '+'))\\right)"
 end
 
 function verbose(a::Add)
-    "(+\n"*
-    indent("$(join(verbose.(content(get_body(a))), ",\n"))") * 
+    "(+\n" *
+    indent("$(join(verbose.(content(get_body(a))), ",\n"))") *
     "\n)::$(verbose(get_type(a)))"
 end
 
 pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
 
-function latex(p::PrimitiveCall) 
+function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
         return "\\nabla \\left($(latex(get_body(mapp(p))))\\right)\\left($(latex(args(p)[1:end-1]))\\right)"
     end
 
     bound_types = get_content_type(get_bound_type(get_type(mapp(p))))
-    if all(a->a==N(), bound_types) && length(bound_types) > 0
+    if all(a -> a == N(), bound_types) && length(bound_types) > 0
         return "$(latex(mapp(p)))_{$(latex(args(p)))}"
     else
         return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
@@ -206,13 +219,13 @@ latex(c::Constant) = "$(get_body(c))"
 verbose(c::Constant) = "$(get_body(c))::$(verbose(get_type(c)))"
 
 function pretty(v::PCTVector, paren=false)
-    terms = (t->isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
-    result = join(terms, ", ") 
+    terms = (t -> isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
+    result = join(terms, ", ")
     return paren ? "($(result))" : result
 end
 
-function latex(v::PCTVector, paren=false) 
-    terms = (t->isa(t, PCTVector) ? latex(t, true) : latex(t)).(content(v))
+function latex(v::PCTVector, paren=false)
+    terms = (t -> isa(t, PCTVector) ? latex(t, true) : latex(t)).(content(v))
     # if any(t->length(t) > 50, terms) && length(terms) > 1
     #     return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
     # else
@@ -222,24 +235,26 @@ function latex(v::PCTVector, paren=false)
 end
 
 function verbose(v::PCTVector, paren=false)
-    terms = (t->isa(t, PCTVector) ? verbose(t, true) : verbose(t)).(content(v))
-    result = join(terms, ", ") 
+    terms = (t -> isa(t, PCTVector) ? verbose(t, true) : verbose(t)).(content(v))
+    result = join(terms, ", ")
     return paren ? "($(result))" : result
 end
 
-function Base.show(io::IO, ::MIME"text/latex", m::APN) 
+function Base.show(io::IO, ::MIME"text/latex", m::APN)
     print(io, latexstring(latex(m)))
 end
 
-function Base.show(io::IO, ::MIME"text/plain", m::APN) 
+function Base.show(io::IO, ::MIME"text/plain", m::APN)
     print(io, pretty(m))
 end
 
 pretty(n::Negate) = "-$(pretty(get_body(n)))"
 
-pretty(m::Monomial) = "$(pretty(base(m)))^($(pretty(power(m))))"
+pretty(m::Monomial) = "($(pretty(base(m))))^($(pretty(power(m))))"
 verbose(m::Monomial) = "($(verbose(base(m)))^$(verbose(power(m))))::$(get_type(m))"
-latex(m::Monomial) = "$(latex(base(m)))^{$(latex(power(m)))}"
+function latex(m::Monomial)
+    "\\left($(latex(base(m)))\\right)^{$(latex(power(m)))}"
+end
 
 pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
 function verbose(l::Let)
@@ -248,16 +263,16 @@ end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
 
 function pretty(c::Composition)
-    join(map(f->pretty(f), content(get_body(c))), "∘")
+    join(map(f -> pretty(f), content(get_body(c))), "∘")
 end
 
 function latex(c::Composition)
-    join(map(f->latex(f), content(get_body(c))), "∘")
+    join(map(f -> latex(f), content(get_body(c))), "∘")
 end
 
 # This function is only for the purpose of displaying the negative sign.
 is_negative(n::APN) = false
-is_negative(n::Mul) = any(t->is_negative(t), get_body(n))
+is_negative(n::Mul) = any(t -> is_negative(t), get_body(n))
 is_negative(n::Constant) = get_body(n) < 0
 
 function pretty(c::FermionicFieldAnnihilation)
@@ -277,8 +292,27 @@ end
 function latex(c::FermionicFieldCreation)
     "\\hat{$(get_body(c))}^{\\dagger}"
 end
-    
 
+function pretty(n::Exp)
+    "exp($(pretty(get_body(n))))"
+end
 
+function latex(n::Exp)
+    "\\exp\\left($(latex(get_body(n)))\\right)"
+end
 
+function verbose(n::Exp)
+    "exp($(verbose(get_body(n))))::$(get_type(n))"
+end
 
+function pretty(n::Log)
+    "log($(pretty(get_body(n))))"
+end
+
+function latex(n::Log)
+    "\\log\\left($(latex(get_body(n)))\\right)"
+end
+
+function verbose(n::Log)
+    "log($(verbose(get_body(n))))::$(get_type(n))"
+end

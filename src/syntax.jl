@@ -225,6 +225,8 @@ struct Block
     return_value::Expr
 end
 
+const univariate_symbols = [:log, :exp]
+
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
     #= n.head == Symbol(:quote) && return parse_quantum_field_node(n) =#
@@ -245,6 +247,7 @@ function parse_node(n::Expr)
         func == :* && return parse_mul_node(n)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
+        func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         return parse_node(AbstractCall, n)
     end
@@ -275,7 +278,13 @@ function parse_composite_node(n::Expr)
     return :(composite($(f1), $(f2)))
 end
 
-
+function parse_univariate_node(n::Expr)
+    if n.args[1] == :exp
+        return :(pct_exp($(parse_node(n.args[2]))))
+    elseif n.args[1] == :log
+        return :(pct_log($(parse_node(n.args[2]))))
+    end
+end
 struct MapTypeNode
     expr::Expr
 end

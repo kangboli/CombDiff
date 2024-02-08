@@ -261,5 +261,5 @@ end
     # delta-id
     f1, _ = @pct f ctx delta(i, i, A(i, j)) 
     f2, _ = @pct f ctx A(i, j)
-    @test get_body(f2) in nodes(PCT.neighbors(get_body(f1)))
+    @test f2 == f1
 end

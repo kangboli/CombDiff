@@ -12,3 +12,8 @@ vacuum_exp(content(get_body(get_body(f))))
 
 f, _ = @pct (i::N, j::N) -> :a(i) ∘ :b(j)'
 vacuum_exp(content(get_body(get_body(f))))
+
+
+f, _ = @pct (ϵ::RV) -> sum((i::N ∈ (1,  N)), ϵ(i) * (:a(i) ∘ :a(i)'))
+vacuum_exp(f)
+

@@ -233,16 +233,51 @@ end
 
 pretty(b::BSum) = "∑$(join(pretty.(param(b))))"
 
+
 """
 Exponentiation
 """
-struct BExp <: ABF end
+struct BExp <: ABF 
+    maptype::MapType
+end
 
-decompose(z::APN, ov::Exp)::PComp = push(decompose(z, get_body(ov)), BExp())
+decompose(z::APN, ov::Exp)::PComp = push(decompose(z, get_body(ov)), BExp(
+MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
+))
 
-as_map(::BExp) = error("Not yet supported")
+as_map(b::BExp, zs=z_vars(b)) = pct_map(zs..., pct_exp(zs...))
 
-pp(::BExp) = error("Not yet supported")
+function pp(b::BExp)
+    zs, ks = zk_vars(b)
+    pct_map(zs..., ks..., mul(conjugate(pct_exp(zs...)), ks...))
+end
+
+pretty(b::BExp) = "exp"
+
+apns(::BExp) = []
+
+"""
+Log
+"""
+struct BLog <: ABF 
+    maptype::MapType
+end
+
+decompose(z::APN, ov::Log)::PComp = push(decompose(z, get_body(ov)), BLog(
+MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
+))
+
+as_map(b::BLog, zs=z_vars(b)) = pct_map(zs..., pct_log(zs...))
+
+function pp(b::BLog)
+    zs, ks = zk_vars(b)
+    pct_map(zs..., ks..., mul(conjugate(monomial(zs..., constant(-1))), ks...))
+end
+
+pretty(b::BLog) = "log"
+
+apns(::BLog) = []
+
 
 """
 z -> f1(f2(z))
@@ -400,6 +435,7 @@ end
 apns(fib::FiniteFibration)::Vector{APN} = vcat(apns.(fibers(fib))...)
 
 pretty(fib::FiniteFibration) = join(pretty.(fibers(fib)), "|")
+
 
 """
 Map to a call

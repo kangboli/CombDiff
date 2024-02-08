@@ -24,7 +24,9 @@ export
     minfty,
     infty,
     composite,
-    Composition
+    Composition,
+    pct_exp,
+    pct_log
 
 abstract type TerminalNode <: APN end
 
@@ -164,14 +166,21 @@ struct PrimitiveCall <: AbstractCall
     args::PCTVector
 end
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
-    make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
-end
+abstract type Univariate <: APN end
 
-struct Exp <: APN
+struct Exp <: Univariate
     type::AbstractPCTType
     body::APN
 end
+
+pct_exp(body::APN) = make_node(Exp, body)
+
+struct Log <: Univariate
+    type::AbstractPCTType
+    body::APN
+end
+
+pct_log(body::APN) = make_node(Log, body)
 
 struct Monomial <: APN
     type::AbstractPCTType
@@ -385,3 +394,6 @@ function conjugate(n::PrimitiveCall)
     end
 end
 
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
+    make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
+end

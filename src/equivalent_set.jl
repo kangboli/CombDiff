@@ -767,3 +767,6 @@ function neighbors(v::PCTVector; settings=default_settings)
 end
 
 
+function neighbors(v::Univariate; settings=default_settings)
+    return sub_neighbors(v; settings=settings)
+end

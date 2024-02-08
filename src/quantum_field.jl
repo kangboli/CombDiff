@@ -15,32 +15,6 @@ function f_annihilation(field::Symbol)
     return make_node(FermionicFieldAnnihilation, field)
 end
 
-function serialize(n::PrimitiveCall)
-    isa(mapp(n), FermionicField) && return [n]
-    return [mapp(n), serialize(args(n)...)]
-end
-
-#= serialize(f::FermionicField) = [f] =#
-serialize(::FermiVacuum) = [FermiVacuum()]
-
-function deserialize(operator_string::Vector)
-    length(operator_string) == 1 && return first(operator_string)
-    return call(first(operator_string), deserialize(operator_string[2:end]))
-end
-
-function deserialize_vac(operator_string::Vector)
-    return deserialize([conjugate(FermiVacuum()), operator_string..., FermiVacuum()])
-end
-
-function normal_form(n::PrimitiveCall)
-    operator_string = serialize(n)
-    if first(operator_string) == conjugate(FermiVacuum()) &&
-       last(operator_string) == FermiVacuum()
-        return vacuum_exp(operator_string[1:end-1])
-    end
-    return normal_form(operator_string)
-end
-
 function is_creation(c::PrimitiveCall)
     return isa(mapp(c), FermionicFieldCreation)
 end
@@ -55,6 +29,13 @@ function anti_commutator(a::PrimitiveCall, b::PrimitiveCall)
     end
 
 end
+
+function vacuum_exp(n::APN)
+    return set_content(n, map(c->vacuum_exp(c), content(n))...) 
+end
+
+vacuum_exp(n::TerminalNode) = n
+vacuum_exp(n::Composition) = vacuum_exp(content(get_body(n)))
 
 function vacuum_exp(operator_string::Vector)
     isempty(operator_string) && return constant(1)
@@ -82,3 +63,21 @@ function vacuum_exp(operator_string::Vector)
     return add(delta_term, mul(constant(-1), vacuum_exp(swapped_string)))
 end
 
+#=
+function deserialize(operator_string::Vector)
+    length(operator_string) == 1 && return first(operator_string)
+    return call(first(operator_string), deserialize(operator_string[2:end]))
+end
+
+function deserialize_vac(operator_string::Vector)
+    return deserialize([conjugate(FermiVacuum()), operator_string..., FermiVacuum()])
+end
+
+function normal_form(n::PrimitiveCall)
+    operator_string = serialize(n)
+    if first(operator_string) == conjugate(FermiVacuum()) &&
+       last(operator_string) == FermiVacuum()
+        return vacuum_exp(operator_string[1:end-1])
+    end
+    return normal_form(operator_string)
+end =#
