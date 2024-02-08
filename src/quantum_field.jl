@@ -1,24 +1,4 @@
-export FermiVacuum, f_annihilation, f_creation
-
-abstract type FermionicField <: AbstractMap end
-
-struct FermionicFieldCreation <: FermionicField
-    type::AbstractPCTType
-    body::Symbol
-end
-
-struct FermionicFieldAnnihilation <: FermionicField
-    type::AbstractPCTType
-    body::Symbol
-end
-
-struct FermiVacuumType <: AbstractPCTType end
-struct FermiVacuum <: APN end
-
-struct ProductType <: AbstractPCTType
-    base::AbstractPCTType
-    power::APN
-end
+export FermiVacuum, f_annihilation, f_creation, vacuum_exp, normal_form, anti_commutator
 
 base(t::ProductType) = t.base
 power(t::ProductType) = t.power
@@ -34,9 +14,6 @@ end
 function f_annihilation(field::Symbol)
     return make_node(FermionicFieldAnnihilation, field)
 end
-
-conjugate(n::FermionicFieldCreation) = f_annihilation(get_body(n))
-conjugate(n::FermionicFieldAnnihilation) = f_creation(get_body(n))
 
 function serialize(n::PrimitiveCall)
     isa(mapp(n), FermionicField) && return [n]
@@ -69,7 +46,6 @@ function is_creation(c::PrimitiveCall)
 end
 
 function anti_commutator(a::PrimitiveCall, b::PrimitiveCall)
-    is_creation(a) == is_creation(a) && return constant(0)
     get_body(mapp(a)) == get_body(mapp(b)) || return constant(0)
     i, j = first(content(args(a))), first(content(args(b)))
     if get_type(i) == get_type(j)
@@ -86,7 +62,7 @@ function vacuum_exp(operator_string::Vector)
     is_creation(last(operator_string)) || return constant(0)
 
     i = findfirst(is_creation, operator_string)
-    swapped_string = operator_string
+    swapped_string = copy(operator_string)
 
     tmp = swapped_string[i]
     swapped_string[i] = swapped_string[i-1]
@@ -94,11 +70,13 @@ function vacuum_exp(operator_string::Vector)
 
     reduced_string = []
     for (j, s) in enumerate(reduced_string)
-        j == i-1 && continue
+        j == i - 1 && continue
         j == i && continue
         push!(reduced_string, s)
     end
+
     commutated = anti_commutator(swapped_string[i-1], swapped_string[i])
+
     delta_term = mul(commutated, vacuum_exp(reduced_string))
 
     return add(delta_term, mul(constant(-1), vacuum_exp(swapped_string)))

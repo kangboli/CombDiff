@@ -218,7 +218,7 @@ function partial_inference(::Type{Composition}, term::PCTVector)
     return MapType(bound_type, body_type)
 end
 
-function inference(n::T)  where T <: FermionicField
+function inference(n::T, ::TypeContext)  where T <: FermionicField
     return set_type(n, partial_inference(T, get_body(n)))
 end
 

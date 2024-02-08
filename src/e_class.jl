@@ -25,6 +25,7 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     process_type(::Type{Delta}) = Delta, [lower(term), upper(term), conjugate(get_body(term))]
     process_type(::Type{Conjugate}) = typeof(get_body(term)), terms(get_body(term))
     process_type(::Type{<:APN}) = Conjugate, [term]
+    
     function inferenced_type(::Type{T}) where T 
         S, terms = process_type(T)
         partial_inference(S, terms...)
@@ -157,5 +158,13 @@ flatten_comp(c::APN) = [c]
 function e_class_reduction(::Type{Composition}, term::PCTVector)
     body = pct_vec(vcat(flatten_comp.(content(term))...)...)
     return Composition, [body], partial_inference(Composition, body)
+end
+
+function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
+    if lower == upper
+        return typeof(body), terms(body), get_type(body)
+    else
+        return Delta, [lower, upper, body], partial_inference(Delta, lower, upper, body)
+    end
 end
 

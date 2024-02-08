@@ -47,6 +47,12 @@ end
 Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) =
     Domain(base, lower, upper, meta)
 
+struct ProductType <: AbstractPCTType
+    base::AbstractPCTType
+    power::APN
+end
+
+
 """
     name(d)
 
@@ -108,5 +114,6 @@ function escalate(map_types::Vararg)
     # TODO implement this properly
     return first(map_types)
 end
+
 
 
