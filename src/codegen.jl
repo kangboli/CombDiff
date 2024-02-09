@@ -56,7 +56,7 @@ end
 
 function codegen(m::Map)
     sizes = map(b -> find_dimensions(b, get_body(m)), content(get_bound(m)))
-    if any(isempty, sizes) || any(b -> get_type(b) != N(), content(get_bound(m)))
+    if any(isempty, sizes) || any(b->!tensorize(get_type(b)), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
             begin
                 $(codegen(get_body(m)))
@@ -86,7 +86,7 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
-    if all(t->get_type(t) == N() || get_type(t) == I(), args(c))
+    if all(t->base(get_type(t)) == N() || base(get_type(t)) == I(), args(c))
         :($(codegen(mapp(c)))[$(codegen.(args(c))...)])
     else
         :($(codegen(mapp(c)))($(codegen.(args(c))...)))

@@ -97,21 +97,21 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
 
 end
 
-function trunc_hash(p::Pair{SignatureTree,Int}, level=3)
-    return trunc_hash(first(p), level) + hash(last(p))
+function trunc_hash(p::Pair{SignatureTree,Int}, h::UInt, level=3)
+    return trunc_hash(first(p), h, level) + hash(last(p), h)
 end
 
-Base.hash(sig::SignatureTree) = trunc_hash(sig)
+Base.hash(sig::SignatureTree, h::UInt) = trunc_hash(sig, h)
 
-function trunc_hash(sig::SignatureTree, level=3)
-    own_hash = sum(hash, (node_type(sig), hash(extra(sig))))
+function trunc_hash(sig::SignatureTree, h::UInt, level=3)
+    own_hash = reduce(xor, (hash(node_type(sig), h), hash(extra(sig), h)))
     level == 0 && return own_hash
     trees_to_hash = subtrees(sig)
     if node_type(sig) <: Commtative
         trees_to_hash = first.(subtrees(first(first(trees_to_hash))))
     end
-    hashes = [trunc_hash(t, level - 1) for t in trees_to_hash]
-    return own_hash + sum(sort(hashes), init=0)
+    hashes = [trunc_hash(t, h, level - 1) for t in trees_to_hash]
+    return own_hash + reduce(xor, sort(hashes), init=0)
 end
 
 
