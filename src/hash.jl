@@ -10,26 +10,26 @@ function Base.:(==)(n_1::R, n_2::S) where {R <: APN, S <: APN}
     return true
 end
 
-function Base.hash(n::T) where T <: APN
-    trunc_hash(n, 3)
+function Base.hash(n::T, h::UInt) where T <: APN
+    trunc_hash(n, h, 3)
 end
 
-function trunc_hash(n::T, level=3) where T <: APN
+function trunc_hash(n::T, h::UInt, level=3) where T <: APN
     result = T.hash
     level == 0 && return result
-    return result + sum(trunc_hash(t, level-1) for t in terms(n))
+    return result + reduce(xor, [trunc_hash(t, h, level-1) for t in terms(n)])
 end
 
 Base.:(==)(t_1::T, t_2::T) where T <: ElementType = true
-trunc_hash(::T, ::Int) where T <: ElementType = T.hash
-trunc_hash(n::Constant, ::Int) = hash(get_body(n))
+trunc_hash(::T, h::UInt, ::Int) where T <: ElementType = T.hash
+trunc_hash(n::Constant, h::UInt, ::Int) = hash(get_body(n), h)
     
-function Base.hash(v::VecType)
-    return sum(hash.(content(v)))
+function Base.hash(v::VecType, h::UInt)
+    return reduce(xor, map(t->hash(t, h), content(v)))
 end
 
-function Base.hash(m::MapType)
-    return sum(hash.(get_bound_type(m))) + hash(content(m))
+function Base.hash(m::MapType, h::UInt)
+    return reduce(xor, map(t->hash(t, h), get_bound_type(m))) + hash(content(m), h)
 end
 
 
@@ -39,8 +39,8 @@ function Base.:(==)(d_1::Domain, d_2::Domain)
     d_1.upper == d_2.upper 
 end
 
-function Base.hash(d::Domain)
-    hash(d.base) + hash(d.lower) + hash(d.upper)
+function Base.hash(d::Domain, h::UInt)
+    hash(d.base, h) + hash(d.lower, h) + hash(d.upper, h)
 end
 
 function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: AbstractPCTType}
@@ -48,8 +48,8 @@ function Base.:(==)(n_1::Var{R}, n_2::Var{S}) where {R <: AbstractPCTType, S <: 
     name(n_1) == name(n_2)
 end
 
-function trunc_hash(v::Var{T}, ::Int) where T <: AbstractPCTType
-    return hash(name(v)) + T.hash
+function trunc_hash(v::Var{T}, h::UInt, ::Int) where T <: AbstractPCTType
+    return hash(name(v), h) + T.hash
 end
 
 remake_node(n::T) where T <: APN = make_node(T, terms(n)...; type=get_type(n))
@@ -71,6 +71,12 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
 
     replaced_expr_2 = deepcopy(get_body(n_2))
     for (index, sig) in zip(content(get_bound(n_2)), signatures!(n_2))
+        #= i, sh = Base.hashindex(sig, length(variable_map.keys))
+        println(i)
+        k = variable_map.keys[i]
+        println(Base.isequal(k, sig)) =#
+        ks = keys(variable_map)
+        sig in ks
         replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
     end
     replaced_expr_2 = remake_node(replaced_expr_2)
@@ -78,7 +84,7 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
     return replaced_expr_1 == replaced_expr_2
 end
 
-function trunc_hash(n::T, level=3) where T <: Contraction
+function trunc_hash(n::T, h::UInt, level=3) where T <: Contraction
     level == 0 && return T.hash
 
     dummy_removed = deepcopy(get_body(n))
@@ -92,7 +98,7 @@ function trunc_hash(n::T, level=3) where T <: Contraction
     for (index, sig) in zip(content(get_bound(n)), signatures!(n))
         replaced_expr = fast_rename!(replaced_expr, index, variable_map[sig])
     end
-    return sum(hash.(signatures!(n))) + trunc_hash(replaced_expr, level-1)
+    return reduce(xor, map(t->hash(t, h), signatures!(n))) + trunc_hash(replaced_expr, h, level-1)
 end
 
 function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
@@ -102,9 +108,9 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Mul, Add}
     return c_1 == c_2
 end
 
-function Base.hash(n::T) where T <: Union{Mul, Add}
-    hashes = hash.(content(get_body(n)))
-    return sum(hashes) + T.hash
+function Base.hash(n::T, h::UInt) where T <: Union{Mul, Add}
+    hashes = map(t->hash(t, h), content(get_body(n)))
+    return reduce(xor, hashes) + T.hash + h
 end
 
 function Base.:(==)(v_1::VecType, v_2::VecType)

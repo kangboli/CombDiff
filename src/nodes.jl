@@ -152,11 +152,11 @@ content_fields(::Type{T}) where {T<:AbstractCall} = [:mapp, :args]
 
 struct Call <: AbstractCall
     type::AbstractPCTType
-    mapp::Union{Map,Pullback}
+    mapp::Union{Map,Pullback,Call}
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback}, args::Vararg)
+function call(mapp::Union{Map,Pullback,Call}, args::Vararg)
     make_node(Call, mapp, make_node(PCTVector, args...))
 end
 

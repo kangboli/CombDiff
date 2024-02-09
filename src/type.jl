@@ -68,6 +68,12 @@ upper(d::Domain) = d.upper
 meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
 
+function tensorize(m::Domain) 
+    base(m) == N() || return false
+    haskey(m.meta, :tensorize) && return m.meta[:tensorize] 
+end
+
+
 function Base.show(io::IO, ::MIME"text/plain", d::Domain)
     print(io, "$(name(d))∈$(verbose(base(d))):[$(pretty(lower(d))), $(pretty(upper(d)))]")
 end

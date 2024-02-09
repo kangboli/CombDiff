@@ -56,7 +56,6 @@ end
 
 function codegen(m::Map)
     sizes = map(b -> find_dimensions(b, get_body(m)), content(get_bound(m)))
-    # print(sizes)
     if any(isempty, sizes) || any(b -> get_type(b) != N(), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
             begin
@@ -99,7 +98,7 @@ function codegen(v::PCTVector)
 end
 
 function codegen(m::Monomial)
-    return :($(codegen(base(m)))^$(codegen(power(m))))
+    return :($(codegen(base(m)))^($(codegen(power(m)))))
 end
 
 function codegen(d::Delta)

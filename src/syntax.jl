@@ -19,8 +19,7 @@ interactive_placeholder = nothing
 macro pit(expr, ctx=interactive_context, use_global_state=false)
     !use_global_state && ctx == interactive_context && error("must give a context if not using the global context")
     expr = purge_line_numbers(expr)
-    if isa(expr, Symbol) || isa(expr, Number) ||
-       isa(expr, QuoteNode) || expr.head != :block
+    if isa(expr, Symbol) || isa(expr, Number) || isa(expr, QuoteNode) || expr.head != :block
         top_level_nodes = [parse_node(expr)]
     else
         top_level_nodes = map(parse_node, expr.args)
@@ -29,7 +28,7 @@ macro pit(expr, ctx=interactive_context, use_global_state=false)
     statements = filter(n -> isa(n, Statement), top_level_nodes)
     domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
     maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
-    return_node_list = filter(n -> isa(n, Expr), top_level_nodes)
+    return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
     if !isempty(return_node_list)
         return_node = statement_to_let(statements, first(return_node_list))
@@ -230,6 +229,7 @@ const univariate_symbols = [:log, :exp]
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
     #= n.head == Symbol(:quote) && return parse_quantum_field_node(n) =#
+    n.head == :. && return parse_escape_node(n)
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
         n.args[1] == Symbol("@domain") && return parse_domain_node(n)
@@ -285,6 +285,12 @@ function parse_univariate_node(n::Expr)
         return :(pct_log($(parse_node(n.args[2]))))
     end
 end
+
+function parse_escape_node(n::Expr)
+    n.args[1] == :jl || error("Escape node must start with jl.")
+    return n.args[2].value
+end
+
 struct MapTypeNode
     expr::Expr
 end
@@ -328,12 +334,14 @@ function parse_domain_node(n::Expr)
     periodic = QuoteNode(false)
     contractable = QuoteNode(true)
     symmetric = QuoteNode(false)
+    tensorize = QuoteNode(true)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
         lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
         periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
+        tensorize = QuoteNode(haskey(pairs, :tensorize) && (pairs[:tensorize]))
         symmetric = QuoteNode(haskey(pairs, :symmetric) && (pairs[:symmetric]))
         contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
     else
@@ -345,6 +353,7 @@ function parse_domain_node(n::Expr)
             $(base)(), $(lower), $(upper),
             meta=Dict(:name => $(QuoteNode(name)),
                 :periodic => $(periodic),
+                :tensorize => $(tensorize),
                 :symmetric => $(symmetric),
                 :contractable => $(contractable)
             )
@@ -509,7 +518,7 @@ function parse_block_node(n::Expr)
     return statement_to_let(statements, return_value)
 end
 
-function statement_to_let(statements::Vector, return_value::Expr)
+function statement_to_let(statements::Vector, return_value::Union{Expr, Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
     return :(make_node(Let, pct_vec($(bound...)), pct_vec($(args...)), $(return_value)))

@@ -75,7 +75,12 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     trees_to_compare_1 = subtrees(sig_1)
     trees_to_compare_2 = subtrees(sig_2)
     length(trees_to_compare_1) == length(trees_to_compare_2) || return false
-    node_type(sig_1) <: Commtative || return trees_to_compare_1 == trees_to_compare_2
+    isempty(trees_to_compare_1) && isempty(trees_to_compare_2) && return true
+    if !(node_type(sig_1) <: Commtative )
+        for (t_1, t_2) in zip(trees_to_compare_1, trees_to_compare_2)
+            t_1 == t_2 || return false 
+        end
+    end
 
     trees_to_compare_1 = first.(subtrees(first(first(trees_to_compare_1))))
     trees_to_compare_2 = first.(subtrees(first(first(trees_to_compare_2))))

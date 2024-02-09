@@ -222,6 +222,8 @@ evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args
 evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
+    isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
+
     new_bound = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
     @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
 
