@@ -73,7 +73,7 @@ function tensorize(m::Domain)
     haskey(m.meta, :tensorize) && return m.meta[:tensorize] 
 end
 
-tensorize(t::ElementType) = false
+tensorize(t::AbstractPCTType) = false
 tensorize(t::N) = true
 
 function Base.show(io::IO, ::MIME"text/plain", d::Domain)
