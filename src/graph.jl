@@ -4,7 +4,7 @@ export PCTGraph, nodes, edges, spanning_tree!, simplify, propagate_k, custom_set
 
 struct PCTGraph
     nodes::Vector{APN}
-    edges::Vector{Pair{Int, Int}}
+    edges::Vector{Pair{Int,Int}}
     hashset::RBTree{APN}
 end
 
@@ -20,26 +20,28 @@ function Base.show(io::IO, ::MIME"text/plain", g::PCTGraph)
     print(io, pretty(g))
 end
 
-PCTGraph() = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}(), RBTree{APN}())
-    
+PCTGraph() = PCTGraph(Vector{APN}(), Vector{Pair{Int,Int}}(), RBTree{APN}())
 
-function PCTGraph(n::APN) 
-    g = PCTGraph(Vector{APN}(), Vector{Pair{Int, Int}}(), RBTree{APN}())
+
+function PCTGraph(n::APN)
+    g = PCTGraph(Vector{APN}(), Vector{Pair{Int,Int}}(), RBTree{APN}())
     push!(nodes(g), n)
     push!(hashset(g), n)
     return g
 end
 
-const Settings = Dict{Symbol, Bool}
-default_settings = Settings(:clench_sum=>false, :symmetry=>false, :logging=>false, :gcd=>true)
-function custom_settings(custom::Vararg{Pair{Symbol, Bool}}; preset=default_settings)::Settings
+const Settings = Dict{Symbol,Bool}
+default_settings = Settings(:clench_sum => false,
+    :symmetry => false, :logging => false, :gcd => true, :blaserize => false)
+function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom
         new_settings[s] = b
     end
     return new_settings
 end
-const symmetry_settings = custom_settings(:symmetry=>true; preset=default_settings)
+const symmetry_settings = custom_settings(:symmetry => true; preset=default_settings)
+const blaserize_settings = custom_settings(:blaserize => true; preset=default_settings)
 
 """
 
@@ -49,20 +51,25 @@ If there is no sink cluster: traverse the subgraph and
     2. return the subgraph.
 
 """
-function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
+function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol,Bool}())
     push!(nodes(seen), n)
     push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
-    neighbor_list = neighbors(n; settings=settings)
-    reduced_list = Vector{Tuple{APN, Bool, String}}()
+    if settings[:blaserize]
+        neighbor_list = blaserize_neighbors(n)
+    else
+        neighbor_list = neighbors(n; settings=settings)
+    end
+    reduced_list = Vector{Tuple{APN,Bool,String}}()
     for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         t in hashset(seen) || push!(reduced_list, (t, d, name))
     end
 
-    for (t, d, name) in sort(reduced_list, by=e->-e[2])
-        push!(edges(seen), node_start=>1+length(nodes(seen)))
-        !d && push!(edges(seen), 1+length(nodes(seen))=>node_start)
-        if haskey(settings, :logging) && settings[:logging] 
+    for (t, d, name) in sort(reduced_list, by=e -> -e[2])
+        push!(edges(seen), node_start => 1 + length(nodes(seen)))
+        !d && push!(edges(seen), 1 + length(nodes(seen)) => node_start)
+        log_edge(n, t, d, name, length(nodes(seen)))
+        if haskey(settings, :logging) && settings[:logging]
             log_edge(n, t, d, name, length(nodes(seen)))
         end
         sink, tree = spanning_tree!(t, seen; settings=settings)
@@ -70,7 +77,7 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol, Bool}())
     end
 
     new_nodes = nodes(seen)[node_start:end]
-    new_edges = edge_start == length(edges(seen)) ? Vector{Pair{Int, Int}}() : edges(seen)[edge_start+1:end]
+    new_edges = edge_start == length(edges(seen)) ? Vector{Pair{Int,Int}}() : edges(seen)[edge_start+1:end]
     return false, PCTGraph(new_nodes, new_edges, hashset(seen))
 end
 

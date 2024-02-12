@@ -1,11 +1,3 @@
-#= function inference_if_needed(::Type{T}, ::UndeterminedPCTType, terms::Vararg) where T <: APN
-    return T(partial_inference(T, terms...), terms...)
-end
-
-function inference_if_needed(::Type{T}, type::S, terms::Vararg) where {T <: APN, S <: AbstractPCTType}
-    return T(type, terms...)
-end
- =#
 
 """
     e_class_reduction(T, terms)

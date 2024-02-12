@@ -1,7 +1,7 @@
 export process_directive
 
 function vdiff(n::APN)
-    set_content(n, vcat(map(t->vdiff(t), content(n))...)...)
+    set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
 end
 
 function vdiff(p::Pullback)
@@ -11,7 +11,7 @@ function vdiff(p::Pullback)
         return pcomp |> pp |> eval_all |> propagate_k |> simplify |> first
     end
 
-    result = pct_vec(map(f-> ecall(vdiff_single(decompose(pct_map(f, get_body(m)))), f), get_bound(m))...)
+    result = pct_vec(map(f -> ecall(vdiff_single(decompose(pct_map(f, get_body(m)))), f), get_bound(m))...)
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 
@@ -55,15 +55,19 @@ function simplify(n::APN; settings=default_settings)
 end
 
 function simplify(n::Map; settings=default_settings)
-    simplified_nodes = simplify(get_body(n); settings=settings)
-    map(t->make_node(Map, get_bound(n), t), simplified_nodes)
+    if settings[:blaserize]
+        return invoke(simplify, Tuple{APN}, n; settings)
+    else
+        simplified_nodes = simplify(get_body(n); settings=settings)
+        return map(t -> make_node(Map, get_bound(n), t), simplified_nodes)
+    end
 end
 
 process_directive(n::APN) = set_content(n, map(process_directive, content(n))...)
 
 const directive_list = [:__vdiff, :__sym, :__deactivate]
 
-function process_directive(n::PrimitiveCall) 
+function process_directive(n::PrimitiveCall)
     directive = get_body(mapp(n))
     directive in directive_list || return invoke(process_directive, Tuple{APN,}, n)
     length(args(n)) > 1 && error("A directive cannot be applied to multiple arguments")
@@ -73,4 +77,4 @@ function process_directive(n::PrimitiveCall)
     directive == :__deactivate && pop!(current_ast_transforms())
 end
 
-process_directive(n::Union{Var, Constant}) = n
+process_directive(n::Union{Var,Constant}) = n
