@@ -56,6 +56,8 @@ function combine_factors(terms::Vector)
         term_dict[rest] = get_body(constant_term) + get(term_dict, rest, 0)
     end
     function process_term!(a::APN)
+        #= println(typeof(a))
+        println(hash(a)) =#
         term_dict[a] = 1 + get(term_dict, a, 0)
     end
     

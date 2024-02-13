@@ -15,7 +15,7 @@ function Base.hash(n::T, h::UInt) where T <: APN
 end
 
 function trunc_hash(n::T, h::UInt, level=3) where T <: APN
-    result = T.hash
+    result = hash(T, h)
     level == 0 && return result
     return result + reduce(xor, [trunc_hash(t, h, level-1) for t in terms(n)])
 end
@@ -85,7 +85,7 @@ function Base.:(==)(n_1::T, n_2::T) where T <: Union{Contraction, Prod}
 end
 
 function trunc_hash(n::T, h::UInt, level=3) where T <: Contraction
-    level == 0 && return T.hash
+    level == 0 && return hash(T, h)
 
     dummy_removed = deepcopy(get_body(n))
     for index in content(get_bound(n))
@@ -110,7 +110,7 @@ end
 
 function Base.hash(n::T, h::UInt) where T <: Union{Mul, Add}
     hashes = map(t->hash(t, h), content(get_body(n)))
-    return reduce(xor, hashes) + T.hash + h
+    return reduce(xor, hashes) + hash(T, h) + h
 end
 
 function Base.:(==)(v_1::VecType, v_2::VecType)

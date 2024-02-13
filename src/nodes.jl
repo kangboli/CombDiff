@@ -346,6 +346,8 @@ function pct_let(terms::Vararg{APN})
     make_node(Let, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
 end
 
+content_fields(::Type{Let}) = [:bound, :args, :body]
+
 
 struct Negate <: APN
     type::AbstractPCTType

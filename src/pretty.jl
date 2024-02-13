@@ -34,7 +34,11 @@ function latex(m::Map)
     range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)"
     params = map(v -> "$(latex(v))$(range_str(range(v)))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
-    return "$(params) \\to $(latex(get_body(m)))"
+    if isa(get_body(m), PCTVector)
+        return "$(params) \\to $(latex(get_body(m), true))"
+    else
+        return "$(params) \\to $(latex(get_body(m)))"
+    end
 end
 
 function verbose(m::Map)
@@ -75,7 +79,7 @@ verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_ty
 
 pretty(c::Conjugate) = "$(pretty(get_body(c)))'"
 
-conj_symbol(::MapType) = "\\dagger"
+conj_symbol(::MapType) = "'"
 conj_symbol(::ElementType) = "*"
 
 latex(c::Conjugate) = "$(latex(get_body(c)))^{$(conj_symbol(get_type(get_body(c))))}"

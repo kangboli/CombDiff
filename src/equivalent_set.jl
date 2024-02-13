@@ -177,20 +177,20 @@ function sub_neighbors(n::Union{Add,Mul}; settings=default_settings)
 end
 
 function combine_map_neighbors(terms::Vector)
-    result = NeighborList()    
+    result = NeighborList()
     for (i, x) in enumerate(terms)
         for (j, y) in enumerate(terms)
             i < j || continue
             isa(x, Map) && isa(y, Map) || continue
             length(get_bound(x)) == length(get_bound(y)) || continue
-            all(i->get_type(get_bound(x)[i]) == get_type(get_bound(y)[i]), 1:length(get_bound(x))) || continue
+            all(i -> get_type(get_bound(x)[i]) == get_type(get_bound(y)[i]), 1:length(get_bound(x))) || continue
 
             new_bound = get_bound(x) == get_bound(y) ? get_bound(x) :
-            pct_vec(map(var, range.(get_bound(x)), new_symbol(x, y; num=length(get_bound(x)), symbol=:_a),  get_type.(get_bound(x))))
+                        pct_vec(map(var, range.(get_bound(x)), new_symbol(x, y; num=length(get_bound(x)), symbol=:_a), get_type.(get_bound(x))))
 
             new_map = pct_map(new_bound..., add(ecall(x, new_bound...), ecall(y, new_bound...)))
 
-            push!(result, add(new_map, terms[(k -> k != i && k != j).(1:end)]...); dired=true, name="combine_map")
+            push!(result, add(new_map, terms[(k->k != i && k != j).(1:end)]...); dired=true, name="combine_map")
         end
     end
 
@@ -201,8 +201,8 @@ end
 function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(a))
-    
-    if settings[:gcd] 
+
+    if settings[:gcd]
         append!(result, gcd_neighbors(terms))
     end
     #= append!(result, combine_map_neighbors(terms)) =#
@@ -304,12 +304,12 @@ function relax_sum(terms)
     new_ff = Vector{Var}()
     summand = get_body(terms[i])
     for t in content(get_bound(terms[i]))
-        if require_renaming(t) 
+        if require_renaming(t)
             new_var = var(pop!(symbols), get_type(t))
             push!(new_ff, new_var)
             summand = subst(summand, t, new_var)
         else
-            push!(new_ff, t) 
+            push!(new_ff, t)
         end
     end
 
@@ -407,15 +407,15 @@ function contract_delta_neighbors(s::Sum)
     d = get_body(s)
     isa(d, Delta) || return result
 
-    new_bound = pct_vec(sort(content(get_bound(s)), by=t->startswith(string(name(t)), "_"), rev=true)...)
+    new_bound = pct_vec(sort(content(get_bound(s)), by=t -> startswith(string(name(t)), "_"), rev=true)...)
     for (i, v) in enumerate(new_bound)
         contractable(expr::APN, s::Symbol)::Bool = false
         contractable(expr::Var, s::Symbol)::Bool = name(expr) == s
-        function contractable(expr::Mul, s::Symbol)::Bool 
+        function contractable(expr::Mul, s::Symbol)::Bool
             p = mul(expr, constant(-1))
             isa(p, Var) && contractable(p, s)
         end
-        contractable(expr::Add, s::Symbol)::Bool = any(t->contractable(t, s), get_body(expr))
+        contractable(expr::Add, s::Symbol)::Bool = any(t -> contractable(t, s), get_body(expr))
         #= is_contractable(v) != isempty(range(v)) && error("bug alert! mismatch $(name(v)): $(range(v))") =#
         is_contractable(v) || continue
         #= isempty(range(v)) || continue =#
@@ -448,7 +448,7 @@ function clench_sum(s::Sum)
     result = NeighborList()
 
     summand = get_body(s)
-    if isa(summand, Mul) 
+    if isa(summand, Mul)
         for (i, v) in enumerate(content(get_bound(s)))
             interior, exterior = Vector{APN}(), Vector{APN}()
 
@@ -471,14 +471,14 @@ function obvious_clench(s::Sum)
     result = NeighborList()
 
     summand = get_body(s)
-    if isa(summand, Mul) 
+    if isa(summand, Mul)
         interior, exterior = Vector{APN}(), Vector{APN}()
 
         for t in content(get_body(summand))
-            target = any(v->contains_name(t, name(v)), content(get_bound(s))) ? interior : exterior
+            target = any(v -> contains_name(t, name(v)), content(get_bound(s))) ? interior : exterior
             push!(target, t)
         end
-        
+
         new_sum = mul(exterior..., pct_sum(content(get_bound(s))..., mul(interior...)))
         push!(result, new_sum; dired=true, name="sum_out")
     end
@@ -490,7 +490,7 @@ end
 function sum_out_linear_op(s::Sum)
     result = NeighborList()
     summand = get_body(s)
-    if isa(summand, PrimitiveCall)  || (isa(summand, Conjugate)  && isa(get_body(summand), PrimitiveCall))
+    if isa(summand, PrimitiveCall) || (isa(summand, Conjugate) && isa(get_body(summand), PrimitiveCall))
         linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
         new_sum = call(mapp(summand), pct_sum(get_bound(s)..., first(args(summand))))
         push!(result, new_sum; dired=true, name="linear_sum_out")
@@ -658,8 +658,8 @@ function neighbors(s::Sum; settings=default_settings)
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
-    append!(result, obvious_clench(s))
-    settings[:clench_sum] && append!(result, clench_sum(s))
+    settings[:clench_sum] && append!(result, obvious_clench(s))
+    #= settings[:clench_sum] && append!(result, clench_sum(s)) =#
     append!(result, sum_out_linear_op(s))
     append!(result, sum_out_delta(s))
     if settings[:symmetry]

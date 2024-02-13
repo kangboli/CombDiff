@@ -4,6 +4,10 @@ function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
 end
 
+function vdiff(n::TerminalNode)
+    return n
+end
+
 function vdiff(p::Pullback)
     m = get_body(p)
 
@@ -15,6 +19,7 @@ function vdiff(p::Pullback)
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 
+
 function propagate_k(n::Map, k=constant(1))
     zs = get_bound(n)[1:end-1]
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
@@ -24,7 +29,10 @@ end
 Redux will be a higher level interface to simplify to reduce the complexity.
 I haven't figured out how to go about this so it just calls simplify right now.
 """
-redux(n::APN; settings=default_settings) = simplify(n::APN; settings=settings) |> first
+function redux(n::APN; settings=default_settings) 
+    result = simplify(n::APN; settings=settings) |> first
+    simplify(result::APN; settings=custom_settings(:clench_sum=>true)) |> first
+end
 
 #= function redux(n::Map; settings=default_settings)
     pct_map(get_bound(n)...,  redux(get_body(n); settings=settings))

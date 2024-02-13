@@ -36,8 +36,6 @@ function codegen(n::Sum)
             _sum
         end
     )
-
-
 end
 
 codegen(v::Var) = get_body(v)
@@ -82,7 +80,7 @@ function codegen(m::Map)
 end
 
 function codegen(c::Conjugate)
-    :($(codegen(get_body(c)))')
+    :(conj($(codegen(get_body(c)))))
 end
 
 function codegen(c::PrimitiveCall)
@@ -117,4 +115,29 @@ end
 
 function codegen(n::Log)
     return :(log($(codegen(get_body(n)))))
+end
+
+function codegen(n::BlasMul)
+    :(*($(map(codegen, content(get_body(n)))...)))
+end
+
+function codegen(n::BlasTranspose)
+    :(transpose($(codegen(get_body(n)))))
+end
+
+function codegen(n::MatrixInnerProd)
+    l_matrix, r_matrix = content(get_body(n))
+    :(dot(vec($(codegen(l_matrix))), vec($(codegen(r_matrix)))))
+end
+
+function codegen(n::BlasTrace)
+    :(tr($(codegen(get_body(n)))))
+end
+
+function codegen(n::ScalarTensorProduct)
+    return :($(codegen(n.scalar)) .* $(codegen(n.tensor)))
+end
+
+function codegen(n::BlasIndexing)
+    :($(codegen(mapp(n)))[$(map(codegen, content(args(n)))...)])
 end

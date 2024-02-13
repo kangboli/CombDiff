@@ -1,24 +1,31 @@
 using PCT
 f, _ = @pct (A::RM, v::RV) -> sum((i::N, j::N), v(i) * A(i, j) * v(j))
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (v::CV) -> 2 * sum((i::N), v(i)' * v(i))
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (A::CM, v::CV) -> (j::N) -> sum((i::N), v(i)' * A(i, j))
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (A::CM, v::CV) -> (i::N) -> sum((j::N), v(j)' * A(i, j))
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (v::RV) -> sum((i::N), v(i) * v(i))
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (A::CM, B::CM) -> (i::N, j::N) -> sum((k::N), A(i, k) * B(k, j))
 bf = blaserize(f) |> first
+codegen(bf)
 
-f, _ = @pct (x::RV, p::RV) -> (i::N) -> x(i) + p(i)
+f, _ = @pct (x::RV, p::RV, a::R) -> (i::N) -> x(i) + a * p(i)
 bf = blaserize(f) |> first
+codegen(bf)
 
 f, _ = @pct (A::CM, B::CM) -> (i::N, j::N) -> sum((k::N), A(k, i)' * B(k, j))
 bf = blaserize(f) |> first
