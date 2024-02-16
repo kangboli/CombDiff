@@ -1,12 +1,17 @@
-export process_directive
+export process_directive, dropp
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
 end
 
-function vdiff(n::TerminalNode)
-    return n
+function dropp(n::APN)
+    set_content(n, vcat(map(t -> dropp(t), content(n))...)...)
 end
+
+
+vdiff(n::TerminalNode) = n
+
+dropp(n::TerminalNode) = n
 
 function vdiff(p::Pullback)
     m = get_body(p)
@@ -19,6 +24,11 @@ function vdiff(p::Pullback)
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 
+
+function dropp(p::Pullback)
+    m = get_body(p)
+    return dropp(m)
+end
 
 function propagate_k(n::Map, k=constant(1))
     zs = get_bound(n)[1:end-1]

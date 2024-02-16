@@ -150,13 +150,18 @@ args(c::AbstractCall) = c.args
 
 content_fields(::Type{T}) where {T<:AbstractCall} = [:mapp, :args]
 
+struct Add <: APN
+    type::AbstractPCTType
+    body::PCTVector
+end
+
 struct Call <: AbstractCall
     type::AbstractPCTType
-    mapp::Union{Map,Pullback,Call}
+    mapp::Union{Map,Pullback,Call,Add}
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback,Call}, args::Vararg)
+function call(mapp::Union{Map,Pullback,Call,Add}, args::Vararg)
     make_node(Call, mapp, make_node(PCTVector, args...))
 end
 
@@ -193,11 +198,6 @@ base(n::Monomial) = n.base
 power(n::Monomial) = n.power
 
 monomial(base::APN, power::APN) = make_node(Monomial, base, power)
-
-struct Add <: APN
-    type::AbstractPCTType
-    body::PCTVector
-end
 
 function add(args::Vararg)
     return make_node(Add, make_node(PCTVector, args...))

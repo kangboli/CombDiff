@@ -176,7 +176,7 @@ function sub_neighbors(n::Union{Add,Mul}; settings=default_settings)
     return result
 end
 
-function combine_map_neighbors(terms::Vector)
+#= function combine_map_neighbors(terms::Vector)
     result = NeighborList()
     for (i, x) in enumerate(terms)
         for (j, y) in enumerate(terms)
@@ -195,6 +195,27 @@ function combine_map_neighbors(terms::Vector)
     end
 
     return result
+end =#
+
+function combine_maps(terms::Vector)
+    map_dict, remaining_terms = Dict{Int,Vector{APN}}(), Vector{APN}()
+    function process_term!(a::Map)
+        map_dict[length(get_bound(a))] = push!(get(map_dict, length(get_bound(a)), []), a)
+    end
+
+    process_term!(a::APN) = push!(remaining_terms, a)
+    map(process_term!, terms)
+
+    function process_kv(v)
+        vs = get_bound(v[1])
+        have_common_names = all(i -> name.(get_bound(v[i])) == name.(vs), 1:length(v))
+        new_bound = have_common_names ? vs : pct_vec(map(var,
+            new_symbol(v...; num=length(vs), symbol=:_a), get_type.(vs))...)
+        return pct_map(new_bound..., add([ecall(x, new_bound...) for x in v]...))
+    end
+
+    new_maps = [process_kv(v) for (_, v) in map_dict]
+    return add(remaining_terms..., new_maps...)
 end
 
 
@@ -204,6 +225,10 @@ function neighbors(a::Add; settings=default_settings)
 
     if settings[:gcd]
         append!(result, gcd_neighbors(terms))
+    end
+    if count(a -> isa(a, Map), content(get_body(a))) > 1
+        new_add = combine_maps(content(get_body(a)))
+        push!(result, new_add; dired=true, name="combine map")
     end
     #= append!(result, combine_map_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))

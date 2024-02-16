@@ -65,7 +65,7 @@ function combine_factors(terms::Vector)
     return [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
 end
 
-function combine_maps(terms::Vector)
+#= function combine_maps(terms::Vector)
     map_dict, remaining_terms = Dict{Int, Vector{APN}}(), Vector{APN}()
     function process_term!(a::Map)
         map_dict[length(get_bound(a))] = push!(get(map_dict, length(get_bound(a)), []), a)
@@ -84,7 +84,7 @@ function combine_maps(terms::Vector)
 
     new_maps = [process_kv(v) for (_, v) in map_dict]
     return [remaining_terms..., new_maps...]
-end
+end =#
 
 flatten_add(a::APN) = [a]
 flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
@@ -96,9 +96,9 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     new_terms = filter(t -> !is_zero(t), [const_term,  get(d, false, [])...])
     new_terms = combine_factors(new_terms)
 
-    if count(a->isa(a, Map), new_terms) > 1
+    #= if count(a->isa(a, Map), new_terms) > 1
         new_terms = combine_maps(new_terms)
-    end
+    end =#
 
     sort!(new_terms)
     length(new_terms) == 0 && return Constant, [0], I()

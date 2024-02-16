@@ -111,7 +111,7 @@ struct BlasIndexing <: AbstractCall
     args::PCTVector
 end
 
-function call(mapp::APN, args::Vararg)
+function call(mapp::Union{BlasNode, BlasIndexing}, args::Vararg)
     make_node(BlasIndexing, mapp, make_node(PCTVector, args...))
 end
 pretty(c::BlasIndexing) = "($(pretty(c.mapp)))($(join(map(pretty, content(args(c))), ", ")))"
@@ -370,16 +370,29 @@ function map_dist_neighbors(m::Map)
     term = get_body(m)
     isa(term, Add) || return result
     subterms = content(get_body(term))
-    push!(result, add(map(t -> pct_map(get_bound(m), t), subterms)...);
-        dired=true, name="map dist")
+    push!(result, add(map(t -> pct_map(content(get_bound(m))..., t), subterms)...);
+        dired=false, name="map dist")
     return result
 end
+
+function map_elementwise_prod(m::Map)
+    result = NeighborList()
+    term = get_body(m)
+    isa(term, Mul) || return result
+    subterms = content(get_body(term))
+    all(t->isa(t, AbstractCall), subterms) || return result
+    if reduce(isequal, [map(args, subterms)..., get_bound(m)])
+        push!(result, elementwise_mul(map(mapp, subterms)...); dired=true, name="map elementwise prod")
+    end
+    return result
+end
+
 
 function blaserize_neighbors(m::Map)
     result = NeighborList()
     append!(result, map_cancel_neighbors(m))
     append!(result, map_out_neighbors(m))
-    #= append!(result, map_dist_neighbors(m)) =#
+    append!(result, map_dist_neighbors(m))
     append!(result, sub_blaserize_neighbors(m))
     return result
 end
@@ -396,17 +409,59 @@ function scalar_tensor_product(scalar, tensor)
     return make_node(ScalarTensorProduct, scalar, tensor)
 end
 
+function e_class_reduction(::Type{ScalarTensorProduct}, scalar, tensor)
+    while isa(tensor, ScalarTensorProduct)
+        scalar = mul(scalar, tensor.scalar)
+        tensor = tensor.tensor
+    end
+    
+    return ScalarTensorProduct, [scalar, tensor], partial_inference(ScalarTensorProduct, scalar, tensor)
+end
+
 function partial_inference(::Type{ScalarTensorProduct}, scalar, tensor)
     return get_type(tensor)
 end
 
 function pretty(n::ScalarTensorProduct)
-    return "$(pretty(n.scalar))⋅$(pretty(n.tensor))"
+    tensor_str = pretty(n.tensor)
+    if isa(n.tensor, AbstractMap) 
+        tensor_str = "($(pretty(n.tensor)))"
+    end
+    return "$(pretty(n.scalar))⋅$(tensor_str)"
 end
 
 function latex(n::ScalarTensorProduct)
-    return "$(latex(n.scalar)) \\cdot $(latex(n.tensor))"
+    tensor_str = latex(n.tensor)
+    if isa(n.tensor, AbstractMap) 
+        tensor_str = "($(latex(n.tensor)))"
+    end
+    return "$(latex(n.scalar)) \\cdot $(tensor_str)"
 end
+
+struct ElementWiseMul
+    type::AbstractCall
+    body::PCTVector
+end
+
+function elementwise_mul(body::PCTVector)
+    return make_node(ElementWiseMul, body)
+end
+
+function partial_inference(::Type{ElementWiseMul}, body::PCTVector)
+    return get_type(last(content(body)))
+end
+
+function pretty(n::ElementWiseMul)
+    return join(map(pretty, get_body(n)), "⊙")
+end
+
+function latex(n::ElementWiseMul)
+    return join(map(latex, get_body(n)), "\\odot")
+end
+
+#= function e_class_reduction(::Type{ElementWiseMul}, body::PCTVector)
+    
+end =#
 
 function scalar_tensor_product_neighbors(m::Mul)
     result = NeighborList()

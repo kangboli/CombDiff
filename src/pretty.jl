@@ -25,14 +25,14 @@ function verbose(d::Domain)
 end
 
 function pretty(m::Map)
-    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v -> "$(pretty(v))$(range_str(range(v)))", content(get_bound(m)))
+    #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
+    params = map(v -> "$(pretty(v))", content(get_bound(m)))
     "($(join(params, ", "))) -> \n$(indent(pretty(get_body(m))))"
 end
 
 function latex(m::Map)
-    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)"
-    params = map(v -> "$(latex(v))$(range_str(range(v)))", content(get_bound(m)))
+    #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)" =#
+    params = map(v -> "$(latex(v))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     if isa(get_body(m), PCTVector)
         return "$(params) \\to $(latex(get_body(m), true))"
@@ -42,8 +42,8 @@ function latex(m::Map)
 end
 
 function verbose(m::Map)
-    range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))"
-    params = map(v -> "$(verbose(v))$(range_str(range(v)))", content(get_bound(m)))
+    #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
+    params = map(v -> "$(verbose(v)))", content(get_bound(m)))
     "($(join(params, ", "))->\n" *
     "$(indent(verbose(get_body(m)))))\n" *
     "::$(verbose(get_type(m)))"
@@ -278,6 +278,7 @@ end
 is_negative(n::APN) = false
 is_negative(n::Mul) = any(t -> is_negative(t), get_body(n))
 is_negative(n::Constant) = get_body(n) < 0
+is_negative(n::ScalarTensorProduct) = is_negative(n.scalar)
 
 function pretty(c::FermionicFieldAnnihilation)
     return "$(get_body(c))̂"
@@ -320,3 +321,4 @@ end
 function verbose(n::Log)
     "log($(verbose(get_body(n))))::$(get_type(n))"
 end
+
