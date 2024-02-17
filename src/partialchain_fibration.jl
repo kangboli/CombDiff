@@ -458,11 +458,6 @@ end
 
 as_map(m::BMap)::APN = param(m)
 
-function decompose(z::APN, ov::AbstractCall)::PComp
-    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), BMap(mapp(ov)))
-    push(decompose(z, args(ov)), BMap(mapp(ov)))
-end
-
 function decompose(zs::PCTVector, ov::Var)::PComp
     length(zs) == 1 && return decompose(first(zs), ov)
     const_type = MapType(get_type(zs), get_type(ov))
@@ -496,6 +491,40 @@ end
 decompose(map::Map)::Union{PComp,Vector{PComp}} = decompose(get_bound(map), get_body(map))
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
+
+struct BPullback <: ABF
+    param::PCTVector
+    maptype::MapType
+end
+
+function decompose(z::APN, ov::AbstractCall)::PComp
+    if isa(mapp(ov), PrimitivePullback) && !isa(get_body_type(get_type(mapp(ov))), VecType)
+        zs..., k = content(args(ov))
+        if any(t->contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
+            maptype = MapType(VecType([get_type(k)]), get_type(ov))
+            bp = BPullback(pct_vec(mapp(ov), zs...), maptype)
+            return push(decompose(z, k), bp)
+        end
+    end
+    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), BMap(mapp(ov)))
+    push(decompose(z, args(ov)), BMap(mapp(ov)))
+end
+
+function as_map(bp::BPullback)
+    m, args... = content(param(bp))
+    zs = z_vars(bp)
+    return pct_map(zs..., call(m, args..., zs...))
+end
+
+"""
+𝒫(z -> 𝒫 g(x, z))(z, k) = = conj(z->𝒫 g(x, z))(k)
+"""
+function pp(bp::BPullback)
+    zs, ks = zk_vars(bp)
+    return pct_map(zs..., ks..., call(conjugate(as_map(bp)), ks...))
+end
+pretty(bp::BPullback) = pretty(as_map(bp))
+
 
 v_wrap(n::APN)::PCTVector = pct_vec(n)
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])

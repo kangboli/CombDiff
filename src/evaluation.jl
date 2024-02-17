@@ -1,4 +1,10 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free
+
+function get_free(n::APN)
+    free, _ = free_and_dummy(n)
+    return free
+end
+
 
 # Rule for evaluating the functions that can be evaluated
 

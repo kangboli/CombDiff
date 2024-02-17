@@ -89,7 +89,7 @@ end
 function delta_out_pullback_neighbors(c::PrimitiveCall)
     result = NeighborList()
     isa(mapp(c), AbstractPullback) || return result
-    is_pullback_of_univariate(mapp(c)) || return result
+    isa(get_body_type(get_type(get_body(mapp(c)))), VecType) && return result
     zs..., k = content(args(c))
     isa(k, Delta) || return result
     push!(result, delta(upper(k), lower(k), call(mapp(c), zs..., get_body(k))); dired=true, name="delta_out_pullback")

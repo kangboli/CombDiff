@@ -77,12 +77,29 @@ latex(c::Call) = "\\left($(latex(mapp(c)))\\right)\\left($(latex(args(c)))\\righ
 
 verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_type(c)))"
 
-pretty(c::Conjugate) = "$(pretty(get_body(c)))'"
+function pretty(c::Conjugate) 
 
-conj_symbol(::MapType) = "'"
-conj_symbol(::ElementType) = "*"
+    conj_symbol(t::MapType) = get_body_type(t) == C() ? "⁺" : "ᵀ" 
+    conj_symbol(::ElementType) = "'"
+    interior = pretty(get_body(c))
+    if isa(c, Map)
+        interior = "($(interior))"
+    end
 
-latex(c::Conjugate) = "$(latex(get_body(c)))^{$(conj_symbol(get_type(get_body(c))))}"
+    return "$(interior)$(conj_symbol(get_type(get_body(c))))"
+end
+
+
+function latex(c::Conjugate)
+    conj_symbol(t::MapType) = get_body_type(t) == C() ? "\\dagger" : "T"
+    conj_symbol(::ElementType) = "*"
+    interior = latex(get_body(c))
+    if isa(get_body(c), Map)
+        interior = "\\left($(interior)\\right)"
+    end
+
+    return "$(interior)^{$(conj_symbol(get_type(get_body(c))))}"
+end
 
 verbose(c::Conjugate) = "$(verbose(get_body(c)))'"
 
@@ -206,10 +223,15 @@ function latex(p::PrimitiveCall)
     end
 
     bound_types = get_content_type(get_bound_type(get_type(mapp(p))))
+    map_str = latex(mapp(p))
+    #= if isa(mapp(p), Conjugate)
+        map_str = "\\left($(map_str)\\right)"
+    end =#
+
     if all(a -> a == N(), bound_types) && length(bound_types) > 0
-        return "$(latex(mapp(p)))_{$(latex(args(p)))}"
+        return "$(map_str)_{$(latex(args(p)))}"
     else
-        return "$(latex(mapp(p)))\\left($(latex(args(p)))\\right)"
+        return "$(map_str)\\left($(latex(args(p)))\\right)"
     end
 end
 
