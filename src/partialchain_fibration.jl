@@ -237,12 +237,12 @@ pretty(b::BSum) = "∑$(join(pretty.(param(b))))"
 """
 Exponentiation
 """
-struct BExp <: ABF 
+struct BExp <: ABF
     maptype::MapType
 end
 
 decompose(z::APN, ov::Exp)::PComp = push(decompose(z, get_body(ov)), BExp(
-MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
+    MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
 ))
 
 as_map(b::BExp, zs=z_vars(b)) = pct_map(zs..., pct_exp(zs...))
@@ -259,12 +259,12 @@ apns(::BExp) = []
 """
 Log
 """
-struct BLog <: ABF 
+struct BLog <: ABF
     maptype::MapType
 end
 
 decompose(z::APN, ov::Log)::PComp = push(decompose(z, get_body(ov)), BLog(
-MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
+    MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
 ))
 
 as_map(b::BLog, zs=z_vars(b)) = pct_map(zs..., pct_log(zs...))
@@ -291,11 +291,11 @@ struct PComp <: ABF
 end
 
 const Seg = Union{ABF,AbstractFibration}
-function comp(z::T, f::Vararg{Seg})::PComp where T <: APN
+function comp(z::T, f::Vararg{Seg})::PComp where {T<:APN}
     T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
     PComp(v_wrap(z), [f...], MapType(v_wrap(get_type(z)), output_type(last(f))))
 end
-function comp(z::T)::PComp where T <: APN
+function comp(z::T)::PComp where {T<:APN}
     T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
     PComp(v_wrap(z), [], MapType(v_wrap(get_type(z)), get_type(z)))
 end
@@ -306,7 +306,7 @@ pfuncs(c::PComp)::Vector{ABF} = c.pfuncs
 
 push(c::PComp, f::Vararg)::PComp = comp(input(c), pfuncs(c)..., f...)
 
-pop(c::PComp)::Tuple{T, PComp} where T <: ABF = last(pfuncs(c)), comp(input(c), pfuncs(c)[1:end-1]...)
+pop(c::PComp)::Tuple{T,PComp} where {T<:ABF} = last(pfuncs(c)), comp(input(c), pfuncs(c)[1:end-1]...)
 
 Base.isempty(c::PComp)::Bool = isempty(pfuncs(c))
 
@@ -316,7 +316,11 @@ Base.show(io::IO, c::PComp) = println(io, pretty(c))
 apns(c::PComp)::Vector{APN} = vcat(content(input(c)), apns.(pfuncs(c))...)
 
 function as_map(c::PComp)::Map
-    result = foldl((r, f) -> ecall(as_map(f), v_wrap(r)...), pfuncs(c); init=input(c))
+    result = input(c)
+    for f in pfuncs(c)
+        result = ecall(as_map(f), v_wrap(result)...)
+    end
+    #= result = foldl((r, f) -> ecall(as_map(f), v_wrap(r)...), pfuncs(c); init=input(c)) =#
     return pct_map(content(input(c))..., result)
 end
 
@@ -417,7 +421,9 @@ end
 
 function as_map(fib::FiniteFibration, zs=z_vars(fib))::Map
     b_fb = as_map.(fibers(fib))
-    pct_map(zs..., pct_vec([ecall(f, zs...) for f in b_fb]...))
+    fzs = [v_unwrap(ecall(f, zs...)) for f in b_fb]
+    result = pct_map(zs..., pct_vec(fzs...))
+    return result
 end
 
 function decompose(z::APN, ov::PCTVector)::PComp
@@ -471,28 +477,28 @@ function pp(b::BMap)::AbstractMap
     # TODO: Implement the vector case.
     process_param(p::APN) = primitive_pullback(p)
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
-    function process_param(p::Var)
+    function process_param(p::Union{Var,PrimitivePullback})
         bound_types = get_content_type(get_bound_type(get_type(m)))
         n_args = length(bound_types)
         zs, ks = zk_vars(b)
-        if n_args == 1 
+        if n_args == 1
             linear(get_type(m)) || return pullback(p)
-            return pct_map(zs..., ks..., call(conjugate(m), ks...)) 
+            return pct_map(zs..., ks..., call(conjugate(m), ks...))
         end
         #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
-        pullbacks = map(z->call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
+        pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
         pct_map(zs..., ks..., pct_vec(pullbacks...))
     end
     return process_param(m)
 end
 
 #= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, get_body(map)) for t in content(ff(map))]) =#
-decompose(map::Map)::Union{PComp, Vector{PComp}} = decompose(get_bound(map), get_body(map))
+decompose(map::Map)::Union{PComp,Vector{PComp}} = decompose(get_bound(map), get_body(map))
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 
 v_wrap(n::APN)::PCTVector = pct_vec(n)
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
-v_unwrap(n::Union{PCTVector, Vector}) = length(n) == 1 ? first(n) : n
+v_unwrap(n::Union{PCTVector,Vector}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n

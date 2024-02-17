@@ -116,7 +116,8 @@ function call(mapp::Union{BlasNode, BlasIndexing}, args::Vararg)
 end
 pretty(c::BlasIndexing) = "($(pretty(c.mapp)))($(join(map(pretty, content(args(c))), ", ")))"
 function latex(c::BlasIndexing)
-    if all(t -> t == N(), base.(get_type.(content(args(c)))))
+    arg_types = get_type.(content(args(c)))
+    if all(t -> isa(t, ElementType), arg_types) && all(t -> t == N(), base.(arg_types))
         return "($(latex(c.mapp)))_{$(join(map(latex, content(args(c))), ", "))}"
     else
         return "($(latex(c.mapp)))($(join(map(latex, content(args(c))), ", ")))"
@@ -414,6 +415,8 @@ function e_class_reduction(::Type{ScalarTensorProduct}, scalar, tensor)
         scalar = mul(scalar, tensor.scalar)
         tensor = tensor.tensor
     end
+
+    scalar == constant(1) && return typeof(tensor), terms(tensor), get_type(tensor)
     
     return ScalarTensorProduct, [scalar, tensor], partial_inference(ScalarTensorProduct, scalar, tensor)
 end
@@ -473,6 +476,7 @@ function scalar_tensor_product_neighbors(m::Mul)
     tensors = get(d, false, [])
     length(tensors) == 1 || return result
     isa(first(tensors), AbstractCall) || return result
+    all(t->tensorize(get_type(t)), content(args(first(tensors)))) || return result
     new_term = call(scalar_tensor_product(mul(scalars...), mapp(first(tensors))),
         content(args(first(tensors)))...)
 
@@ -484,6 +488,46 @@ function blaserize_neighbors(m::Mul)
     result = NeighborList()
     append!(result, scalar_tensor_product_neighbors(m))
     append!(result, sub_blaserize_neighbors(m))
+    return result
+end
+
+function gradient_neighbors(c::AbstractCall)
+    result = NeighborList()
+    isa(mapp(c), AbstractPullback) || return result
+    is_pullback_of_univariate(mapp(c)) || return result
+    zs..., k = content(args(c))
+    new_term = scalar_tensor_product(k, call(mapp(c), zs..., constant(1)))
+    push!(result, new_term; dired=true, name="gradient neighbor")
+    return result
+end
+
+function blaserize_neighbors(c::AbstractCall)
+    result = NeighborList()
+    append!(result, gradient_neighbors(c))
+    append!(result, sub_blaserize_neighbors(c))
+    return result
+end
+
+function pullback_map_out(p::PrimitivePullback)
+    result = NeighborList()
+    m = get_body(p)
+    isa(m, Map) || return result
+    map_body = get_body(m)
+    if isa(map_body, ScalarTensorProduct) 
+        free, _ = free_and_dummy(map_body.scalar)
+        any(t->t in free, content(get_bound(m))) && return result
+        new_term = scalar_tensor_product(map_body.scalar, 
+        primitive_pullback(pct_map(content(get_bound(m))..., map_body.tensor)))
+        push!(result, new_term; dired=true, name="pullback_map_out")
+    end
+    return result
+end
+
+function blaserize_neighbors(p::PrimitivePullback)
+    
+    result = NeighborList()
+    #= append!(result, pullback_map_out(p)) =#
+    append!(result, sub_blaserize_neighbors(p))
     return result
 end
 

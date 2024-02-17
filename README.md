@@ -1,7 +1,15 @@
 # PCT
 
 This package is a proof-of-concept implementation of variational
-differentiation for quantum chemistry.
+differentiation for quantum chemistry. The goal is to be able to be able to
+express quantum chemistry models including those written in the second
+quantization notation and give the derived-by-hand quality gradient by
+literally giving the latex formula that is otherwise produced by hand.
+
+This package is not just another symbolic algebra system or automatic
+differentiation system. It is a language that is simultaneously capable of
+both.
+
 
 ## Usage
 

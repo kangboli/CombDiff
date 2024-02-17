@@ -37,7 +37,7 @@ struct PCTVector <: APN
     type::VecType
     content::Vector
     function PCTVector(type::VecType, content::Vararg)
-        new(type, [content...])
+        new(type, collect(content))
     end
 end
 

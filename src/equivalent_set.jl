@@ -72,10 +72,33 @@ function sub_neighbors(c::PrimitiveCall; settings=default_settings)
     return result
 end
 
+#= function k_out_neighbors(p::PrimitiveCall)
+    result = NeighborList()
+    isa(mapp(p), AbstractPullback) || return result
+    zs..., k = content(args(p))
+    if isa(get_type(k), ElementType)
+        push!(result, mul(call(mapp(p), zs..., constant(1)), k);
+            dired=true, name="k_out")
+    end
+    return result
+end =#
+function is_pullback_of_univariate(p::AbstractPullback)
+    isa(get_body_type(get_type(get_body(p))), ElementType) 
+end
+
+function delta_out_pullback_neighbors(c::PrimitiveCall)
+    result = NeighborList()
+    isa(mapp(c), AbstractPullback) || return result
+    is_pullback_of_univariate(mapp(c)) || return result
+    zs..., k = content(args(c))
+    isa(k, Delta) || return result
+    push!(result, delta(upper(k), lower(k), call(mapp(c), zs..., get_body(k))); dired=true, name="delta_out_pullback")
+end
 
 function neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
 
+    append!(result, delta_out_pullback_neighbors(c))
     function apply_symmetry(indices, op)
         # Apply the permutation.
         new_term = set_content(c, mapp(c), args(c)[collect(indices)])
@@ -97,6 +120,7 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
     for (indices, op) in symmetries(get_type(mapp(c)))
         push!(result, apply_symmetry(indices, op); name="symmetry")
     end
+
     return result
 end
 
@@ -291,7 +315,7 @@ function dist_neighbors(terms::Vector)
     return result
 end
 
-function prod_in_neighbors(terms)
+#= function prod_in_neighbors(terms)
     result = NeighborList()
     for (i, t) in enumerate(terms)
         isa(t, Sum) || continue
@@ -304,7 +328,7 @@ function prod_in_neighbors(terms)
         push!(result, set_content(t, mul(get_body(t), rem_terms)); name="prod_in")
     end
     return result
-end
+end =#
 
 function prod_const_neighbors(terms)
     result = NeighborList()
@@ -515,11 +539,13 @@ end
 function sum_out_linear_op(s::Sum)
     result = NeighborList()
     summand = get_body(s)
-    if isa(summand, PrimitiveCall) || (isa(summand, Conjugate) && isa(get_body(summand), PrimitiveCall))
-        linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
-        new_sum = call(mapp(summand), pct_sum(get_bound(s)..., first(args(summand))))
-        push!(result, new_sum; dired=true, name="linear_sum_out")
-    end
+    (isa(summand, PrimitiveCall) ||
+     (isa(summand, Conjugate) &&
+      isa(get_body(summand), PrimitiveCall))) || return result
+    linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
+    new_sum = call(mapp(summand), pct_sum(get_bound(s)..., first(args(summand))))
+
+    push!(result, new_sum; dired=true, name="linear_sum_out")
     return result
 end
 

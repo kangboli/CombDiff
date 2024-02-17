@@ -156,7 +156,7 @@ function verbose(d::T) where {T<:AbstractDelta}
     indent("$(verbose(last(content(d)))))::$(verbose(get_type(d)))")
 end
 
-pretty(m::Mul) = "($(join(pretty.(content(get_body(m))), "⋅")))"
+pretty(m::Mul) = "$(join(pretty.(sort(content(get_body(m)),by=is_negative,rev=true)), "⋅"))"
 
 function latex(m::Mul)
     negative_first = sort(content(get_body(m)), by=is_negative, rev=true)
@@ -225,7 +225,7 @@ verbose(c::Constant) = "$(get_body(c))::$(verbose(get_type(c)))"
 function pretty(v::PCTVector, paren=false)
     terms = (t -> isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
     result = join(terms, ", ")
-    return paren ? "($(result))" : result
+    return paren ? "𝕧($(result))" : "$(result)"
 end
 
 function latex(v::PCTVector, paren=false)
@@ -241,7 +241,7 @@ end
 function verbose(v::PCTVector, paren=false)
     terms = (t -> isa(t, PCTVector) ? verbose(t, true) : verbose(t)).(content(v))
     result = join(terms, ", ")
-    return paren ? "($(result))" : result
+    return "𝕧($(result))"
 end
 
 function Base.show(io::IO, ::MIME"text/latex", m::APN)
