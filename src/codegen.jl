@@ -92,7 +92,7 @@ function codegen(c::PrimitiveCall)
 end
 
 function codegen(v::PCTVector)
-    return :([$(codegen.(content(v)))...])
+    return :([$(codegen.(content(v))...)])
 end
 
 function codegen(m::Monomial)
