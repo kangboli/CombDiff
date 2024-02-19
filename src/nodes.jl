@@ -116,6 +116,7 @@ struct Map <: AbstractMap
 end
 
 function pct_map(terms::Vararg{APN})
+    length(terms) == 1 && error("map with no argument is not allowed")
     terms = collect(terms)
     make_node(Map, pct_vec(terms[1:end-1]...), last(terms))
 end
@@ -159,12 +160,19 @@ end
 
 struct Call <: AbstractCall
     type::AbstractPCTType
-    mapp::Union{Map,Pullback,Call,Add}
+    mapp::APN
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback,Call,Add}, args::Vararg)
-    make_node(Call, mapp, make_node(PCTVector, args...))
+function call(mapp::APN, args::Vararg)
+    #= if isa(mapp, Map) && length(get_bound(mapp)) != length(args)
+        println(pretty(mapp))
+        println.(pretty.(args))
+        get_body(first(args)) != :t && error("ahah")
+        #= length(get_bound(mapp)) == 3 && error("Aha") =#
+    end =#
+    arg_vec = pct_vec(args...)
+    make_node(Call, mapp, arg_vec)
 end
 
 struct PrimitiveCall <: AbstractCall
@@ -344,6 +352,8 @@ function pct_copy(body::Var)
     make_node(Copy, body)
 end
 
+name(c::Copy) = name(get_body(c))
+
 struct Let <: APN
     type::AbstractPCTType
     bound::PCTVector
@@ -354,10 +364,21 @@ end
 args(l::Let) = l.args
 function pct_let(terms::Vararg{APN})
     terms = collect(terms)
-    make_node(Let, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
+    bounds = pct_vec(terms[1:end÷2]...)
+    args = pct_vec(terms[end÷2+1:end-1]...)
+    body = terms[end]
+    make_node(Let, bounds, args, body)
 end
 
 content_fields(::Type{Let}) = [:bound, :args, :body]
+function Base.iterate(n::Let)
+    isa(get_body(n), PCTVector) || error("iterating a let that does not return a vector")
+    return n, 1
+end
+function Base.iterate(::Let, state::Int)
+    return nothing
+end
+#= Base.length(n::Let) = length(get_body(n)) =#
 
 
 struct Negate <: APN

@@ -1,4 +1,4 @@
-export 
+export
     make_node,
     content,
     set_content,
@@ -154,7 +154,7 @@ end
 
 symmetric(d::Domain) = haskey(d.meta, :symmetric) && d.meta[:symmetric]
 symmetric(::ElementType) = false
-symmetric(v::Var) = symmetric(get_type(v)) 
+symmetric(v::Var) = symmetric(get_type(v))
 
 is_periodic(d::Domain) = haskey(d.meta, :periodic) && d.meta[:periodic]
 is_periodic(::ElementType) = false

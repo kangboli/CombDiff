@@ -289,11 +289,11 @@ end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
 
 function pretty(c::Composition)
-    join(map(f -> pretty(f), content(get_body(c))), "∘")
+    join(map(f -> pretty(f), content(get_body(c))), " ∘\n")
 end
 
 function latex(c::Composition)
-    join(map(f -> latex(f), content(get_body(c))), "∘")
+    join(map(f -> latex(f), content(get_body(c))), "\\circ")
 end
 
 # This function is only for the purpose of displaying the negative sign.
@@ -349,5 +349,5 @@ function pretty(c::Copy)
 end
 
 function latex(c::Copy)
-    "\\%$(latex(get_body(c)))"
+    "\\%$(pretty(get_body(c)))"
 end

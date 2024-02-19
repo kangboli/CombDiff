@@ -821,3 +821,7 @@ end
 function neighbors(v::Univariate; settings=default_settings)
     return sub_neighbors(v; settings=settings)
 end
+
+function neighbors(v::Let; settings=default_settings)
+    return sub_neighbors(v; settings=settings)
+end
