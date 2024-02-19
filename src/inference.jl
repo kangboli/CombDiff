@@ -105,6 +105,7 @@ function inference(l::Let, context::TypeContext)
     typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
+        f = isa(f, Copy) ? get_body(f) : f
         f = set_type(f, get_type(a))
         push!(typed_bound, f)
         push!(typed_args, a)

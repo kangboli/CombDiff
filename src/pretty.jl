@@ -344,3 +344,10 @@ function verbose(n::Log)
     "log($(verbose(get_body(n))))::$(get_type(n))"
 end
 
+function pretty(c::Copy)
+    "%$(pretty(get_body(c)))"
+end
+
+function latex(c::Copy)
+    "\\%$(latex(get_body(c)))"
+end

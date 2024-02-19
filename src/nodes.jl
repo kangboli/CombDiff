@@ -26,7 +26,9 @@ export
     composite,
     Composition,
     pct_exp,
-    pct_log
+    pct_log,
+    pct_let,
+    pct_copy
 
 abstract type TerminalNode <: APN end
 
@@ -333,6 +335,15 @@ is_zero(t) = isa(t, Constant) && get_body(t) == 0
 is_one(t) = isa(t, Constant) && get_body(t) == 1
 is_minus_one(t) = isa(t, Constant) && get_body(t) == -1
 
+struct Copy <: Univariate
+    type::AbstractPCTType
+    body::Var
+end
+
+function pct_copy(body::Var)
+    make_node(Copy, body)
+end
+
 struct Let <: APN
     type::AbstractPCTType
     bound::PCTVector
@@ -356,6 +367,20 @@ end
 
 function call(vec::PCTVector, c::Constant)
     return content(vec)[get_body(c)]
+end
+
+struct Omega <: APN
+    type::AbstractPCTType
+    bound::PCTVector
+    body::APN
+    function Omega(type, bound::PCTVector, summand::APN)
+        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, N()) : t for t in content(bound)]...)
+        new(type, bound, summand)
+    end
+end
+
+function pct_omega(terms::Vararg)
+    return make_node(Omega, pct_vec(terms[1:end-1]...), last(terms))
 end
 
 struct Composition <: APN

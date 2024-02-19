@@ -464,22 +464,24 @@ function parse_let_node(l::Expr)
 
     substitutions = l.args[1].head == :block ? l.args[1].args : [l.args[1]]
 
-    bounds = []
-    args = []
+    bounds, args = [], []
 
     function parse_subst!(a::Expr)
-        @assert a.head == Symbol("=")
-        push!(bounds, :($(parse_node(a.args[1]))))
+        if a.head == :const
+            a = a.args[1]
+            push!(bounds, :(pct_copy($(parse_node(a.args[1])))))
+        elseif a.head == Symbol("=")
+            push!(bounds, :($(parse_node(a.args[1]))))
+        end
         push!(args, :($(parse_node(a.args[2]))))
     end
 
     parse_subst!.(substitutions)
     content = parse_node(l.args[2])
 
-    return :(make_node(
-        Let,
-        pct_vec($(bounds...)),
-        pct_vec($(args...)),
+    return :(pct_let(
+        $(bounds...),
+        $(args...),
         $(content),
     ))
 end
@@ -519,7 +521,7 @@ function parse_block_node(n::Expr)
     return statement_to_let(statements, return_value)
 end
 
-function statement_to_let(statements::Vector, return_value::Union{Expr, Symbol})
+function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
     return :(make_node(Let, pct_vec($(bound...)), pct_vec($(args...)), $(return_value)))

@@ -500,7 +500,7 @@ end
 function decompose(z::APN, ov::AbstractCall)::PComp
     if isa(mapp(ov), PrimitivePullback) && !isa(get_body_type(get_type(mapp(ov))), VecType)
         zs..., k = content(args(ov))
-        if any(t->contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
+        if any(t -> contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
             maptype = MapType(VecType([get_type(k)]), get_type(ov))
             bp = BPullback(pct_vec(mapp(ov), zs...), maptype)
             return push(decompose(z, k), bp)
@@ -525,6 +525,32 @@ function pp(bp::BPullback)
 end
 pretty(bp::BPullback) = pretty(as_map(bp))
 
+struct BLetConst <: ABF
+    param::PCTVector
+    maptype::MapType
+end
+
+function decompose(z::APN, ov::Let)::PComp
+    params = pct_vec(get_bound(ov), args(ov))
+    contains_name(params, get_body(z)) && error("The input variables currently cannot appear in a const expression.")
+    maptype = MapType(v_wrap(get_type(ov)), get_type(ov))
+    lc = BLetConst(params, maptype)
+    return push(decompose(z, get_body(ov)), lc)
+end
+
+function as_map(lc::BLetConst)
+    bounds, args = param(lc)
+    zs = z_vars(lc)
+    return pct_map(zs..., pct_let(bounds..., args..., zs...))
+end
+
+"""
+𝒫 (z -> let ... z end)(z, k) = let ... k end
+"""
+function pp(lc::BLetConst)
+    zs, ks = zk_vars(lc)
+    pct_map(zs..., ks..., call(as_map(lc), ks...))
+end
 
 v_wrap(n::APN)::PCTVector = pct_vec(n)
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])

@@ -6,10 +6,12 @@ express quantum chemistry models including those written in the second
 quantization notation and give the derived-by-hand quality gradient by
 literally giving the latex formula that is otherwise produced by hand.
 
-This package is not just another symbolic algebra system or automatic
-differentiation system. It is a language that is simultaneously capable of
-both.
-
+There are two equivalent descriptions for what this package this depending on
+the audience. The version filled with buzzwords for begging money is
+a framework for scientific machine learning that blends neural networks and
+quantum physics. The version for those who are technically competent is
+a lisp-like DSL for describing models written in the first/second quantized
+notation and a compiler that differentiates and simplifies the models. 
 
 ## Usage
 
