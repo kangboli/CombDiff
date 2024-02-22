@@ -83,7 +83,7 @@ end
     return result
 end =#
 function is_pullback_of_univariate(p::AbstractPullback)
-    isa(get_body_type(get_type(get_body(p))), ElementType) 
+    isa(get_body_type(get_type(get_body(p))), ElementType)
 end
 
 function delta_out_pullback_neighbors(c::PrimitiveCall)
@@ -242,6 +242,28 @@ function combine_maps(terms::Vector)
     return add(remaining_terms..., new_maps...)
 end
 
+function add_let(a::Add)
+    result = NeighborList()
+    d_let = Dict()
+    rest = []
+    for t in content(get_body(a))
+        if !isa(t, Let)
+            push!(rest, t)
+            continue
+        end
+        d_let[get_bound(t)=>args(t)] =
+            push!(get(d_let, get_bound(t) => args(t), []), get_body(t))
+    end
+    #= if length(keys(d_let)) > 2
+        ks = collect(keys(d_let))
+        println(content(last(ks[1])) .== content(last(ks[3])))
+    end =#
+
+    let_factors = [pct_let(first(k)..., last(k)..., add(v...)) for (k, v) in d_let]
+    new_term = add(let_factors..., rest...)
+    push!(result, new_term; dired=true, name="add let")
+    return result
+end
 
 function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
@@ -257,6 +279,7 @@ function neighbors(a::Add; settings=default_settings)
     #= append!(result, combine_map_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
     append!(result, sub_neighbors(a; settings=settings))
+    append!(result, add_let(a))
     return result
 end
 
@@ -550,7 +573,7 @@ function sum_out_linear_op(s::Sum)
 end
 
 
-"""
+#= """
 sum(i, i * sum(j, A(i, j) * j)) = sum(j, j * sum(i, i * A(i, j)))
 This is broken. Do not use.
 """
@@ -600,7 +623,7 @@ function sum_exchange(s::Sum)
     end
     return result
 end
-
+ =#
 
 
 function sum_out_delta(s::Sum)
@@ -666,6 +689,26 @@ function sum_shift_neighbors(s::Sum)
     return result
 end
 
+function sum_let_const_out(s::Sum)
+    result = NeighborList()
+    body = get_body(s)
+    isa(get_body(s), Let) || return result
+    interior, exterior = [], []
+    for b in get_bound(s)
+        free_let = union!(get_free(get_bound(body)), get_free(args(body)))
+        if any(t -> get_body(t) == get_body(b), free_let)
+            push!(exterior, b)
+        else
+            push!(interior, b)
+        end
+    end
+
+    new_term = pct_sum(exterior...,
+        pct_let(get_bound(body)..., args(body)...,
+            pct_sum(interior..., get_body(body))))
+    push!(result, new_term; dired=true, name="let out")
+    return result
+end
 
 """
 sum((i, j), x(i) + y(j)) <-> sum((i, j), x(i)) + sum((i, j), y(j))
@@ -713,6 +756,7 @@ function neighbors(s::Sum; settings=default_settings)
     #= settings[:clench_sum] && append!(result, clench_sum(s)) =#
     append!(result, sum_out_linear_op(s))
     append!(result, sum_out_delta(s))
+    append!(result, sum_let_const_out(s))
     if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))
         append!(result, sum_sym_neighbors(s))
@@ -722,7 +766,7 @@ function neighbors(s::Sum; settings=default_settings)
     return result
 end
 
-function prod_ex_neighbors(p::Prod)
+#= function prod_ex_neighbors(p::Prod)
     result = NeighborList()
     i, j = get_bound(p), get_bound(get_body(p))
     push!(result, pct_product(j, i, get_body(get_body(p))); name="prod_ex")
@@ -744,7 +788,7 @@ function prod_power_neighbors(p::Prod)
     range = add(upper(d), mul(constant(-1), lower(d)))
     push!(result, mul(get_body(p), range); dired=true, name="prod_power")
     return result
-end
+end =#
 
 function prod_dist_neighbors(p::Prod)
     result = NeighborList()
@@ -774,9 +818,9 @@ function neighbors(p::Prod; settings=default_settings)
         push!(result, set_content(p, t); dired=d, name=s)
     end
 
-    isa(get_body(p), Prod) && append!(result, prod_ex_neighbors(p))
-    symmetric(get_bound(p)) && append!(result, prod_sym_neighbors(p))
-    !contains_name(get_body(p), name(get_bound(p))) && append!(result, prod_power_neighbors(p))
+    #= isa(get_body(p), Prod) && append!(result, prod_ex_neighbors(p))
+    symmetric(get_bound(p)) && append!(result, prod_sym_neighbors(p)) =#
+    #= !contains_name(get_body(p), name(get_bound(p))) && append!(result, prod_power_neighbors(p)) =#
     append!(result, prod_dist_neighbors(p))
     append!(result, prod_sum_neighbors(p))
 
@@ -822,6 +866,48 @@ function neighbors(v::Univariate; settings=default_settings)
     return sub_neighbors(v; settings=settings)
 end
 
-function neighbors(v::Let; settings=default_settings)
-    return sub_neighbors(v; settings=settings)
+function let_const_bound_delta_prop(lt::Let)
+    result = NeighborList()
+    bound = [get_bound(lt)...]
+    new_args = [args(lt)...]
+    body = get_body(lt)
+
+    for i in 1:length(bound)
+        v = new_args[i]
+        isa(v, Delta) || continue
+        u, l, b = upper(v), lower(v), get_body(v)
+        any(t -> contains_name(pct_vec(u, l), name(t)), bound[1:i]) && continue
+        new_args[i] = b
+        d = delta(u, l, get_body(bound[i]))
+        for j = i+1:length(bound)
+            new_args[j] = subst(new_args[j], get_body(bound[i]), d)
+        end
+        body = subst(body, get_body(bound[i]), d)
+    end
+    push!(result, pct_let(bound..., new_args..., body))
+    return result
+end
+
+function let_const_body_delta_out(lt::Let)
+    result = NeighborList()
+    body = get_body(lt)
+    isa(body, Delta) || return result
+    u, l, b = upper(body), lower(body), get_body(body)
+
+    any(t -> contains_name(pct_vec(u, l), name(t)),
+        get_bound(lt)) && return result
+
+    new_term = delta(u, l, pct_let(get_bound(lt)...,
+        args(lt)..., b
+    ))
+    push!(result, new_term; dired=true, name="let delta out")
+    return result
+end
+
+function neighbors(lt::Let; settings=default_settings)
+    result = NeighborList()
+    append!(result, sub_neighbors(lt; settings=settings))
+    append!(result, let_const_bound_delta_prop(lt))
+    append!(result, let_const_body_delta_out(lt))
+    return result
 end

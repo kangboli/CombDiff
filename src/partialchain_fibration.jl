@@ -559,8 +559,12 @@ function pp(cc::CopyComp)
     func_output_types = map(get_body_type, its)
     ots = v_wrap(output_type(cc))
     y_0_type = first(func_input_types) |> get_content_type
-    x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...) |> v_unwrap
-    k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...) |> v_unwrap
+    x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...)
+    k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...)
+    l_0 = pct_vec(map((k, x) -> call(k, x), content(k_0), content(x_0))...)
+    x_0 = v_unwrap(x_0)
+    k_0 = v_unwrap(k_0)
+    l_0 = v_unwrap(l_0)
 
     fs = map(var, new_symbol(; num=length(its), symbol=:_f), its)
 
@@ -569,26 +573,28 @@ function pp(cc::CopyComp)
     N = length(fs)
     ys_values = Vector{APN}(undef, N)
     for i in 0:N-1
-        y_prev = i == 0 ? x_0 : ys[i]
+        y_prev = i == 0 ? x_0 : get_body(ys[i])
         ys_values[i+1] = call(fs[i+1], y_prev)
     end
 
     ls_values = Vector{APN}(undef, N)
     for i in 0:N-1
-        y_feed = i == N - 1 ? x_0 : ys[N-i-1]
-        l_prev = i == 0 ? k_0 : ls[i]
+        y_feed = i == N - 1 ? x_0 : get_body(ys[N-i-1])
+        l_prev = i == 0 ? l_0 : get_body(ls[i])
         ls_values[i+1] = call(primitive_pullback(fs[N-i]), y_feed, l_prev)
     end
 
     function body_elem(m::Int)
-        y_prev = m == 1 ? x_0 : ys[m-1]
-        l_next = m == N ? k_0 : ls[N-m]
+        y_prev = m == 1 ? x_0 : get_body(ys[m-1])
+        l_next = m == N ? l_0 : get_body(ls[N-m])
         λ = var(:_λ, get_type(y_prev))
-        return pct_map(λ, pct_sum(x_0, delta(y_prev, λ, l_next)))
+        b = delta(y_prev, λ, l_next)
+        return pct_map(λ, pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
+            ys_values..., ls_values[1:end-1]..., b)))
     end
-    body = pct_vec(map(body_elem, 1:N)...)
+    body = map(body_elem, 1:N)
 
-    result = pct_map(fs..., k_0, pct_let(ys..., ls..., ys_values..., ls_values..., body))
+    result = pct_map(fs..., k_0, pct_vec(body...))
     return result
 end
 

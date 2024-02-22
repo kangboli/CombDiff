@@ -32,53 +32,6 @@ function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
     return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
 end
 
-function e_class_reduction(::Type{S}, mapp::T, new_args::PCTVector) where {S<:AbstractCall,T<:APN}
-    """
-    f(let g = ...
-        (g, q)
-    end)
-
-    let g = ...
-        f(g, q)
-    end
-    """
-    println(pretty(new_args))
-    if typeof(new_args) == Let
-        let_arg = new_args
-        body = get_body(let_arg)
-        error("ahah")
-        new_map_var = var(first(new_symbol(mapp, let_arg;)), get_type(mapp))
-        new_map = pct_map(new_map_var,
-            pct_let(get_bound(let_arg)..., args(let_arg)...,
-                call(new_map_var, body...)))
-
-        result = evaluate(call(new_map, mapp))
-        return e_class_reduction(typeof(result), terms(result)...)
-        #= return typeof(result), terms(result), partial_inference(Let, terms(result)...) =#
-    end
-
-    """
-    (let f = ...
-        m ->  f(m) 
-    end)(x) 
-
-    (m -> let f = ...
-        f(m)
-    end)(x)
-    """
-    if T == Let
-        body = get_body(mapp)
-        new_vars = map(var, new_symbol(mapp; num=length(new_args)))
-        new_map = pct_map(new_vars...,
-            pct_let(get_bound(mapp)..., args(mapp)..., evaluate(call(body, new_vars...))))
-
-        result = call(new_map, new_args...)
-        return typeof(result), terms(result), partial_inference(Let, terms(result)...)
-    end
-
-    return S, [mapp, new_args...], partial_inference(S, mapp, new_args...)
-end
-
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
@@ -221,7 +174,7 @@ function e_class_reduction(::Type{T}, body::S) where {T<:Univariate,S<:APN}
     end
 end
 
-function e_class_reduction(::Type{PCTVector}, elements::Vararg)
+#= function e_class_reduction(::Type{PCTVector}, elements::Vararg)
     i = findall(t -> isa(t, Let), elements)
     isempty(i) && return PCTVector, elements, partial_inference(PCTVector, elements...)
     length(i) > 1 && error("only one let is currently supported for unwrapping let expression in PCT vectors")
@@ -242,4 +195,71 @@ function e_class_reduction(::Type{PCTVector}, elements::Vararg)
     end
 
     return typeof(result), terms(result), get_type(result)
+end =#
+
+
+
+#= function e_class_reduction(::Type{S}, mapp::T, arguments::PCTVector) where {S<:AbstractCall,T<:APN}
+    """
+    f(let g = ...
+        (g, q)
+    end)
+
+    let g = ...
+        f(g, q)
+    end
+    """
+    #= is_let = findall(t -> isa(t, Let), content(arguments))
+    is_not_let = findall(t -> !isa(t, Let), content(arguments))
+    if !isempty(is_let) && reduce(isequal, map(get_bound, arguments[is_let])) && reduce(isequal, map(args, arguments[is_let]))
+
+        new_args = Vector{APN}(map(var, new_symbol(mapp, arguments; num=length(arguments)), get_type.(arguments)))
+        for i in is_let
+            new_args[i] = get_body(arguments[i])
+        end
+        mapp_var = var(first(new_symbol(mapp, arguments, new_args...)), get_type(mapp))
+        new_let = pct_let(get_bound(first(arguments[is_let]))..., args(first(arguments[is_let]))..., call(mapp_var, new_args...))
+        result = evaluate(call(pct_map(mapp_var, new_args[is_not_let]..., new_let), mapp, arguments[is_not_let]...))
+
+        return typeof(result), terms(result), partial_inference(typeof(result), terms(result)...)
+    end =#
+
+
+
+    return S, [mapp, arguments], partial_inference(S, mapp, arguments)
+    #= println(pretty(new_args))
+    if typeof(new_args) == Let
+        let_arg = new_args
+        body = get_body(let_arg)
+        error("ahah")
+        new_map_var = var(first(new_symbol(mapp, let_arg;)), get_type(mapp))
+        new_map = pct_map(new_map_var,
+            pct_let(get_bound(let_arg)..., args(let_arg)...,
+                call(new_map_var, body...)))
+
+        result = evaluate(call(new_map, mapp))
+        return e_class_reduction(typeof(result), terms(result)...)
+        #= return typeof(result), terms(result), partial_inference(Let, terms(result)...) =#
+    end =#
+
+    """
+    (let f = ...
+        m ->  f(m) 
+    end)(x) 
+
+    (m -> let f = ...
+        f(m)
+    end)(x)
+    """
+    #= if T == Let
+        body = get_body(mapp)
+        new_vars = map(var, new_symbol(mapp; num=length(new_args)))
+        new_map = pct_map(new_vars...,
+            pct_let(get_bound(mapp)..., args(mapp)..., evaluate(call(body, new_vars...))))
+
+        result = call(new_map, new_args...)
+        return typeof(result), terms(result), partial_inference(Let, terms(result)...)
+    end =#
+
 end
+ =#

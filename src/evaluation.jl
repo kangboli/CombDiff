@@ -230,8 +230,9 @@ evaluate(c::TerminalNode) = c
 function evaluate(c::Call)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
+    isa(mapp(c), Map) || error("Evaluating a call that is not that of a map")
 
-    new_bound = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
+    new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
     #= println(pretty(c))
     println(pretty(pct_vec(new_bound...)))
     println(pretty(args(c))) =#
@@ -264,7 +265,7 @@ function evaluate(l::Let)
     if !isempty(substs)
         new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...))
     else
-        new_call = get_body(l)
+        new_call = evaluate(get_body(l))
     end
     result = pct_let(copies..., copy_args..., new_call)
     return result
@@ -276,7 +277,6 @@ has_call(::Copy) = false
 function has_call(c::Call) 
     isa(mapp(c), Copy) && return false
     isa(mapp(c), PrimitivePullback) && return false
-    #= println(pretty(c)) =#
     return true
 end
 

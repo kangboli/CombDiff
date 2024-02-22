@@ -11,6 +11,8 @@ function latex_indent(s::AbstractString)
     join(latex_indent.(split(s, "\\\\")), "\\\\")
 end
 
+verbose(n::APN) = pretty(n)
+
 verbose(t::MapType) = "[$(verbose(get_bound_type(t)))->$(verbose(get_body_type(t)))]"
 
 verbose(v::VecType) = "$(join(verbose.(get_content_type(v)), "×"))"
