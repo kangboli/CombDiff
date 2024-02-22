@@ -105,15 +105,16 @@ function inference(l::Let, context::TypeContext)
     typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
-        f = isa(f, Copy) ? get_body(f) : f
+        is_copy = isa(f, Copy)
+        f = is_copy ? get_body(f) : f
         f = set_type(f, get_type(a))
-        push!(typed_bound, f)
+        push!(typed_bound, is_copy ? pct_copy(f) : f)
         push!(typed_args, a)
         push_var!(context, get_body(f), f)
     end
     
     typed_content = inference(get_body(l), context)
-    map(f -> pop_var!(context, get_body(f)), typed_bound)
+    map(f -> pop_var!(context, isa(f, Copy) ?  get_body(get_body(f)) : get_body(f)), typed_bound)
     return l = pct_let(typed_bound..., typed_args..., typed_content) 
 end
 

@@ -95,10 +95,45 @@ function delta_out_pullback_neighbors(c::PrimitiveCall)
     push!(result, delta(upper(k), lower(k), call(mapp(c), zs..., get_body(k))); dired=true, name="delta_out_pullback")
 end
 
+
+"""
+𝒫 (z -> f(z)) (t, let p = g(q)
+    p * k
+end)
+
+(t -> let p = g(q)
+    t (p * k)
+end)(k -> P(z -> f(z))(t, k))
+
+𝒫 (z -> f(z)) (p, let p = g(q)
+    p * k
+end)
+"""
+function let_out_pullback(p::PrimitiveCall)
+    result = NeighborList()
+    isa(mapp(p), PrimitivePullback) || return result
+    inner_map = get_body(mapp(p))
+    map_output_type = get_body_type(get_type(inner_map))
+    isa(map_output_type, VecType) && return result
+    new_args..., let_term = content(args(p))
+    isa(let_term, Let) || return result
+
+    t = var(first(new_symbol(p)), MapType(VecType([get_type(let_term)]), get_type(p)))
+    new_let = pct_map(t, pct_let(get_bound(let_term)..., args(let_term)...,
+        call(t, get_body(let_term))))
+
+    k = var(first(new_symbol(p, t)), get_type(let_term))
+    new_map = pct_map(k, evaluate(call(mapp(p), new_args..., k)))
+
+    push!(result, eval_all(call(new_let, new_map)); dired=true, name="let out pullback")
+    return result
+end
+
 function neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
 
     append!(result, delta_out_pullback_neighbors(c))
+    append!(result, let_out_pullback(c))
     function apply_symmetry(indices, op)
         # Apply the permutation.
         new_term = set_content(c, mapp(c), args(c)[collect(indices)])
@@ -124,8 +159,12 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
     return result
 end
 
-function neighbors(::PrimitivePullback; settings=default_settings)
-    return NeighborList()
+
+function neighbors(p::PrimitivePullback; settings=default_settings)
+    result = NeighborList()
+    append!(result, sub_neighbors(p; settings=settings))
+    return result
+    #= return NeighborList() =#
 end
 
 
@@ -809,7 +848,7 @@ function prod_sum_neighbors(p::Prod)
     return result
 end
 
-
+#=
 function neighbors(p::Prod; settings=default_settings)
     result = NeighborList()
 
@@ -825,7 +864,7 @@ function neighbors(p::Prod; settings=default_settings)
     append!(result, prod_sum_neighbors(p))
 
     return result
-end
+end =#
 
 
 function neighbors(d::Delta; settings=default_settings)
@@ -856,9 +895,39 @@ function neighbors(c::Conjugate; settings=default_settings)
     return result
 end
 
+"""
+(x, p, let p = q; f(p) end)
+
+((a, b) -> let p = q
+    (a, b, f(p))
+end) (x, p)
+
+let p' = q
+    (x, p, f(p'))
+end
+"""
+function let_out_vector(v::PCTVector)
+    result = NeighborList()
+    i = findfirst(t -> isa(t, Let), content(v))
+    i === nothing && return result
+
+    let_term = content(v)[i]
+    new_vec = Vector{APN}(map(var, new_symbol(; num=length(v)), get_type.(content(v))))
+    new_vec[i] = get_body(let_term)
+
+    new_map = pct_map(new_vec[1:end.!=i]..., pct_let(get_bound(let_term)...,
+        args(let_term)..., pct_vec(new_vec...)))
+
+    push!(result, evaluate(call(new_map, content(v)[1:end.!=i]...)); dired=true, name="let out vector")
+    return result
+end
+
 function neighbors(v::PCTVector; settings=default_settings)
-    all(t -> isa(t, Var), content(v)) && return NeighborList()
-    return sub_neighbors(v; settings=settings)
+    result = NeighborList()
+    all(t -> isa(t, Var), content(v)) && return result
+    append!(result, let_out_vector(v))
+    append!(result, sub_neighbors(v; settings=settings))
+    return result
 end
 
 
@@ -904,10 +973,24 @@ function let_const_body_delta_out(lt::Let)
     return result
 end
 
+function let_collapse(lt::Let)
+    result = NeighborList()
+    inner_lt = get_body(lt)
+    isa(inner_lt, Let) || return result
+    get_bound(lt) == get_bound(inner_lt) || return result
+    args(lt) == args(inner_lt) || return result
+    push!(result, pct_let(get_bound(lt)..., args(lt)..., get_body(inner_lt)); dired=true, name="let collapse")
+    return result
+end
+
+
 function neighbors(lt::Let; settings=default_settings)
     result = NeighborList()
     append!(result, sub_neighbors(lt; settings=settings))
     append!(result, let_const_bound_delta_prop(lt))
     append!(result, let_const_body_delta_out(lt))
+    append!(result, let_collapse(lt))
     return result
 end
+
+

@@ -174,6 +174,14 @@ function e_class_reduction(::Type{T}, body::S) where {T<:Univariate,S<:APN}
     end
 end
 
+function e_class_reduction(::Type{Let}, bound::PCTVector, args::PCTVector, body::APN)
+    if isempty(content(bound))
+        return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
+    end
+
+    return Let, [bound, args, body], partial_inference(Let, bound, args, body)
+end
+
 #= function e_class_reduction(::Type{PCTVector}, elements::Vararg)
     i = findall(t -> isa(t, Let), elements)
     isempty(i) && return PCTVector, elements, partial_inference(PCTVector, elements...)

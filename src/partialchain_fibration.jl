@@ -347,6 +347,7 @@ function pp(c::PComp)::Map
     p_expr = pp(x_expr)
     p_call = call(p_expr, zs..., chain...)
     chain = v_wrap(eval_all(p_call)) =#
+    #= println(pretty(p_expr)) =#
     chain = v_wrap(ecall(p_expr, ys..., v_wrap(ecall(p_f, expr..., ks...))...))
     f_map = as_map(f)
     if any(s -> contains_name(f_map, s), name.(zs))
@@ -482,7 +483,7 @@ function pp(b::BMap)::AbstractMap
         end
         #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
         pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
-        pct_map(zs..., ks..., pct_vec(pullbacks...))
+        return pct_map(zs..., ks..., pct_vec(pullbacks...))
     end
     return process_param(m)
 end
@@ -530,8 +531,9 @@ struct CopyComp <: ABF
 end
 
 function decompose(z::APN, ov::Composition)
-    maptype = MapType(get_type(get_body(ov)), get_type(ov))
-    return push(decompose(z, get_body(ov)), CopyComp(maptype))
+    body = pct_vec(reverse(content(get_body(ov)))...)
+    maptype = MapType(get_type(body), get_type(ov))
+    return push(decompose(z, body), CopyComp(maptype))
 end
 
 function as_map(cc::CopyComp)
@@ -569,7 +571,7 @@ function pp(cc::CopyComp)
     fs = map(var, new_symbol(; num=length(its), symbol=:_f), its)
 
     ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
-    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), reverse(func_input_types)))
+    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types))))
     N = length(fs)
     ys_values = Vector{APN}(undef, N)
     for i in 0:N-1
@@ -633,5 +635,6 @@ function v_wrap(n::Let)
 end
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
-v_unwrap(n::Union{PCTVector,Vector}) = length(n) == 1 ? first(n) : n
+v_unwrap(n::Union{PCTVector,Vector, VecType}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n
+

@@ -230,12 +230,10 @@ evaluate(c::TerminalNode) = c
 function evaluate(c::Call)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
+    isa(mapp(c), PrimitivePullback) && return call(eval_all(mapp(c)), map(eval_all, content(args(c)))...)
     isa(mapp(c), Map) || error("Evaluating a call that is not that of a map")
 
     new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    #= println(pretty(c))
-    println(pretty(pct_vec(new_bound...)))
-    println(pretty(args(c))) =#
     @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
 
     n = evaluate(get_body(mapp(c)))
@@ -274,11 +272,16 @@ end
 has_call(n::APN) = any(has_call, content(n))
 has_call(::TerminalNode) = false
 has_call(::Copy) = false
-function has_call(c::Call) 
+function has_call(c::Call)
     isa(mapp(c), Copy) && return false
-    isa(mapp(c), PrimitivePullback) && return false
+    #= isa(mapp(c), PrimitivePullback) && return false =#
     return true
 end
+function has_call(lt::Let)
+    all(t -> !isa(t, Copy), get_bound(lt)) && return true
+    return has_call(get_body(lt))
+end
+
 
 function eval_all(n::APN)
     while has_call(n)
@@ -286,4 +289,14 @@ function eval_all(n::APN)
     end
     return n
 end
+
+function deprimitize(n::APN)
+    return set_terms(n, map(deprimitize, terms(n))...)
+end
+
+function deprimitize(p::PrimitivePullback)
+    return pullback(get_body(p))
+end
+
+deprimitize(t::TerminalNode) = t
 
