@@ -41,15 +41,24 @@ end
 
 df = vdiff(f)
 
-f, _ = @pct (m::RM) -> 
+f, _ = @pct (m::RM, ReLu::RF) -> 
 let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
     vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
-    pullback((t_1::RM, w::RV) -> (
+    pullback((t_1::RM, t_2::RM, w::RV) -> (
         ((x::RV) -> vip(x, w)) ∘
-        ((x::RV) -> mvp(t_1, x)))(m))
+        ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
+        ((x::RV) -> mvp(t_1, x)) ∘
+        ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
+        ((x::RV) -> mvp(t_2, x)) 
+        )(m))
 end
 df = PCT.eval_pullback(f)
 dfe = eval_all(df)
+PCT.deprimitize(dfe)
+dfee = PCT.eval_pullback(PCT.deprimitize(dfe)) 
+eval_all(dfee)
+dfff = simplify(eval_all(dfee)) |> first 
+df_blas = dfff |> blaserize
 
 @macroexpand @pct (m::RM) -> 
 let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))

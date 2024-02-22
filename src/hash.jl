@@ -130,13 +130,36 @@ function Base.:(==)(m_1::Map, m_2::Map)
     N == length(get_bound(m_2)) || return false
     get_type(get_bound(m_1)) == get_type(get_bound(m_2)) || return false
     new_bounds = map(var, new_symbol(m_1, m_2; num=N), get_type.(content(get_bound(m_1))))
-    evaluate(call(m_1, new_bounds...)) == evaluate(call(m_2, new_bounds...))
+
+    replaced_expr_1 = deepcopy(get_body(m_1))
+    for (old, new) in zip(content(get_bound(m_1)), new_bounds)
+        fast_rename!(replaced_expr_1, old, get_body(new))
+    end
+    replaced_expr_1 = remake_node(replaced_expr_1)
+
+    replaced_expr_2 = deepcopy(get_body(m_2))
+    for (old, new) in zip(content(get_bound(m_2)), new_bounds)
+        fast_rename!(replaced_expr_2, old, get_body(new))
+    end
+    replaced_expr_2 = remake_node(replaced_expr_2)
+
+    return  replaced_expr_1 == replaced_expr_2
+    #= eval_all(call(m_1, new_bounds...)) == eval_all(call(m_2, new_bounds...)) =#
 end
 
 function Base.hash(m::Map, h::UInt)
     N = length(get_bound(m))
     new_bounds = map(var, new_symbol(m; num=N), get_type.(content(get_bound(m))))
-    return hash(evaluate(call(m, new_bounds...)), h)
+
+    replaced_expr = deepcopy(get_body(m))
+    for (old, new) in zip(content(get_bound(m)), new_bounds)
+        fast_rename!(replaced_expr, old, get_body(new))
+    end
+    replaced_expr = remake_node(replaced_expr)
+
+    return hash(replaced_expr, h)
+
+    #= return hash(eval_all(call(m, new_bounds...)), h) =#
 end
 
 function Base.:(==)(d_1::T, d_2::T) where {T<:AbstractDelta}

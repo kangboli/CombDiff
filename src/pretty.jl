@@ -79,9 +79,9 @@ latex(c::Call) = "\\left($(latex(mapp(c)))\\right)\\left($(latex(args(c)))\\righ
 
 verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_type(c)))"
 
-function pretty(c::Conjugate) 
+function pretty(c::Conjugate)
 
-    conj_symbol(t::MapType) = get_body_type(t) == C() ? "⁺" : "ᵀ" 
+    conj_symbol(t::MapType) = get_body_type(t) == C() ? "⁺" : "ᵀ"
     conj_symbol(::ElementType) = "'"
     interior = pretty(get_body(c))
     if isa(c, Map)
@@ -217,7 +217,12 @@ function verbose(a::Add)
     "\n)::$(verbose(get_type(a)))"
 end
 
-pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
+function pretty(p::PrimitiveCall)
+    if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
+        return "∇($(latex(get_body(mapp(p)))))($(pretty(args(p)[1:end-1])))"
+    end
+    "$(pretty(mapp(p)))($(pretty(args(p))))"
+end
 
 function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
