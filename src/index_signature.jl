@@ -77,9 +77,10 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     length(trees_to_compare_1) == length(trees_to_compare_2) || return false
     isempty(trees_to_compare_1) && isempty(trees_to_compare_2) && return true
     if !(node_type(sig_1) <: Commtative )
-        for (t_1, t_2) in zip(trees_to_compare_1, trees_to_compare_2)
-            t_1 == t_2 || return false 
-        end
+        trees_to_compare_1 == trees_to_compare_2 || return false
+        # for (t_1, t_2) in zip(trees_to_compare_1, trees_to_compare_2)
+        #     t_1 == t_2 || return false 
+        # end
     end
 
     trees_to_compare_1 = first.(subtrees(first(first(trees_to_compare_1))))
@@ -87,11 +88,13 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     # trees_to_compare_1 == trees_to_compare_2
 
     # TODO: Change this to a sort based comparison
-    for t in trees_to_compare_1
-        n_1 = count(x -> x == t, trees_to_compare_1)
-        n_2 = count(x -> x == t, trees_to_compare_2)
-        n_1 == n_2 || return false
-    end
+    # A dictionary based algorithm turned out slower.
+    counter(trees_to_compare_1) == counter(trees_to_compare_2) || return false
+    # for t in trees_to_compare_1
+    #     n_1 = count(x -> x == t, trees_to_compare_1)
+    #     n_2 = count(x -> x == t, trees_to_compare_2)
+    #     n_1 == n_2 || return false
+    # end
 
     return true
 

@@ -308,12 +308,13 @@ function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(a))
 
-    if settings[:gcd]
-        append!(result, gcd_neighbors(terms))
-    end
     if count(a -> isa(a, Map), content(get_body(a))) > 1
         new_add = combine_maps(content(get_body(a)))
         push!(result, new_add; dired=true, name="combine map")
+    end
+
+    if settings[:gcd]
+        append!(result, gcd_neighbors(terms))
     end
     #= append!(result, combine_map_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
@@ -790,11 +791,11 @@ function neighbors(s::Sum; settings=default_settings)
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
+    append!(result, sum_out_delta(s))
     append!(result, sum_dist_neighbors(s))
     settings[:clench_sum] && append!(result, obvious_clench(s))
     #= settings[:clench_sum] && append!(result, clench_sum(s)) =#
     append!(result, sum_out_linear_op(s))
-    append!(result, sum_out_delta(s))
     append!(result, sum_let_const_out(s))
     if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))

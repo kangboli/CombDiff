@@ -18,12 +18,11 @@ function vdiff(p::Pullback)
     #= output_type = get_body_type(get_type(m))  =#
     #= output_type == R() || error("Output must be a real scalar for the gradient to be defined") =#
     function vdiff_single(pcomp)
-        return pcomp |> pp |> eval_all |> propagate_k
+        return pcomp |> pp |> eval_all |> propagate_k |> simplify |> first
     end
 
     univariate_map = f -> decompose(pct_map(f, get_body(m)))
     result = pct_vec(map(f -> ecall(vdiff_single(univariate_map(f)), f), get_bound(m))...)
-    result = result |> simplify |> first
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 

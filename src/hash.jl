@@ -129,6 +129,9 @@ function Base.:(==)(m_1::Map, m_2::Map)
     N = length(get_bound(m_1))
     N == length(get_bound(m_2)) || return false
     get_type(get_bound(m_1)) == get_type(get_bound(m_2)) || return false
+    if get_bound(m_1) == get_bound(m_2)
+        return get_body(m_1) == get_body(m_2)
+    end
     new_bounds = map(var, new_symbol(m_1, m_2; num=N), get_type.(content(get_bound(m_1))))
 
     replaced_expr_1 = deepcopy(get_body(m_1))
@@ -148,18 +151,13 @@ function Base.:(==)(m_1::Map, m_2::Map)
 end
 
 function Base.hash(m::Map, h::UInt)
-    N = length(get_bound(m))
-    new_bounds = map(var, new_symbol(m; num=N), get_type.(content(get_bound(m))))
-
     replaced_expr = deepcopy(get_body(m))
-    for (old, new) in zip(content(get_bound(m)), new_bounds)
-        fast_rename!(replaced_expr, old, get_body(new))
+    for old in content(get_bound(m))
+        fast_rename!(replaced_expr, old, :dummy)
     end
     replaced_expr = remake_node(replaced_expr)
 
     return hash(replaced_expr, h)
-
-    #= return hash(eval_all(call(m, new_bounds...)), h) =#
 end
 
 function Base.:(==)(d_1::T, d_2::T) where {T<:AbstractDelta}
