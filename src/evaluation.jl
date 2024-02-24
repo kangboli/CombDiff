@@ -144,7 +144,20 @@ subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
 
 function subst(n::Var, old::Var, new::APN, ::Bool)
     # The type of the variable is not compared.
-    name(n) == name(old) ? new : n
+    name(n) == name(old) && return new 
+    new_type = subst(get_type(n), old, new)
+    new_type == get_type(n) && return n
+    return set_type(n, new_type)
+end
+
+function subst(t::AbstractPCTType, ::APN, ::APN)
+    return t
+end
+
+function subst(t::Domain, old::Var, new::APN)
+    contains_name(get_type_bound(t), get_body(old)) && return t
+    return Domain(base(t), get_type_bound(t), subst(lower(t), old, new), 
+        subst(upper(t), old, new); meta=meta(t))
 end
 
 function subst(n::T, old::T, new::APN, ::Bool) where {T<:APN}

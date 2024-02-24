@@ -329,7 +329,13 @@ end
 get_expr(n::DomainNode) = n.expr
 
 function parse_domain_node(n::Expr)
-    name = n.args[2]
+    if isa(n.args[2], Symbol)
+        name = n.args[2]
+        bound = :(pct_vec())
+    else
+        name = n.args[2].args[1]
+        bound = :(pct_vec($(map(p -> parse_node(Param, p), n.args[2].args[2:end])...)))
+    end
     block = n.args[3]
     periodic = QuoteNode(false)
     contractable = QuoteNode(true)
@@ -351,7 +357,7 @@ function parse_domain_node(n::Expr)
     end
     return DomainNode(:(
         push_type!(_ctx, $(QuoteNode(name)), inference(Domain(
-            $(base)(), $(lower), $(upper),
+            $(base)(), $(bound), $(lower), $(upper),
             meta=Dict(:name => $(QuoteNode(name)),
                 :periodic => $(periodic),
                 :tensorize => $(tensorize),
@@ -379,9 +385,18 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 
     if p.head == Symbol("::")
         name, type = p.args
-        type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-        isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
+
+        if isa(type, Symbol)
+            type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
+            isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
+        else
+            domain_base = type.args[1] in base_domains ? :($(type.args[1])()) : :(_ctx[$(QuoteNode(type.args[1]))])
+            domain = :(Domain($(domain_base), pct_vec(),
+                $(map(t -> parse_node(t), type.args[2:end])...)))
+            return :(var($(QuoteNode(name)), $(domain)))
+        end
     end
+
     if p.head == :call && p.args[1] == :∈
         param = p.args[2]
         domain = p.args[3]

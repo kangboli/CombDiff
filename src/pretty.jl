@@ -22,13 +22,18 @@ verbose(::UndeterminedPCTType) = "?"
 verbose(::T) where {T<:ElementType} = string(T)
 
 function verbose(d::Domain)
-    name = haskey(meta(d), :name) ? name : ""
+    name = haskey(meta(d), :name) ? meta(d)[:name] : ""
     "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
+function pretty(d::Domain)
+    return verbose(d)
+end
+
+verbose_if_domain(v::Var) = isa(get_type(v), Domain) ? verbose(v) : pretty(v)
 
 function pretty(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
-    params = map(v -> "$(pretty(v))", content(get_bound(m)))
+    params = map(v -> "$(verbose_if_domain(v))", content(get_bound(m)))
     "($(join(params, ", "))) -> \n$(indent(pretty(get_body(m))))"
 end
 
@@ -117,7 +122,7 @@ latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(get_body(p)))\\right)"
 
 verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
-pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(get_body(s))))"
+pretty(s::Sum) = "∑(($(join(map(verbose_if_domain, content(get_bound(s))), ", ")...)), $(pretty(get_body(s))))"
 
 function latex(s::Sum, paren=false)
     indices = []
@@ -357,4 +362,12 @@ end
 
 function latex(c::Copy)
     "\\%$(pretty(get_body(c)))"
+end
+
+function pretty(i::Indicator)
+    "𝕀($(pretty(get_index(i))), $(pretty(lower(i))), $(pretty(upper(i))), $(pretty(get_body(i))))"
+end
+
+function latex(i::Indicator)
+    "𝕀($(latex(get_index(i))), $(latex(lower(i))), $(latex(upper(i))), , $(pretty(get_body(i))))"
 end

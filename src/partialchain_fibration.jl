@@ -351,7 +351,8 @@ function pp(c::PComp)::Map
     chain = v_wrap(ecall(p_expr, ys..., v_wrap(ecall(p_f, expr..., ks...))...))
     f_map = as_map(f)
     if any(s -> contains_name(f_map, s), name.(zs))
-        is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_d), v_wrap(get_type(expr)))
+        i_map_type = get_content_type(get_bound_type(get_type(f_map)))
+        is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_d), i_map_type)
         #= deltas = ks
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)

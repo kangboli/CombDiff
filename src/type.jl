@@ -39,13 +39,14 @@ base(::T) where {T<:ElementType} = T()
 
 struct Domain <: ElementType
     base::ElementType
+    type_bound::APN
     lower::APN
     upper::APN
     meta::Dict
 end
 
-Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) =
-    Domain(base, lower, upper, meta)
+Domain(base::ElementType, bound::APN, lower::APN, upper::APN; meta=Dict()) =
+    Domain(base, bound, lower, upper, meta)
 
 struct ProductType <: AbstractPCTType
     base::AbstractPCTType
@@ -62,6 +63,7 @@ during printing.
 name(d::Domain) = meta(d)[:name]
 
 base(d::Domain) = d.base
+get_type_bound(d::Domain) = d.type_bound
 lower(d::Domain) = d.lower
 upper(d::Domain) = d.upper
 

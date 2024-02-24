@@ -41,30 +41,43 @@ end
 
 df = vdiff(f)
 
-f, _ = @pct (m::RM, ReLu::RF) -> 
-let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
-    vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
-    pullback((t_1::RM, t_2::RM, w::RV) -> (
-        ((x::RV) -> vip(x, w)) ∘
-        ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
-        ((x::RV) -> mvp(t_1, x)) ∘
-        ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
-        ((x::RV) -> mvp(t_2, x)) 
+f, _ = @pct (m::RM, ReLu::RF) ->
+    let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
+        vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
+        pullback((t_1::RM, t_2::RM, w::RV) -> (
+            ((x::RV) -> vip(x, w)) ∘
+            ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
+            ((x::RV) -> mvp(t_1, x)) ∘
+            ((x::RV) -> (i::N) -> ReLu(x(i))) ∘
+            ((x::RV) -> mvp(t_2, x))
         )(m))
-end
+    end
 df = PCT.eval_pullback(f)
 dfe = eval_all(df)
 PCT.deprimitize(dfe)
-dfee = PCT.eval_pullback(PCT.deprimitize(dfe)) 
+dfee = PCT.eval_pullback(PCT.deprimitize(dfe))
 eval_all(dfee)
-dfff = simplify(eval_all(dfee)) |> first 
+dfff = simplify(eval_all(dfee)) |> first
 df_blas = dfff |> blaserize
 
-@macroexpand @pct (m::RM) -> 
-let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
-    vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
-    pullback((t_1::RM, w::RV) -> (
-        ((x::RV) -> vip(x, w)) ∘
-        ((x::RV) -> mvp(t_1, x)))(m))
+@macroexpand @pct (m::RM) ->
+    let mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
+        vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
+        pullback((t_1::RM, w::RV) -> (
+            ((x::RV) -> vip(x, w)) ∘
+            ((x::RV) -> mvp(t_1, x)))(m))
+    end
+
+_, ctx = @pct begin
+    @domain P{M,N} begin
+        base = I
+        lower = M
+        upper = N
+    end
 end
 
+f, _ = @pct (X::RM) -> pullback((W::RM) -> (i::N, j::N) -> sum((p, q), W(p, q) * X(i + p, j + q)))
+pf = PCT.eval_pullback(f)
+
+f, _ = @pct pullback((X::RM) -> (i::N, j::N) -> exp(X(i, j)) * (sum((i, j), exp(X(i, j))))^(-1))
+pf = PCT.eval_pullback(f)

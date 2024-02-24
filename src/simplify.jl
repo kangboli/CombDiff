@@ -1,4 +1,4 @@
-export process_directive, dropp
+export process_directive, dropp, eval_pullback
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)

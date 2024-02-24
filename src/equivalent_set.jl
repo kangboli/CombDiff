@@ -521,33 +521,45 @@ function contract_delta_neighbors(s::Sum)
 
     new_bound = pct_vec(sort(content(get_bound(s)), by=t -> startswith(string(name(t)), "_"), rev=true)...)
     for (i, v) in enumerate(new_bound)
-        contractable(expr::APN, s::Symbol)::Bool = false
-        contractable(expr::Var, s::Symbol)::Bool = name(expr) == s
-        function contractable(expr::Mul, s::Symbol)::Bool
+        contractable(expr::APN, s::Var)::Bool = false
+        contractable(expr::Var, s::Var)::Bool = name(expr) == name(s)
+        function contractable(expr::Mul, s::Var)::Bool
             p = mul(expr, constant(-1))
             isa(p, Var) && contractable(p, s)
         end
-        contractable(expr::Add, s::Symbol)::Bool = any(t -> contractable(t, s), get_body(expr))
+        function contractable(expr::Add, s::Var)::Bool
+            any(t -> contractable(t, s), get_body(expr))
+        end
         #= is_contractable(v) != isempty(range(v)) && error("bug alert! mismatch $(name(v)): $(range(v))") =#
         is_contractable(v) || continue
         #= isempty(range(v)) || continue =#
         indices = content(remove_i(new_bound, i))
 
-        this, other = if contractable(upper(d), name(v))
+        this, other = if contractable(upper(d), v)
             upper(d), lower(d)
-        elseif contractable(lower(d), name(v))
+        elseif contractable(lower(d), v)
             lower(d), upper(d)
         else
             continue
         end
 
-        new = if isa(this, Add)
-            add([mul(constant(-1), t) for t in content(get_body(this))]...)
+        shift = if isa(this, Add)
+            add(v, [mul(constant(-1), t) for t in content(get_body(this))]...)
         else
-            mul(constant(-1), this)
+            add(v, mul(constant(-1), this))
         end
-        new_sum = pct_sum(indices..., subst(get_body(d), v, add(other, v, new)))
+        other = add(other, shift)
+
+        if isa(get_type(v), Domain) && get_type(v) != get_type(other)
+            get_type(v) == get_type(this) || continue
+
+            new_sum = indicator(other, lower(get_type(v)), upper(get_type(v)), pct_sum(indices..., subst(get_body(d), v, other)))
+
+        else
+            new_sum = pct_sum(indices..., subst(get_body(d), v, other))
+        end
         push!(result, new_sum; dired=true, name="contract_delta")
+
     end
 
     return result
@@ -995,3 +1007,7 @@ function neighbors(lt::Let; settings=default_settings)
 end
 
 
+
+function neighbors(a::APN; settings=default_settings)
+    return sub_neighbors(a::APN; settings=settings)
+end

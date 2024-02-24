@@ -57,7 +57,10 @@ remake_node(n::T) where {T<:APN} = make_node(T, terms(n)...; type=get_type(n))
 function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
     objectid(n_1) == objectid(n_2) && return true
     length(get_bound(n_1)) == length(get_bound(n_2)) || return false
-    Set(signatures!(n_1)) == Set(signatures!(n_2)) || return false
+    s_1, s_2 = Set(signatures!(n_1)), Set(signatures!(n_2))
+    s_1 == s_2 || return false
+    length(s_1) == length(get_bound(n_1)) || return false
+    length(s_2) == length(get_bound(n_2)) || return false
 
     symbols = new_symbol(get_body(n_1), get_body(n_2), num=length(signatures!(n_1)))
     variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols))
@@ -146,7 +149,7 @@ function Base.:(==)(m_1::Map, m_2::Map)
     end
     replaced_expr_2 = remake_node(replaced_expr_2)
 
-    return  replaced_expr_1 == replaced_expr_2
+    return replaced_expr_1 == replaced_expr_2
     #= eval_all(call(m_1, new_bounds...)) == eval_all(call(m_2, new_bounds...)) =#
 end
 

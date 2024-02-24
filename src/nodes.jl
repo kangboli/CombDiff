@@ -445,3 +445,22 @@ end
 function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
+
+struct Indicator <: APN
+    type::AbstractPCTType
+    index::APN
+    lower::APN
+    upper::APN
+    body::APN
+end
+
+function indicator(index::APN, lower::APN, upper::APN, body::APN)
+    return make_node(Indicator, index, lower, upper, body)
+end
+
+content_fields(::Type{Indicator}) = [:index, :lower, :upper, :body]
+
+get_index(t::Indicator) = t.index
+lower(t::Indicator) = t.lower
+upper(t::Indicator) = t.upper
+

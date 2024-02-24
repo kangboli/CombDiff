@@ -24,7 +24,8 @@ default_context() = TypeContext(
         :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
     ),
     Dict{Symbol,Vector{<:Var}}(
-    :Infty => [infty()],
+        :Infty => [infty()],
+        :∞ => [infty()],
     )
 )
 
@@ -81,16 +82,16 @@ end =#
 
 inference(n::Any) = n
 
-function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
-    has_bound = any(f->hasfield(T, f), bound_fields(T))
+function inference(n::T, context::TypeContext=TypeContext()) where {T<:APN}
+    has_bound = any(f -> hasfield(T, f), bound_fields(T))
     if has_bound
         #= op_context!(get_bound(n), pct_push!, context) =#
-        map(b->push_var!(context, get_body(b), b), content(get_bound(n)))
+        map(b -> push_var!(context, get_body(b), b), content(get_bound(n)))
         # the following line may be redundant.
-        n = set_bound(n, map(t->inference(t, context), [get_bound(n)])...)
+        n = set_bound(n, map(t -> inference(t, context), [get_bound(n)])...)
     end
-    n = set_content(n, map(t->inference(t, context), content(n))...)
-    has_bound && map(b->pop_var!(context, get_body(b)), content(get_bound(n)))
+    n = set_content(n, map(t -> inference(t, context), content(n))...)
+    has_bound && map(b -> pop_var!(context, get_body(b)), content(get_bound(n)))
     # Setting the type may also be redundant.
     return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
@@ -112,16 +113,16 @@ function inference(l::Let, context::TypeContext)
         push!(typed_args, a)
         push_var!(context, get_body(f), f)
     end
-    
+
     typed_content = inference(get_body(l), context)
-    map(f -> pop_var!(context, isa(f, Copy) ?  get_body(get_body(f)) : get_body(f)), typed_bound)
-    return l = pct_let(typed_bound..., typed_args..., typed_content) 
+    map(f -> pop_var!(context, isa(f, Copy) ? get_body(get_body(f)) : get_body(f)), typed_bound)
+    return l = pct_let(typed_bound..., typed_args..., typed_content)
 end
 
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: PCTVector
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:PCTVector}
     return VecType(get_type.([terms...]))
 end
 
@@ -130,11 +131,11 @@ function partial_inference(::Type{Map}, terms...)::AbstractPCTType
     return MapType(get_type(bound), get_type(content))
 end
 
-function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where T <: Var 
+function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where {T<:Var}
     UndeterminedPCTType()
 end
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:AbstractCall}
     mapp = first(terms)
     if isa(mapp, Var) && startswith(string(get_body(mapp)), "__")
         length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
@@ -148,21 +149,21 @@ function partial_inference(::Type{Let}, terms...)::AbstractPCTType
 end
 
 
-function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where T <: Union{Add, Mul}
+function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where {T<:Union{Add,Mul}}
     @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
 end
 
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType  where T <: Contraction
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Contraction}
     return get_type(last(terms))
 end
 
-function partial_inference(::Type{Prod}, terms...)::AbstractPCTType  
+function partial_inference(::Type{Prod}, terms...)::AbstractPCTType
     return get_type(last(terms))
 end
 
-function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
+function partial_inference(::Type{Conjugate}, term)::AbstractPCTType
     isa(get_type(term), ElementType) && return get_type(term)
     return MapType(VecType([get_body_type(get_type(term))]), get_bound_type(get_type(term)), meta(get_type(term)))
 end
@@ -192,7 +193,7 @@ function partial_inference(::Type{Constant}, term)::AbstractPCTType
     isa(term, Complex) && return C()
 end
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:AbstractDelta}
     get_type(last(terms))
 end
 
@@ -202,16 +203,23 @@ end
 
 function inference(d::Domain)
     context = TypeContext()
-    vars = vcat(variables(lower(d)), variables(upper(d)))
-    for v in vars
-        get_var(context, get_body(v)) === nothing || continue
+
+    for v in get_type_bound(d)
         push_var!(context, get_body(v), set_type(v, base(d)))
     end
 
-    return Domain(base(d), 
-           inference(lower(d), context),
-           inference(upper(d), context), 
-           meta(d))
+    #= vars = vcat(variables(lower(d)), variables(upper(d)))
+
+    for v in vars
+        get_var(context, get_body(v)) === nothing || continue
+        push_var!(context, get_body(v), set_type(v, base(d)))
+    end =#
+
+    return Domain(base(d),
+        get_type_bound(d),
+        inference(lower(d), context),
+        inference(upper(d), context),
+        meta(d))
 end
 
 function partial_inference(::Type{Composition}, term::PCTVector)
@@ -220,11 +228,11 @@ function partial_inference(::Type{Composition}, term::PCTVector)
     return MapType(bound_type, body_type)
 end
 
-function inference(n::T, ::TypeContext)  where T <: FermionicField
+function inference(n::T, ::TypeContext) where {T<:FermionicField}
     return set_type(n, partial_inference(T, get_body(n)))
 end
 
-function partial_inference(::Type{FermionicFieldCreation}, ::Symbol) 
+function partial_inference(::Type{FermionicFieldCreation}, ::Symbol)
     bound_type = ProductType(hilbert_space(), var(:_N_e, N()))
     body_type = ProductType(hilbert_space(), add(var(:_N_e, N()), constant(1)))
     operator_type = MapType(VecType([bound_type]), body_type)
@@ -232,14 +240,18 @@ function partial_inference(::Type{FermionicFieldCreation}, ::Symbol)
 end
 
 
-function partial_inference(::Type{FermionicFieldAnnihilation}, ::Symbol) 
+function partial_inference(::Type{FermionicFieldAnnihilation}, ::Symbol)
     bound_type = ProductType(hilbert_space(), var(:_N_e, N()))
     body_type = ProductType(hilbert_space(), add(var(:_N_e, N()), constant(-1)))
     operator_type = MapType(VecType([bound_type]), body_type)
     return MapType(VecType([N()]), operator_type)
 end
 
-function partial_inference(::Type{T}, body::APN) where T <: Univariate
+function partial_inference(::Type{T}, body::APN) where {T<:Univariate}
+    return get_type(body)
+end
+
+function partial_inference(::Type{Indicator}, ::APN, ::APN, ::APN, body::APN) 
     return get_type(body)
 end
 
