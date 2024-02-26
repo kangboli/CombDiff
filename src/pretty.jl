@@ -39,7 +39,13 @@ end
 
 function latex(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)" =#
-    params = map(v -> "$(latex(v))", content(get_bound(m)))
+    function verbose_if_domain(v::Var) 
+        isa(get_type(v), Domain)  || return latex(v)
+        l, u = lower(get_type(v)), upper(get_type(v))
+        return "$(latex(v))∈[$(latex(l)), $(latex(u))]"  
+    end
+
+    params = map(v -> "$(verbose_if_domain(v))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     if isa(get_body(m), PCTVector)
         return "$(params) \\to $(latex(get_body(m), true))"
@@ -371,3 +377,14 @@ end
 function latex(i::Indicator)
     "𝕀($(latex(get_index(i))), $(latex(lower(i))), $(latex(upper(i))), , $(pretty(get_body(i))))"
 end
+
+
+function pretty(i::ArgMin)
+    "argmin($(pretty(get_body(i))))"
+end
+
+function latex(i::ArgMin)
+    "\\mathrm{argmin}\\left($(latex(get_body(i)))\\right)"
+end
+
+

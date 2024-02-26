@@ -240,6 +240,8 @@ function parse_node(n::Expr)
         (func == :∑ || func == :sum) && return parse_contraction_node(Sum, n)
         (func == :∫ || func == :int) && return parse_contraction_node(Integral, n)
         (func == :∏ || func == :prod) && return parse_prod_node(n)
+        func == :argmin && return parse_argmin_node(n)
+        func == :argmax && return parse_argmax_node(n)
         func == :delta && return parse_delta_node(Delta, n)
         func == :delta_not && return parse_delta_node(DeltaNot, n)
         func == :+ && return parse_add_node(n)
@@ -544,4 +546,12 @@ end
 
 function parse_pctvector_node(n::Expr)
     return :(pct_vec($(map(parse_node, n.args)...)))
+end
+
+function parse_argmin_node(n::Expr)
+    :(pct_argmin($(parse_node(n.args[2]))))
+end
+
+function parse_argmax_node(n::Expr)
+    :(pct_argmax($(parse_node(n.args[2]))))
 end

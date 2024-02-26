@@ -292,11 +292,11 @@ end
 
 const Seg = Union{ABF,AbstractFibration}
 function comp(z::T, f::Vararg{Seg})::PComp where {T<:APN}
-    T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
+    T == PCTVector && length(z) > 1 && @warn "multiple inputs shouldn't enter pcomp"
     PComp(v_wrap(z), [f...], MapType(v_wrap(get_type(z)), output_type(last(f))))
 end
 function comp(z::T)::PComp where {T<:APN}
-    T == PCTVector && length(z) > 1 && error("multiple inputs shouldn't enter pcomp")
+    T == PCTVector && length(z) > 1 && @warn "multiple inputs shouldn't enter pcomp"
     PComp(v_wrap(z), [], MapType(v_wrap(get_type(z)), get_type(z)))
 end
 
@@ -352,11 +352,13 @@ function pp(c::PComp)::Map
     f_map = as_map(f)
     if any(s -> contains_name(f_map, s), name.(zs))
         i_map_type = get_content_type(get_bound_type(get_type(f_map)))
-        is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_d), i_map_type)
+        is = map(var, new_symbol(expr, ys..., ks...; num=length(i_map_type), symbol=:_d), i_map_type)
         #= deltas = ks
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)
         end =#
+        println(pretty(expr))
+        println.(pretty.(is))
         deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
         partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(deltas))))
         chain = pct_vec(map(add, chain, partial)...)
@@ -454,11 +456,18 @@ end
 param(b::BMap)::APN = b.param
 function maptype(b::BMap)::MapType
     result = get_type(param(b))
-    isa(result, VecType) && return MapType(VecType([I()]), first(content(result)))
+    isa(result, VecType) && return MapType(VecType([I()]), first(get_content_type(result)))
     return result
 end
 
-as_map(m::BMap)::APN = param(m)
+function as_map(m::BMap)::APN
+    if isa(param(m), PCTVector)
+        zs = z_vars(m)
+        return pct_map(zs..., call(param(m), zs...))
+    else
+        param(m)
+    end
+end
 
 function decompose(zs::PCTVector, ov::Var)::PComp
     length(zs) == 1 && return decompose(first(zs), ov)
@@ -490,7 +499,9 @@ function pp(b::BMap)::AbstractMap
 end
 
 #= decompose(map::Map)::Union{PComp, Vector{PComp}} = v_unwrap([decompose(t, get_body(map)) for t in content(ff(map))]) =#
-decompose(map::Map)::Union{PComp,Vector{PComp}} = decompose(get_bound(map), get_body(map))
+function decompose(map::Map)::Union{PComp,Vector{PComp}}
+    decompose(get_bound(map), get_body(map))
+end
 
 pretty(b::BMap) = return "ℳ $(pretty(param(b)))"
 
@@ -630,12 +641,42 @@ function pp(lc::BLetConst)
     return result
 end
 
+struct BArgMin <: ABF
+    maptype::MapType
+end
+
+function decompose(z::APN, ov::ArgMin)::PComp
+    maptype = MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
+    return push(decompose(z, get_body(ov)), BArgMin(maptype))
+end
+
+as_map(b::BArgMin, zs=z_vars(b)) = pct_map(zs..., pct_argmin(zs...))
+
+function pp(b::BArgMin)
+    map_type = first(get_content_type(get_bound_type(maptype(b))))
+    map_input_type = get_content_type(get_bound_type(map_type))
+    zs, ks = zk_vars(b)
+    ts = map(var, new_symbol(zs..., ks...; num=length(map_input_type)), map_input_type)
+    if all(t -> t == N(), map_input_type)
+        return pct_map(zs..., ks..., pct_map(ts..., constant(0)))
+    else
+        error("the pullback of argmin is not yet implemented")
+    end
+end
+
+function pretty(::BArgMin)
+    return "argmin"
+end
+
+param(::BArgMin)::Nothing = nothing
+
 v_wrap(n::APN)::PCTVector = pct_vec(n)
 function v_wrap(n::Let)
     pct_let(get_bound(n)..., args(n)..., v_wrap(get_body(n)))
 end
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
-v_unwrap(n::Union{PCTVector,Vector, VecType}) = length(n) == 1 ? first(n) : n
+v_unwrap(n::Union{PCTVector,Vector,VecType}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n
 
+p

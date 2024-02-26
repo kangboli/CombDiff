@@ -144,7 +144,7 @@ subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
 
 function subst(n::Var, old::Var, new::APN, ::Bool)
     # The type of the variable is not compared.
-    name(n) == name(old) && return new 
+    name(n) == name(old) && return new
     new_type = subst(get_type(n), old, new)
     new_type == get_type(n) && return n
     return set_type(n, new_type)
@@ -156,7 +156,7 @@ end
 
 function subst(t::Domain, old::Var, new::APN)
     contains_name(get_type_bound(t), get_body(old)) && return t
-    return Domain(base(t), get_type_bound(t), subst(lower(t), old, new), 
+    return Domain(base(t), get_type_bound(t), subst(lower(t), old, new),
         subst(upper(t), old, new); meta=meta(t))
 end
 
@@ -244,22 +244,34 @@ function evaluate(c::Call)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
     isa(mapp(c), PrimitivePullback) && return call(eval_all(mapp(c)), map(eval_all, content(args(c)))...)
+    if isa(mapp(c), PCTVector)
+        if isa(first(content(args(c))), Constant)
+            index = get_body(first(content(args(c))))
+            return content(mapp(c))[index]
+        else
+            return call(eval_all(mapp(c)), args(c)...)
+        end
+    end
+
     isa(mapp(c), Map) || error("Evaluating a call that is not that of a map")
 
     new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
-
-    n = evaluate(get_body(mapp(c)))
-    for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
-        n = subst(n, old, new)
-    end
     new_args = map(eval_all, args(c))
+    if length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
 
-    for (old, new) in zip(new_bound, new_args)
-        n = subst(n, old, new)
+        n = evaluate(get_body(mapp(c)))
+        for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
+            n = subst(n, old, new)
+        end
+
+        for (old, new) in zip(new_bound, new_args)
+            n = subst(n, old, new)
+        end
+
+        return n
+    else
+        return call(eval_all(mapp(c)), new_args...)
     end
-
-    return n
 end
 
 function evaluate(l::Let)
@@ -287,6 +299,13 @@ has_call(::TerminalNode) = false
 has_call(::Copy) = false
 function has_call(c::Call)
     isa(mapp(c), Copy) && return false
+    if isa(mapp(c), PCTVector)
+        length(args(c)) == 1 && isa(first(args(c)), Constant) && return true
+        return any(has_call, content(mapp(c))) || any(has_call, content(args(c)))
+    end
+    if length(get_bound_type(get_type(mapp(c)))) != length(args(c))
+        return has_call(mapp(c)) || any(has_call, content(args(c)))
+    end
     #= isa(mapp(c), PrimitivePullback) && return false =#
     return true
 end

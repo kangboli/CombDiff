@@ -28,7 +28,8 @@ export
     pct_exp,
     pct_log,
     pct_let,
-    pct_copy
+    pct_copy,
+    pct_argmin
 
 abstract type TerminalNode <: APN end
 
@@ -463,4 +464,14 @@ content_fields(::Type{Indicator}) = [:index, :lower, :upper, :body]
 get_index(t::Indicator) = t.index
 lower(t::Indicator) = t.lower
 upper(t::Indicator) = t.upper
+
+struct ArgMin <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+function pct_argmin(func::APN)
+    make_node(ArgMin, func)
+end
+
 

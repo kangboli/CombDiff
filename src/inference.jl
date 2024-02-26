@@ -255,3 +255,14 @@ function partial_inference(::Type{Indicator}, ::APN, ::APN, ::APN, body::APN)
     return get_type(body)
 end
 
+function partial_inference(::Type{ArgMin}, body::APN)
+    m_type = get_type(body)
+    bound_type = get_bound_type(m_type)
+    length(bound_type) == 1 && return first(get_content_type(bound_type))
+    return bound_type
+end
+
+function partial_inference(::Type{Call}, ::PCTVector, ::PCTVector)
+    return UndeterminedPCTType()
+end
+
