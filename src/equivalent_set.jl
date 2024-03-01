@@ -550,6 +550,17 @@ function contract_delta_neighbors(s::Sum)
         end
         other = add(other, shift)
 
+        if contains_name(shift, get_body(v))
+            return result
+            #= isa(get_type(shift), Domain) || return result
+            t = get_type(shift)
+            v = set_type(v, Domain(base(t), pct_vec(),
+                add(other, mul(constant(-1), upper(t))),
+                add(other, mul(constant(-1), lower(t)))))
+            push!(result, pct_sum(indices..., v, get_body(s)); dired=true, name="narrow range")
+            return result =#
+        end
+
         if isa(get_type(v), Domain) && get_type(v) != get_type(other)
             get_type(v) == get_type(this) || continue
 

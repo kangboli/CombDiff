@@ -253,25 +253,27 @@ function evaluate(c::Call)
         end
     end
 
-    isa(mapp(c), Map) || error("Evaluating a call that is not that of a map")
+    isa(mapp(c), Map) || error("Evaluating a call that is not that of a map: $(pretty(c))")
 
     new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    new_args = map(eval_all, args(c))
-    if length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
+    new_args = map(eval_all, vcat(map(t -> content(v_wrap(t)), content(args(c)))...))
+    #= new_args = map(eval_all, content(args(c))) =#
+    @assert length(new_bound) == length(new_args) == length(get_bound(mapp(c)))
+    #= if length(new_bound) == length(new_args) == length(get_bound(mapp(c))) =#
 
-        n = evaluate(get_body(mapp(c)))
-        for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
-            n = subst(n, old, new)
-        end
-
-        for (old, new) in zip(new_bound, new_args)
-            n = subst(n, old, new)
-        end
-
-        return n
-    else
-        return call(eval_all(mapp(c)), new_args...)
+    n = eval_all(get_body(mapp(c)))
+    for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
+        n = subst(n, old, new)
     end
+
+    for (old, new) in zip(new_bound, new_args)
+        n = subst(n, old, new)
+    end
+
+    return n
+    #= else
+        return call(eval_all(mapp(c)), new_args...)
+    end =#
 end
 
 function evaluate(l::Let)
@@ -303,9 +305,14 @@ function has_call(c::Call)
         length(args(c)) == 1 && isa(first(args(c)), Constant) && return true
         return any(has_call, content(mapp(c))) || any(has_call, content(args(c)))
     end
-    if length(get_bound_type(get_type(mapp(c)))) != length(args(c))
+
+    if isa(get_type(mapp(c)), VecType)
         return has_call(mapp(c)) || any(has_call, content(args(c)))
     end
+
+    #= if length(get_bound_type(get_type(mapp(c)))) != length(args(c))
+        return has_call(mapp(c)) || any(has_call, content(args(c)))
+    end =#
     #= isa(mapp(c), PrimitivePullback) && return false =#
     return true
 end

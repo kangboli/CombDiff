@@ -116,7 +116,7 @@ function inference(l::Let, context::TypeContext)
 
     typed_content = inference(get_body(l), context)
     map(f -> pop_var!(context, isa(f, Copy) ? get_body(get_body(f)) : get_body(f)), typed_bound)
-    return l = pct_let(typed_bound..., typed_args..., typed_content)
+    return pct_let(typed_bound..., typed_args..., typed_content)
 end
 
 
@@ -141,6 +141,10 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
         length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
         return get_type(last(terms))
     end
+    if isa(mapp, StationaryPoint)
+        return get_content_type(get_type(mapp))[get_body(first(last(terms)))]
+    end
+
     return get_body_type(get_type(first(terms)))
 end
 
@@ -152,6 +156,15 @@ end
 function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where {T<:Union{Add,Mul}}
     @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
+end
+
+function partial_inference(::Type{Add}, term::PCTVector)::AbstractPCTType 
+    @assert length(term) > 0
+    all(t->isa(get_type(t), Domain), content(term)) || return escalate(map(get_type, content(term))...)
+
+    new_upper = add(map(t->upper(get_type(t)), content(term))...)
+    new_lower = add(map(t->lower(get_type(t)), content(term))...)
+    return Domain(escalate(map(t->base(get_type(t)), content(term))...), pct_vec(), new_lower, new_upper)
 end
 
 
@@ -255,10 +268,10 @@ function partial_inference(::Type{Indicator}, ::APN, ::APN, ::APN, body::APN)
     return get_type(body)
 end
 
-function partial_inference(::Type{ArgMin}, body::APN)
+function partial_inference(::Type{T}, body::APN) where T <: StationaryPoint
     m_type = get_type(body)
     bound_type = get_bound_type(m_type)
-    length(bound_type) == 1 && return first(get_content_type(bound_type))
+    #= length(bound_type) == 1 && return first(get_content_type(bound_type)) =#
     return bound_type
 end
 

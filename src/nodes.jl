@@ -29,7 +29,8 @@ export
     pct_log,
     pct_let,
     pct_copy,
-    pct_argmin
+    pct_argmin,
+    pct_argmax
 
 abstract type TerminalNode <: APN end
 
@@ -167,8 +168,6 @@ end
 
 function call(mapp::APN, args::Vararg)
     #= if isa(mapp, Map) && length(get_bound(mapp)) != length(args)
-        println(pretty(mapp))
-        println.(pretty.(args))
         get_body(first(args)) != :t && error("ahah")
         #= length(get_bound(mapp)) == 3 && error("Aha") =#
     end =#
@@ -340,7 +339,11 @@ end
 
 constant(n::Number) = make_node(Constant, n)
 
-is_zero(t) = isa(t, Constant) && get_body(t) == 0
+is_zero(t::Constant) = get_body(t) == 0
+is_zero(t::APN) = false
+is_zero(m::Map) = is_zero(get_body(m))
+is_zero(m::PCTVector) = all(is_zero, content(m))
+
 is_one(t) = isa(t, Constant) && get_body(t) == 1
 is_minus_one(t) = isa(t, Constant) && get_body(t) == -1
 
@@ -443,6 +446,10 @@ function conjugate(n::PrimitiveCall)
     end
 end
 
+function primitive_call(mapp::APN, args::Vararg)
+    make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
+end
+
 function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
@@ -465,7 +472,14 @@ get_index(t::Indicator) = t.index
 lower(t::Indicator) = t.lower
 upper(t::Indicator) = t.upper
 
-struct ArgMin <: APN
+abstract type StationaryPoint <: APN end
+
+struct ArgMin <: StationaryPoint
+    type::AbstractPCTType
+    body::APN
+end
+
+struct ArgMax <: StationaryPoint
     type::AbstractPCTType
     body::APN
 end
@@ -474,4 +488,14 @@ function pct_argmin(func::APN)
     make_node(ArgMin, func)
 end
 
+function pct_argmax(func::APN)
+    make_node(ArgMax, func)
+end
 
+pct_zeros(::ElementType) = constant(0)
+
+function pct_zeros(t::MapType)
+    bound_type = get_content_type(get_bound_type(t))
+    zs = map(var, new_symbol(;num=length(bound_type)), bound_type)
+    return pct_map(zs..., pct_zeros(get_body_type(t)))
+end

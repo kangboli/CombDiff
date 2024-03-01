@@ -90,6 +90,11 @@ get_content_type(v::VecType) = v.content
 Base.length(v::VecType) = length(get_content_type(v))
 Base.getindex(v::VecType, i::Int) = get_content_type(v)[i]
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_content_type(v)), t))
+get_bound_type(v::VecType) = VecType([Domain(N(), pct_vec(), constant(1), constant(length(v)))])
+function get_body_type(v::VecType) 
+    reduce(isequal, get_content_type(v)) || @warn "vector of different types $(v)"
+    return first(v)
+end
 
 
 struct MapType <: AbstractPCTType

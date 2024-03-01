@@ -28,8 +28,6 @@ end
 
 function eval_pullback(n::APN) 
     result = set_content(n, vcat(map(t -> eval_pullback(t), content(n))...)...)
-    #= println(pretty(n))
-    println(pretty(result)) =#
     return result
 end
 eval_pullback(n::TerminalNode) = n

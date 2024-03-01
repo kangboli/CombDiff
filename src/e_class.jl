@@ -44,6 +44,13 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     return Monomial, [base, power], partial_inference(Monomial, base, power)
 end
 
+function mul_scalar_map(s::APN, m::Map)
+    return pct_map(get_bound(m)..., mul(s, get_body(m)))
+end
+
+mul_scalar_map(s::APN, m::APN) = mul(s, m)
+
+
 function combine_factors(terms::Vector)
     term_dict = Dict{APN,Number}()
     function process_term!(a::Constant)
@@ -62,7 +69,7 @@ function combine_factors(terms::Vector)
     end
 
     map(process_term!, terms)
-    return [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+    return [v == 1 ? k : mul_scalar_map(constant(v), k) for (k, v) in term_dict if v != 0]
 end
 
 #= function combine_maps(terms::Vector)
@@ -90,6 +97,8 @@ flatten_add(a::APN) = [a]
 flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
 
 function e_class_reduction(::Type{Add}, term::PCTVector)
+    any(t->t==infty(), term) && return infty()
+    any(t->t==mul(constant(-1), infty()), term) && return mul(constant(-1), infty())
     new_terms = vcat(flatten_add.(content(term))...)
     d = group(t -> isa(t, Constant), new_terms)
     const_term = sum(map(get_body, get(d, true, [])), init=0) |> constant
@@ -131,6 +140,7 @@ flatten_mul(a::Mul) = vcat(flatten_mul.(content(get_body(a)))...)
 flatten_mul(a::APN) = [a]
 
 function e_class_reduction(::Type{Mul}, term::PCTVector)
+    any(t->isa(get_type(t), MapType), content(term)) && @warn "multiplying scalars with nonscalars: $(pretty(term))"
     args = vcat(flatten_mul.(content(term))...)
     is_constant = group(t -> isa(t, Constant), args)
     args_const = get(is_constant, true, [])
@@ -155,8 +165,11 @@ function e_class_reduction(::Type{Composition}, term::PCTVector)
 end
 
 function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
-    if lower == upper
+    if lower == upper || body == constant(0)
         return typeof(body), terms(body), get_type(body)
+    elseif isa(upper, Constant) && isa(lower, Constant) && get_body(upper) != get_body(lower)
+        new_zero = pct_zeros(get_type(body))
+        return typeof(new_zero), terms(new_zero), get_type(new_zero)
     else
         return Delta, [lower, upper, body], partial_inference(Delta, lower, upper, body)
     end

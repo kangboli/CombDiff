@@ -37,15 +37,15 @@ function pretty(m::Map)
     "($(join(params, ", "))) -> \n$(indent(pretty(get_body(m))))"
 end
 
+function verbose_latex_if_domain(v::Var)
+    isa(get_type(v), Domain) || return latex(v)
+    l, u = lower(get_type(v)), upper(get_type(v))
+    return "$(latex(v))∈[$(latex(l)), $(latex(u))]"
+end
+
 function latex(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)" =#
-    function verbose_if_domain(v::Var) 
-        isa(get_type(v), Domain)  || return latex(v)
-        l, u = lower(get_type(v)), upper(get_type(v))
-        return "$(latex(v))∈[$(latex(l)), $(latex(u))]"  
-    end
-
-    params = map(v -> "$(verbose_if_domain(v))", content(get_bound(m)))
+    params = map(v -> "$(verbose_latex_if_domain(v))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     if isa(get_body(m), PCTVector)
         return "$(params) \\to $(latex(get_body(m), true))"
@@ -131,12 +131,12 @@ verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(v
 pretty(s::Sum) = "∑(($(join(map(verbose_if_domain, content(get_bound(s))), ", ")...)), $(pretty(get_body(s))))"
 
 function latex(s::Sum, paren=false)
-    indices = []
+    #= indices = []
     while isa(s, Sum)
         push!(indices, get_bound(s))
         s = get_body(s)
-    end
-    result = "\\sum_{$(join(latex.(indices),","))}$(latex(s))"
+    end =#
+    result = "\\sum_{$(join(verbose_latex_if_domain.(content(get_bound(s))),","))}$(latex(get_body(s)))"
     return paren ? "\\left($(result)\\right)" : result
 end
 
@@ -385,6 +385,15 @@ end
 
 function latex(i::ArgMin)
     "\\mathrm{argmin}\\left($(latex(get_body(i)))\\right)"
+end
+
+
+function pretty(i::ArgMax)
+    "argmax($(pretty(get_body(i))))"
+end
+
+function latex(i::ArgMax)
+    "\\mathrm{argmax}\\left($(latex(get_body(i)))\\right)"
 end
 
 

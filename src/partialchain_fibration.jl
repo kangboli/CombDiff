@@ -24,7 +24,10 @@ An abstract interface for functions. A function needs to implement
 """
 abstract type AbstractBuiltinFunction end
 const ABF = AbstractBuiltinFunction
-ecall(ts::Vararg{APN}) = eval_all(call(ts...))
+function ecall(ts::Vararg{APN}) 
+    eval_all(call(ts...))
+end
+vcall(ts::Vararg{APN}) = v_wrap(eval_all(call(ts...)))
 
 abstract type AbstractFibration <: ABF end
 
@@ -347,8 +350,8 @@ function pp(c::PComp)::Map
     p_expr = pp(x_expr)
     p_call = call(p_expr, zs..., chain...)
     chain = v_wrap(eval_all(p_call)) =#
-    #= println(pretty(p_expr)) =#
-    chain = v_wrap(ecall(p_expr, ys..., v_wrap(ecall(p_f, expr..., ks...))...))
+    inner = v_wrap(ecall(p_f, expr..., ks...))
+    chain = v_wrap(ecall(p_expr, ys..., inner...))
     f_map = as_map(f)
     if any(s -> contains_name(f_map, s), name.(zs))
         i_map_type = get_content_type(get_bound_type(get_type(f_map)))
@@ -357,10 +360,10 @@ function pp(c::PComp)::Map
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)
         end =#
-        println(pretty(expr))
-        println.(pretty.(is))
+        @assert length(expr) == length(is)
         deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
-        partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(deltas))))
+        partial = call(pp(decompose(zs, f_map)), ys..., v_wrap(pct_map(is..., v_unwrap(deltas)))...)
+        partial = v_wrap(eval_all(partial))
         chain = pct_vec(map(add, chain, partial)...)
     end
     result = pct_map(ys..., ks..., v_unwrap(chain))
@@ -456,7 +459,7 @@ end
 param(b::BMap)::APN = b.param
 function maptype(b::BMap)::MapType
     result = get_type(param(b))
-    isa(result, VecType) && return MapType(VecType([I()]), first(get_content_type(result)))
+    isa(result, VecType) && return MapType(VecType([N()]), first(get_content_type(result)))
     return result
 end
 
@@ -482,6 +485,10 @@ function pp(b::BMap)::AbstractMap
     process_param(p::Map) = pp(decompose(p))
     # TODO: Implement the vector case.
     process_param(p::APN) = primitive_pullback(p)
+    function process_param(::PCTVector)
+        zs, ks = zk_vars(b)
+        return pct_map(zs..., ks..., pct_zeros(get_body_type(maptype(b))))
+    end
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
     function process_param(p::Union{Var,PrimitivePullback})
         bound_types = get_content_type(get_bound_type(get_type(m)))
@@ -641,36 +648,51 @@ function pp(lc::BLetConst)
     return result
 end
 
-struct BArgMin <: ABF
-    maptype::MapType
-end
+abstract type BStationary <: ABF end
 
-function decompose(z::APN, ov::ArgMin)::PComp
-    maptype = MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
-    return push(decompose(z, get_body(ov)), BArgMin(maptype))
+struct BArgMin <: BStationary
+    maptype::MapType
 end
 
 as_map(b::BArgMin, zs=z_vars(b)) = pct_map(zs..., pct_argmin(zs...))
 
-function pp(b::BArgMin)
+struct BArgMax <: BStationary
+    maptype::MapType
+end
+
+as_map(b::BArgMax, zs=z_vars(b)) = pct_map(zs..., pct_argmax(zs...))
+
+b_constructor(::Type{ArgMin}) = BArgMin
+b_constructor(::Type{ArgMax}) = BArgMax
+
+function decompose(z::APN, ov::T)::PComp where T <: StationaryPoint
+    maptype = MapType(VecType([get_type(get_body(ov))]), get_type(ov))
+    return push(decompose(z, get_body(ov)), b_constructor(T)(maptype))
+end
+
+function pp(b::T) where T <: BStationary
     map_type = first(get_content_type(get_bound_type(maptype(b))))
     map_input_type = get_content_type(get_bound_type(map_type))
     zs, ks = zk_vars(b)
-    ts = map(var, new_symbol(zs..., ks...; num=length(map_input_type)), map_input_type)
-    if all(t -> t == N(), map_input_type)
-        return pct_map(zs..., ks..., pct_map(ts..., constant(0)))
+    #= ts = map(var, new_symbol(zs..., ks...; num=length(map_input_type)), map_input_type) =#
+    if all(t -> base(t) == N(), map_input_type)
+        return pct_map(zs..., ks..., pct_zeros(map_type))
     else
         error("the pullback of argmin is not yet implemented")
     end
 end
 
-function pretty(::BArgMin)
-    return "argmin"
+pretty(::BArgMin) = "argmin"
+pretty(::BArgMax) = "argmax"
+param(::BStationary)::Nothing = nothing
+
+function v_wrap(n::APN)::PCTVector
+    if isa(get_type(n), VecType)
+        pct_vec(map(i->primitive_call(n, constant(i)) , 1:length(get_type(n)))...)
+    else
+        pct_vec(n)
+    end
 end
-
-param(::BArgMin)::Nothing = nothing
-
-v_wrap(n::APN)::PCTVector = pct_vec(n)
 function v_wrap(n::Let)
     pct_let(get_bound(n)..., args(n)..., v_wrap(get_body(n)))
 end
@@ -679,4 +701,14 @@ v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
 v_unwrap(n::Union{PCTVector,Vector,VecType}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n
 
-p
+function v_wrap(m::Map)
+    bound = get_bound(m)
+    length(bound) == 1 || return pct_vec(m)
+    b = first(bound)
+    isa(get_type(b), Domain) || return pct_vec(m)
+
+    u, l = upper(get_type(b)), lower(get_type(b))
+    isa(u, Constant) && isa(l, Constant) || return pct_vec(m)
+
+    return pct_vec(map(i->ecall(m, constant(i)), get_body(l):get_body(u))...)
+end
