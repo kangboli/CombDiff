@@ -72,7 +72,7 @@ function latex(v::Var)
     elseif startswith(string(name(v)), "_")
         components = split(string(name(v))[2:end], "_")
         if length(components) > 1
-            rest = "_{$(join(components[2:end]))}"
+            rest = "{$(join(components[2:end]))}"
         else
             rest = ""
         end
