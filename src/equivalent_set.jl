@@ -83,7 +83,7 @@ end
     return result
 end =#
 function is_pullback_of_univariate(p::AbstractPullback)
-    isa(get_body_type(get_type(get_body(p))), ElementType) 
+    isa(get_body_type(get_type(get_body(p))), ElementType)
 end
 
 function delta_out_pullback_neighbors(c::PrimitiveCall)
@@ -106,10 +106,19 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
         op == :conj && return conjugate(new_term)
         op == :id && return new_term
         op == :neg && return mul(constant(-1), new_term)
-        op == :ineg && return set_content(c, mapp(c),
-            [mul(constant(-1), t) for t in args(c)[collect(indices)]])
-        op == :inegc && return conjugate(set_content(c, mapp(c),
-            [mul(constant(-1), t) for t in args(c)[collect(indices)]]))
+        if op == :ineg
+            new_args = []
+            for (i, a) in enumerate(content(args(c)))
+                if i in indices
+                    a = mul(constant(-1), a)
+                end
+                push!(new_args, a)
+            end
+            return set_content(c, mapp(c), pct_vec(new_args...))
+        end
+        op == :inegc && error("Not yet properly implemented")
+        #= return conjugate(set_content(c, mapp(c),
+            [mul(constant(-1), t) for t in args(c)[collect(indices)]])) =#
         return new_term
     end
 
