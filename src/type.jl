@@ -109,7 +109,7 @@ symmetries(c::MapType) = get(c.meta, :symmetries, [])
 
 linear(c::MapType) = get(c.meta, :linear, false)
 
-function escalate(element_types::Vararg{T}) where {T<:ElementType}
+function escalate(element_types::Vararg)
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()
     any(t -> type_based(t, C()), element_types) && return C()
     any(t -> type_based(t, R()), element_types) && return R()
@@ -118,9 +118,12 @@ function escalate(element_types::Vararg{T}) where {T<:ElementType}
     return UndeterminedPCTType()
 end
 
-function escalate(map_types::Vararg)
-    # TODO implement this properly
-    return first(map_types)
+function escalate(map_types::Vararg{MapType})
+    # TODO: implement this properly
+    bound_types = get_bound_type.(map_types) 
+    body_type = get_body_type.(map_types)
+    #= @assert reduce(isequal, base.(bound_types)) =#
+    return MapType(first(bound_types), escalate(body_type...))
 end
 
 

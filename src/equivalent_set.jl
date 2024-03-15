@@ -110,9 +110,10 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
             new_args = []
             for (i, a) in enumerate(content(args(c)))
                 if i in indices
-                    a = mul(constant(-1), a)
+                    push!(new_args, mul(constant(-1), a))
+                else
+                    push!(new_args, a)
                 end
-                push!(new_args, a)
             end
             return set_content(c, mapp(c), pct_vec(new_args...))
         end
