@@ -1,8 +1,20 @@
 export blaserize
 
-abstract type BlasNode <: APN end
+unwrap(n::APN) = n
+unwrap(n::Conjugate) = get_body(n)
 
-struct BlasMul <: BlasNode
+abstract type AbstractBlasNode <: APN end
+
+struct BlasIndexing <: AbstractCall
+    type::AbstractPCTType
+    mapp::APN
+    args::PCTVector
+end
+
+const BlasNode = Union{AbstractBlasNode, BlasIndexing}
+
+
+struct BlasMul <: AbstractBlasNode
     type::AbstractPCTType
     body::PCTVector
 end
@@ -46,11 +58,15 @@ function pretty(n::BlasMul)
     join(map(pretty, content(get_body(n))), "⋅")
 end
 
+function verbose(n::BlasMul)
+    "$(join(map(verbose, content(get_body(n))), "⋅"))::$(verbose(get_type(n)))"
+end
+
 function latex(n::BlasMul)
     join(map(latex, content(get_body(n))), "\\cdot ")
 end
 
-struct BlasTranspose <: BlasNode
+struct BlasTranspose <: AbstractBlasNode
     type::AbstractPCTType
     body::APN
 end
@@ -80,15 +96,17 @@ function e_class_reduction(::Type{BlasTranspose}, body::T) where {T<:APN}
 end
 
 
-function partial_inference(::Type{BlasTranspose}, body)
+function partial_inference(::Type{BlasTranspose}, body::T) where T <: Union{Var, Conjugate}
+    body = unwrap(body)
     bound_types = get_content_type(get_bound_type(get_type(body)))
     if length(bound_types) == 1
-        if isa(first(bound_types), MapType)
+        return get_type(body)
+        #= if isa(first(bound_types), MapType)
             return MapType(get_bound_type(first(bound_types)), get_body_type(get_type(body)))
         else
             primal_type = MapType(VecType([first(bound_types)]), get_type(body))
             return MapType(VecType([primal_type]), get_type(body))
-        end
+        end =#
     end
     return MapType(VecType(reverse(bound_types)), get_body_type(get_type(body)))
 end
@@ -99,22 +117,31 @@ function pretty(n::BlasTranspose)
     return "$(pretty(body))ᵀ"
 end
 
+function verbose(n::BlasTranspose)
+    body = get_body(n)
+    isa(body, Conjugate) && return "$(verbose(get_body(body)))⁺::$(verbose(get_type(n)))"
+    return "$(verbose(body))ᵀ::$(verbose(get_type(n)))"
+end
+
 function latex(n::BlasTranspose)
     body = get_body(n)
     isa(body, Conjugate) && return "$(latex(get_body(body)))^{\\dagger}"
     return "$(latex(body))^{T}"
 end
 
-struct BlasIndexing <: AbstractCall
-    type::AbstractPCTType
-    mapp::APN
-    args::PCTVector
-end
+args(n::BlasIndexing) = n.args
+mapp(n::BlasIndexing) = n.mapp
 
-function call(mapp::Union{BlasNode, BlasIndexing}, args::Vararg)
+#= content_fields(::Type{BlasIndexing}) = [:mapp, :args] =#
+
+function call(mapp::BlasNode, args::Vararg)
     make_node(BlasIndexing, mapp, make_node(PCTVector, args...))
 end
+
 pretty(c::BlasIndexing) = "($(pretty(c.mapp)))($(join(map(pretty, content(args(c))), ", ")))"
+
+verbose(c::BlasIndexing) = "($(verbose(c.mapp)))($(join(map(verbose, content(args(c))), ", ")))::$(verbose(get_type(c)))"
+
 function latex(c::BlasIndexing)
     arg_types = get_type.(content(args(c)))
     if all(t -> isa(t, ElementType), arg_types) && all(t -> t == N(), base.(arg_types))
@@ -135,6 +162,12 @@ function e_class_reduction(::Type{BlasIndexing}, mapp::APN, args::PCTVector)
         end
     end
     return BlasIndexing, [mapp, args], partial_inference(BlasIndexing, mapp, args)
+end
+
+function partial_inference(::Type{BlasIndexing}, terms...)
+    mapp = first(terms)
+    result = get_body_type(get_type(mapp))
+    return result
 end
 
 function sub_blaserize_neighbors(n::APN)
@@ -194,7 +227,7 @@ function as_blas_mul(s::Var, t_1, t_2)
     end
 end
 
-struct MatrixInnerProd <: BlasNode
+struct MatrixInnerProd <: AbstractBlasNode
     type::AbstractPCTType
     body::PCTVector
 end
@@ -204,7 +237,8 @@ function matrix_inner_prod(body::Vararg)
 end
 
 function partial_inference(::Type{MatrixInnerProd}, body)
-    return escalate(map(b -> get_body_type(get_type(b)), content(body))...)
+    body_content = map(unwrap, content(body))
+    return escalate(map(b -> get_body_type(get_type(b)), body_content)...)
 end
 
 function pretty(n::MatrixInnerProd)
@@ -217,7 +251,7 @@ function latex(n::MatrixInnerProd)
     return "\\langle$(latex(first(matrices))), $(latex(last(matrices)))\\rangle"
 end
 
-struct BlasTrace <: BlasNode
+struct BlasTrace <: AbstractBlasNode
     type::AbstractPCTType
     body::APN
 end
@@ -381,7 +415,7 @@ function map_elementwise_prod(m::Map)
     term = get_body(m)
     isa(term, Mul) || return result
     subterms = content(get_body(term))
-    all(t->isa(t, AbstractCall), subterms) || return result
+    all(t -> isa(t, AbstractCall), subterms) || return result
     if reduce(isequal, [map(args, subterms)..., get_bound(m)])
         push!(result, elementwise_mul(map(mapp, subterms)...); dired=true, name="map elementwise prod")
     end
@@ -398,7 +432,7 @@ function blaserize_neighbors(m::Map)
     return result
 end
 
-struct ScalarTensorProduct <: BlasNode
+struct ScalarTensorProduct <: AbstractBlasNode
     type::AbstractPCTType
     scalar::APN
     tensor::APN
@@ -417,7 +451,7 @@ function e_class_reduction(::Type{ScalarTensorProduct}, scalar, tensor)
     end
 
     scalar == constant(1) && return typeof(tensor), terms(tensor), get_type(tensor)
-    
+
     return ScalarTensorProduct, [scalar, tensor], partial_inference(ScalarTensorProduct, scalar, tensor)
 end
 
@@ -427,7 +461,7 @@ end
 
 function pretty(n::ScalarTensorProduct)
     tensor_str = pretty(n.tensor)
-    if isa(n.tensor, AbstractMap) 
+    if isa(n.tensor, AbstractMap)
         tensor_str = "($(pretty(n.tensor)))"
     end
     return "$(pretty(n.scalar))⋅$(tensor_str)"
@@ -435,7 +469,7 @@ end
 
 function latex(n::ScalarTensorProduct)
     tensor_str = latex(n.tensor)
-    if isa(n.tensor, AbstractMap) 
+    if isa(n.tensor, AbstractMap)
         tensor_str = "($(latex(n.tensor)))"
     end
     return "$(latex(n.scalar)) \\cdot $(tensor_str)"
@@ -463,7 +497,7 @@ function latex(n::ElementWiseMul)
 end
 
 #= function e_class_reduction(::Type{ElementWiseMul}, body::PCTVector)
-    
+
 end =#
 
 function scalar_tensor_product_neighbors(m::Mul)
@@ -476,7 +510,7 @@ function scalar_tensor_product_neighbors(m::Mul)
     tensors = get(d, false, [])
     length(tensors) == 1 || return result
     isa(first(tensors), AbstractCall) || return result
-    all(t->tensorize(get_type(t)), content(args(first(tensors)))) || return result
+    all(t -> tensorize(get_type(t)), content(args(first(tensors)))) || return result
     new_term = call(scalar_tensor_product(mul(scalars...), mapp(first(tensors))),
         content(args(first(tensors)))...)
 
@@ -513,18 +547,18 @@ function pullback_map_out(p::PrimitivePullback)
     m = get_body(p)
     isa(m, Map) || return result
     map_body = get_body(m)
-    if isa(map_body, ScalarTensorProduct) 
+    if isa(map_body, ScalarTensorProduct)
         free, _ = free_and_dummy(map_body.scalar)
-        any(t->t in free, content(get_bound(m))) && return result
-        new_term = scalar_tensor_product(map_body.scalar, 
-        primitive_pullback(pct_map(content(get_bound(m))..., map_body.tensor)))
+        any(t -> t in free, content(get_bound(m))) && return result
+        new_term = scalar_tensor_product(map_body.scalar,
+            primitive_pullback(pct_map(content(get_bound(m))..., map_body.tensor)))
         push!(result, new_term; dired=true, name="pullback_map_out")
     end
     return result
 end
 
 function blaserize_neighbors(p::PrimitivePullback)
-    
+
     result = NeighborList()
     #= append!(result, pullback_map_out(p)) =#
     append!(result, sub_blaserize_neighbors(p))
