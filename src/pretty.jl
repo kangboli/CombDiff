@@ -120,10 +120,11 @@ pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(get_body(s))))"
 function latex(s::Sum, paren=false)
     indices = []
     while isa(s, Sum)
-        push!(indices, get_bound(s))
+        append!(indices, content(get_bound(s)))
         s = get_body(s)
     end
-    result = "\\sum_{$(join(latex.(indices),","))}$(latex(s))"
+    sum_str = all(i->type_based(get_type(i), R()), indices) ? "\\int" : "\\sum"
+    result = "$(sum_str)_{$(join(latex.(indices),","))}$(latex(s))"
     return paren ? "\\left($(result)\\right)" : result
 end
 

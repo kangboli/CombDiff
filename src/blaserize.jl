@@ -11,7 +11,7 @@ struct BlasIndexing <: AbstractCall
     args::PCTVector
 end
 
-const BlasNode = Union{AbstractBlasNode, BlasIndexing}
+const BlasNode = Union{AbstractBlasNode,BlasIndexing}
 
 
 struct BlasMul <: AbstractBlasNode
@@ -96,19 +96,22 @@ function e_class_reduction(::Type{BlasTranspose}, body::T) where {T<:APN}
 end
 
 
-function partial_inference(::Type{BlasTranspose}, body::T) where T <: Union{Var, Conjugate}
+function partial_inference(::Type{BlasTranspose}, body::T) where {T<:APN}
     body = unwrap(body)
     bound_types = get_content_type(get_bound_type(get_type(body)))
     if length(bound_types) == 1
-        return get_type(body)
+        result = get_type(body)
         #= if isa(first(bound_types), MapType)
             return MapType(get_bound_type(first(bound_types)), get_body_type(get_type(body)))
         else
             primal_type = MapType(VecType([first(bound_types)]), get_type(body))
             return MapType(VecType([primal_type]), get_type(body))
         end =#
+    else
+        result = MapType(VecType(reverse(bound_types)), get_body_type(get_type(body)))
     end
-    return MapType(VecType(reverse(bound_types)), get_body_type(get_type(body)))
+    return result
+
 end
 
 function pretty(n::BlasTranspose)
@@ -348,13 +351,38 @@ function blaserize_neighbors(c::Conjugate)
     return result
 end
 
+struct ElementWiseAdd <: AbstractBlasNode
+    type::AbstractPCTType
+    body::PCTVector
+end
+
+function pretty(n::ElementWiseAdd)
+    #= return invoke(pretty, Tuple{Add}, n) =#
+    signed = map(t -> is_negative(t) ? pretty(t) : "+$(pretty(t))", content(get_body(n)))
+    return "($(strip(join(signed, ""), '+')))"
+end
+
+function latex(n::ElementWiseAdd)
+    #= return invoke(latex, Tuple{Add}, n) =#
+    signed = map(t -> is_negative(t) ? latex(t) : "+$(latex(t))", content(get_body(n)))
+    return "\\left($(strip(join(signed, ""), '+'))\\right)"
+end
+
+function elementwise_add(terms...)
+    return make_node(ElementWiseAdd, pct_vec(terms...))
+end
+
+function partial_inference(::Type{ElementWiseAdd}, body::PCTVector)
+    return get_type(first(body))
+end    
+
 function tensor_addition_neighbors(a::Add)
     result = NeighborList()
     addants = content(get_body(a))
     all(t -> isa(t, AbstractCall), addants) || return result
     reduce(isequal, map(args, addants)) || return result
     common_args = args(first(addants))
-    new_node = call(add(map(mapp, addants)...), content(common_args)...)
+    new_node = call(elementwise_add(map(mapp, addants)...), content(common_args)...)
     push!(result, new_node; dired=true, name="tensor addition")
     return result
 end
@@ -475,8 +503,8 @@ function latex(n::ScalarTensorProduct)
     return "$(latex(n.scalar)) \\cdot $(tensor_str)"
 end
 
-struct ElementWiseMul
-    type::AbstractCall
+struct ElementWiseMul <: AbstractBlasNode
+    type::AbstractPCTType
     body::PCTVector
 end
 
