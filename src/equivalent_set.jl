@@ -266,7 +266,12 @@ function neighbors(a::Add; settings=default_settings)
     end
     #= append!(result, combine_map_neighbors(terms)) =#
     append!(result, add_delta_neighbors(terms))
-    append!(result, sub_neighbors(a; settings=settings))
+    sub_result = sub_neighbors(a; settings=settings)
+    for (i, t) in enumerate(nodes(sub_result))
+        isa(t, Add) && length(content(get_body(t))) == length(content(get_body(a))) && continue
+        directed(sub_result)[i] = true
+    end
+    append!(result, sub_result)
     return result
 end
 
