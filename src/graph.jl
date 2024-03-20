@@ -68,7 +68,7 @@ function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol,Bool}())
     for (t, d, name) in sort(reduced_list, by=e -> -e[2])
         push!(edges(seen), node_start => 1 + length(nodes(seen)))
         !d && push!(edges(seen), 1 + length(nodes(seen)) => node_start)
-        #= log_edge(n, t, d, name, length(nodes(seen))) =#
+        log_edge(n, t, d, name, length(nodes(seen)))
         if haskey(settings, :logging) && settings[:logging]
             log_edge(n, t, d, name, length(nodes(seen)))
         end

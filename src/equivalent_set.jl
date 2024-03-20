@@ -358,34 +358,11 @@ function prod_const_neighbors(terms)
     return result
 end
 
-function relax_sum(terms)
-    result = NeighborList()
-    i = findfirst(t -> isa(t, Sum), terms)
-    i === nothing && return result
-    free = free_and_dummy(mul(terms[1:end.!=i]...)) |> first
-    require_renaming(t) = name(t) in name.(free)
-    symbols = new_symbol(terms..., num=count(require_renaming, content(get_bound(terms[i]))))
-    new_ff = Vector{Var}()
-    summand = get_body(terms[i])
-    for t in content(get_bound(terms[i]))
-        if require_renaming(t)
-            new_var = var(pop!(symbols), get_type(t))
-            push!(new_ff, new_var)
-            summand = subst(summand, t, new_var)
-        else
-            push!(new_ff, t)
-        end
-    end
-
-    push!(result, pct_sum(new_ff..., mul(summand, terms[1:end.!=i]...)); dired=true, name="sum_in")
-    return result
-end
-
 function neighbors(m::Mul; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(m))
     append!(result, mul_add_neighbors(terms))
-    settings[:clench_sum] || append!(result, relax_sum(terms))
+    #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
     append!(result, swallow_neighbors(terms))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
@@ -719,12 +696,40 @@ end
 #     return delta(upper(delta), lower(delta), pct_sum(ff(s)..., get_body(delta)))
 # end
 
+function relax_sum(s::Sum)
+    result = NeighborList()
+    isa(get_body(s), Mul) || return result
+    terms = content(get_body(get_body(s)))
+    i = findfirst(t -> isa(t, Sum), terms)
+    i === nothing && return result
+    free = free_and_dummy(mul(terms[1:end.!=i]...)) |> first
+    require_renaming(t) = name(t) in name.(free)
+    symbols = new_symbol(terms..., num=count(require_renaming, content(get_bound(terms[i]))))
+    new_ff = Vector{Var}()
+    summand = get_body(terms[i])
+    for t in content(get_bound(terms[i]))
+        if require_renaming(t)
+            new_var = var(pop!(symbols), get_type(t))
+            push!(new_ff, new_var)
+            summand = subst(summand, t, new_var)
+        else
+            push!(new_ff, t)
+        end
+    end
+
+    push!(result, pct_sum(get_bound(s)..., new_ff..., mul(summand, terms[1:end.!=i]...)); dired=true, name="sum_in")
+    return result
+end
+
 function neighbors(s::Sum; settings=default_settings)
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
-    settings[:clench_sum] && append!(result, obvious_clench(s))
+    #= settings[:clench_sum] && append!(result, obvious_clench(s)) =#
+    append!(result, obvious_clench(s))
+    append!(result, relax_sum(s))
+
     #= settings[:clench_sum] && append!(result, clench_sum(s)) =#
     append!(result, sum_out_linear_op(s))
     append!(result, sum_out_delta(s))
