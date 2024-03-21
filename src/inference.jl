@@ -162,7 +162,7 @@ end
 
 function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
     isa(get_type(term), ElementType) && return get_type(term)
-    return MapType(VecType([get_body_type(get_type(term))]), get_bound_type(get_type(term)), meta(get_type(term)))
+    return MapType(VecType(reverse(get_content_type(get_bound_type(get_type(term))))), get_body_type(get_type(term)), meta(get_type(term)))
 end
 
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType

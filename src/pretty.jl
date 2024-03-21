@@ -35,9 +35,9 @@ function latex(m::Map)
     params = map(v -> "$(latex(v))", content(get_bound(m)))
     params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
     if isa(get_body(m), PCTVector)
-        return "$(params) \\to $(latex(get_body(m), true))"
+        return "$(params) \\mapsto $(latex(get_body(m), true))"
     else
-        return "$(params) \\to $(latex(get_body(m)))"
+        return "$(params) \\mapsto $(latex(get_body(m)))"
     end
 end
 
@@ -63,7 +63,7 @@ function latex(v::Var)
         else
             rest = ""
         end
-        return "\\mathbb{$(components[1])}$(rest)"
+        return "\\mathtt{$(components[1])}$(rest)"
     else
         return "$(name(v))"
     end
