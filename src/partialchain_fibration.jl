@@ -310,7 +310,7 @@ pop(c::PComp)::Tuple{T,PComp} where {T<:ABF} = last(pfuncs(c)), comp(input(c), p
 
 Base.isempty(c::PComp)::Bool = isempty(pfuncs(c))
 
-pretty(c::PComp) = "$(pretty(input(c))): " * join([pretty.(reverse(pfuncs(c)))...], " ◀ ")
+pretty(c::PComp) = "$(pretty(input(c))): " * join([pretty.(reverse(pfuncs(c)))...], " B ") * "I"
 Base.show(io::IO, c::PComp) = println(io, pretty(c))
 
 apns(c::PComp)::Vector{APN} = vcat(content(input(c)), apns.(pfuncs(c))...)

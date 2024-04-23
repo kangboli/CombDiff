@@ -268,7 +268,7 @@ function verbose(v::PCTVector, paren=false)
 end
 
 function Base.show(io::IO, ::MIME"text/latex", m::APN)
-    print(io, latexstring(latex(m)))
+    print(io, latexstring("\\begin{array}{l} $(latex(m)) \\end{array}" ))
 end
 
 function Base.show(io::IO, ::MIME"text/plain", m::APN)
