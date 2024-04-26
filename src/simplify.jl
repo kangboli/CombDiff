@@ -1,4 +1,4 @@
-export process_directive, dropp
+export process_directive, dropp, eval_pullback
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
@@ -27,6 +27,34 @@ function vdiff(p::Pullback)
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 
+function eval_pullback(n::APN) 
+    result = set_content(n, vcat(map(t -> eval_pullback(t), content(n))...)...)
+    return result
+end
+
+eval_pullback(n::TerminalNode) = n
+
+function eval_pullback(c::AbstractCall) 
+    return call(eval_pullback(mapp(c)), map(eval_pullback, content(args(c)))...)
+end
+
+function eval_pullback(p::Pullback)
+    m = get_body(p)
+    #= output_type == R() || error("Output must be a real scalar for the gradient to be defined") =#
+    function vdiff_single(pcomp)
+        return pcomp |> pp |> eval_all 
+    end
+
+    univariate_map = f -> decompose(pct_map(f, get_body(m)))
+
+    output_type = get_body_type(get_type(m)) 
+    k_types = isa(output_type, VecType) ? get_content_type(output_type) : [output_type]
+
+    ks = map(var, new_symbol(m; num=length(v_wrap(get_body(m))), symbol=:_k), k_types)
+    result = pct_vec(map(f -> ecall(vdiff_single(univariate_map(f)), f, ks...), get_bound(m))...)
+    result = result |> simplify |> first
+    return pct_map(get_bound(m)..., ks..., v_unwrap(result))
+end
 
 function dropp(p::Pullback)
     m = get_body(p)
@@ -34,6 +62,7 @@ function dropp(p::Pullback)
 end
 
 function propagate_k(n::Map, k=constant(1))
+    println(pretty(n))
     zs = get_bound(n)[1:end-1]
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end

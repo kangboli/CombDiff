@@ -32,6 +32,13 @@ function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
     return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
 end
 
+function e_class_reduction(::Type{Let}, bound::PCTVector, args::PCTVector, body::APN)
+    if isempty(content(bound))
+        return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
+    end
+
+    return Let, [bound, args, body], partial_inference(Let, bound, args, body)
+end
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()

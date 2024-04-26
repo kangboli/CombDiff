@@ -1,4 +1,4 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize
 
 function get_free(n::APN)
     free, _ = free_and_dummy(n)
@@ -272,13 +272,15 @@ has_call(::TerminalNode) = false
 has_call(::Copy) = false
 
 function has_call(c::Call)
-    (has_call(mapp(c)) || any(has_call, content(args(c)))) ||
+    has_call(mapp(c)) ||
+        any(has_call, content(args(c))) ||
         (isa(mapp(c), PCTVector) && length(args(c)) == 1 && isa(first(args(c)), Constant)) ||
         isa(mapp(c), Map)
 end
 function has_call(lt::Let)
-    all(t -> !isa(t, Copy), get_bound(lt)) ||
-        has_call(get_body(lt))
+    has_call(get_body(lt)) && return true
+    any(has_call, args(lt)) && return true
+    return any(t -> !isa(t, Copy), get_bound(lt)) 
 end
 
 
@@ -289,3 +291,12 @@ function eval_all(n::APN)
     return n
 end
 
+function deprimitize(n::APN)
+    return set_terms(n, map(deprimitize, terms(n))...)
+end
+
+function deprimitize(p::PrimitivePullback)
+    return pullback(get_body(p))
+end
+
+deprimitize(t::TerminalNode) = t
