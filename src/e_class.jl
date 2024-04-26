@@ -146,12 +146,12 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
 end
 
 
-flatten_comp(c::Composition) = vcat(flatten_comp.(content(get_body(c)))...)
+flatten_comp(c::AbstractComp) = vcat(flatten_comp.(content(get_body(c)))...)
 flatten_comp(c::APN) = [c]
 
-function e_class_reduction(::Type{Composition}, term::PCTVector)
+function e_class_reduction(::Type{T}, term::PCTVector) where T <: AbstractComp
     body = pct_vec(vcat(flatten_comp.(content(term))...)...)
-    return Composition, [body], partial_inference(Composition, body)
+    return T, [body], partial_inference(T, body)
 end
 
 function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)

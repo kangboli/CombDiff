@@ -21,6 +21,9 @@ function vdiff(p::Pullback)
     end
 
     result = pct_vec(map(f -> ecall(vdiff_single(decompose(pct_map(f, get_body(m)))), f), get_bound(m))...)
+    if length(result) > 1
+        result = simplify(result) |> first
+    end
     return pct_map(get_bound(m)..., v_unwrap(result))
 end
 

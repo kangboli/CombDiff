@@ -247,6 +247,7 @@ function parse_node(n::Expr)
         func == :* && return parse_mul_node(n)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
+        func == :▷ && return parse_reverse_composite_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         return parse_node(AbstractCall, n)
@@ -276,6 +277,13 @@ function parse_composite_node(n::Expr)
     f2 = parse_node(n.args[3])
 
     return :(composite($(f1), $(f2)))
+end
+
+function parse_reverse_composite_node(n::Expr)
+    f1 = parse_node(n.args[2])
+    f2 = parse_node(n.args[3])
+
+    return :(rev_composite($(f2), $(f1)))
 end
 
 function parse_univariate_node(n::Expr)
@@ -476,10 +484,9 @@ function parse_let_node(l::Expr)
     parse_subst!.(substitutions)
     content = parse_node(l.args[2])
 
-    return :(make_node(
-        Let,
-        pct_vec($(bounds...)),
-        pct_vec($(args...)),
+    return :(pct_let(
+        $(bounds...),
+        $(args...),
         $(content),
     ))
 end
@@ -522,7 +529,7 @@ end
 function statement_to_let(statements::Vector, return_value::Union{Expr, Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
-    return :(make_node(Let, pct_vec($(bound...)), pct_vec($(args...)), $(return_value)))
+    return :(pct_let($(bound...), $(args...), $(return_value)))
 end
 
 function parse_pctvector_node(n::Expr)

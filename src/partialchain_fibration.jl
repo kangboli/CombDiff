@@ -529,5 +529,109 @@ pretty(bp::BPullback) = pretty(as_map(bp))
 v_wrap(n::APN)::PCTVector = pct_vec(n)
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
-v_unwrap(n::Union{PCTVector,Vector}) = length(n) == 1 ? first(n) : n
+v_unwrap(n::Union{PCTVector,Vector,VecType}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n
+
+
+struct CopyComp <: ABF
+    maptype::MapType
+end
+
+function decompose(z::APN, ov::AbstractComp)
+    body = pct_vec(reverse(content(get_body(ov)))...)
+    maptype = MapType(get_type(body), get_type(ov))
+    return push(decompose(z, body), CopyComp(maptype))
+end
+
+function as_map(cc::CopyComp)
+    zs = z_vars(cc)
+    return pct_map(zs..., composite(zs...))
+end
+
+
+param(::CopyComp)::Nothing = nothing
+
+function pretty(c::CopyComp)
+    "Ω̄"
+end
+
+"""
+   
+x0 -> y1 -> y2 -> y3
+↓  f1 ↓  f2 ↓  f3
+k3 <- k2 <- k1 <- k0
+"""
+
+function pp(cc::CopyComp)
+    its = get_content_type(input_type(cc))
+    func_input_types = map(get_bound_type, its)
+    func_output_types = map(get_body_type, its)
+    ots = v_wrap(output_type(cc))
+    y_0_type = first(func_input_types) |> get_content_type
+    x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...)
+    k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...)
+    l_0 = pct_vec(map((k, x) -> call(k, x), content(k_0), content(x_0))...)
+    x_0 = v_unwrap(x_0)
+    k_0 = v_unwrap(k_0)
+    l_0 = v_unwrap(l_0)
+
+    fs = map(var, new_symbol(; num=length(its), symbol=:_f), its)
+
+    ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
+    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types))))
+    N = length(fs)
+    ys_values = Vector{APN}(undef, N)
+    for i in 0:N-1
+        y_prev = i == 0 ? x_0 : get_body(ys[i])
+        ys_values[i+1] = call(fs[i+1], y_prev)
+    end
+
+    ls_values = Vector{APN}(undef, N)
+    for i in 0:N-1
+        y_feed = i == N - 1 ? x_0 : get_body(ys[N-i-1])
+        l_prev = i == 0 ? l_0 : get_body(ls[i])
+        ls_values[i+1] = call(primitive_pullback(fs[N-i]), y_feed, l_prev)
+    end
+
+    function body_elem(m::Int)
+        y_prev = m == 1 ? x_0 : get_body(ys[m-1])
+        l_next = m == N ? l_0 : get_body(ls[N-m])
+        λ = var(:_λ, get_type(y_prev))
+        b = delta(y_prev, λ, l_next)
+        return pct_map(λ, pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
+            ys_values..., ls_values[1:end-1]..., b)))
+    end
+    body = map(body_elem, 1:N)
+
+    result = pct_map(fs..., k_0, pct_vec(body...))
+    return result
+end
+
+struct BLetConst <: ABF
+    param::PCTVector
+    maptype::MapType
+end
+
+function decompose(z::APN, ov::Let)::PComp
+    params = pct_vec(get_bound(ov), args(ov))
+    contains_name(params, get_body(z)) && error("The input variables currently cannot appear in a const expression.")
+    maptype = MapType(v_wrap(get_type(ov)), get_type(ov))
+    lc = BLetConst(params, maptype)
+    return push(decompose(z, get_body(ov)), lc)
+end
+
+function as_map(lc::BLetConst)
+    bounds, args = param(lc)
+    zs = z_vars(lc)
+    result = pct_map(zs..., pct_let(bounds..., args..., zs...))
+    return result
+end
+
+"""
+𝒫 (z -> let ... z end)(z, k) = let ... k end
+"""
+function pp(lc::BLetConst)
+    zs, ks = zk_vars(lc)
+    result = pct_map(zs..., ks..., call(as_map(lc), ks...))
+    return result
+end

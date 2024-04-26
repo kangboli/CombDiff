@@ -147,7 +147,7 @@ function subst(n::Var, old::Var, new::APN, ::Bool)
     name(n) == name(old) ? new : n
 end
 
-function subst(n::T, old::T, new::APN, ::Bool) where T <: APN
+function subst(n::T, old::T, new::APN, ::Bool) where {T<:APN}
     n == old ? new : n
 end
 
@@ -213,7 +213,7 @@ function resolve_conflict(n::T, old::APN, new::APN,
     isempty(conflict) && return n
 
     for c in conflict
-        new_prefix = filter(t->t != "", split(string(name(c)), "_")) |> first
+        new_prefix = filter(t -> t != "", split(string(name(c)), "_")) |> first
         tmp = set_content(c, first(new_symbol(new, n, old, symbol=Symbol("_$(new_prefix)"))))
         n = subst(n, c, tmp, true)
     end
@@ -229,9 +229,9 @@ evaluate(c::TerminalNode) = c
 
 function evaluate(c::Call)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
-    isa(mapp(c), Add) && return add(map(t->eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
+    isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
 
-    new_bound = map(var, range.(get_bound(mapp(c))), new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
+    new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
     @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
 
     n = evaluate(get_body(mapp(c)))
@@ -248,14 +248,39 @@ function evaluate(c::Call)
 end
 
 function evaluate(l::Let)
-    new_call = call(pct_map(get_bound(l)..., get_body(l)), args(l)...)
-    return evaluate(new_call)
+    copies, substs, subst_args, copy_args = [], [], [], []
+    for (b, a) in zip(get_bound(l), args(l))
+        if isa(b, Copy)
+            push!(copies, b)
+            push!(copy_args, eval_all(a))
+        else
+            push!(substs, b)
+            push!(subst_args, eval_all(a))
+        end
+    end
+    if !isempty(substs)
+        new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...))
+    else
+        new_call = evaluate(get_body(l))
+    end
+    result = pct_let(copies..., copy_args..., new_call)
+    return result
 end
 
 has_call(n::APN) = any(has_call, content(n))
 has_call(::TerminalNode) = false
-has_call(::Call) = true
-has_call(::Let) = true
+has_call(::Copy) = false
+
+function has_call(c::Call)
+    (has_call(mapp(c)) || any(has_call, content(args(c)))) ||
+        (isa(mapp(c), PCTVector) && length(args(c)) == 1 && isa(first(args(c)), Constant)) ||
+        isa(mapp(c), Map)
+end
+function has_call(lt::Let)
+    all(t -> !isa(t, Copy), get_bound(lt)) ||
+        has_call(get_body(lt))
+end
+
 
 function eval_all(n::APN)
     while has_call(n)

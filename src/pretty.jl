@@ -27,7 +27,7 @@ end
 function pretty(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
     params = map(v -> "$(pretty(v))", content(get_bound(m)))
-    "($(join(params, ", "))) -> \n$(indent(pretty(get_body(m))))"
+    "($(join(params, ", "))) -> $(pretty(get_body(m)))"
 end
 
 function latex(m::Map)
@@ -284,18 +284,37 @@ function latex(m::Monomial)
 end
 
 pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
+#= pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend" =#
+
 function verbose(l::Let)
     "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), get_bound(l), args(l)), "\n"))\n$(indent(verbose(get_body(l))))\nend"
 end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
 
 function pretty(c::Composition)
-    join(map(f -> pretty(f), content(get_body(c))), "∘")
+    join(map(f -> pretty(f), content(get_body(c))), " ∘\n")
+end
+
+function pretty(c::RevComposition)
+    join(map(f -> pretty(f), reverse(content(get_body(c)))), " ▷\n")
 end
 
 function latex(c::Composition)
     join(map(f -> latex(f), content(get_body(c))), "∘")
 end
+
+function latex(c::RevComposition)
+    join(map(f -> latex(f), reverse(content(get_body(c)))), "▷")
+end
+
+function pretty(c::Copy)
+    "%$(pretty(get_body(c)))"
+end
+
+function latex(c::Copy)
+    "\\%$(pretty(get_body(c)))"
+end
+
 
 # This function is only for the purpose of displaying the negative sign.
 is_negative(n::APN) = false

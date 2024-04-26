@@ -162,4 +162,4 @@ is_periodic(::ElementType) = false
 is_contractable(d::Domain) = !haskey(d.meta, :contractable) || d.meta[:contractable]
 is_contractable(::ElementType) = true
 is_contractable(v::Var) = is_contractable(get_type(v))
-
+is_contractable(v::MapType) = true

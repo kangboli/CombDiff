@@ -105,17 +105,18 @@ function inference(l::Let, context::TypeContext)
     typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
+        is_copy = isa(f, Copy)
+        f = is_copy ? get_body(f) : f
         f = set_type(f, get_type(a))
-        push!(typed_bound, f)
+        push!(typed_bound, is_copy ? pct_copy(f) : f)
         push!(typed_args, a)
         push_var!(context, get_body(f), f)
     end
-    
-    typed_content = inference(get_body(l), context)
-    map(f -> pop_var!(context, get_body(f)), typed_bound)
-    return l = pct_let(typed_bound..., typed_args..., typed_content) 
-end
 
+    typed_content = inference(get_body(l), context)
+    map(f -> pop_var!(context, isa(f, Copy) ? get_body(get_body(f)) : get_body(f)), typed_bound)
+    return pct_let(typed_bound..., typed_args..., typed_content)
+end
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
@@ -212,7 +213,7 @@ function inference(d::Domain)
            meta(d))
 end
 
-function partial_inference(::Type{Composition}, term::PCTVector)
+function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
     bound_type = get_bound_type(get_type(first(content(term))))
     body_type = get_body_type(get_type(last(content(term))))
     return MapType(bound_type, body_type)

@@ -24,9 +24,12 @@ export
     minfty,
     infty,
     composite,
+    rev_composite,
     Composition,
+    RevComposition,
     pct_exp,
-    pct_log
+    pct_log, 
+    pct_let
 
 abstract type TerminalNode <: APN end
 
@@ -157,12 +160,12 @@ end
 
 struct Call <: AbstractCall
     type::AbstractPCTType
-    mapp::Union{Map,Pullback,Call,Add}
+    mapp::APN
     args::PCTVector
 end
 
-function call(mapp::Union{Map,Pullback,Call,Add}, args::Vararg)
-    make_node(Call, mapp, make_node(PCTVector, args...))
+function call(mapp::APN, args::Vararg)
+    make_node(Call, mapp, pct_vec(args...))
 end
 
 struct PrimitiveCall <: AbstractCall
@@ -358,13 +361,24 @@ function call(vec::PCTVector, c::Constant)
     return content(vec)[get_body(c)]
 end
 
-struct Composition <: APN
+abstract type AbstractComp <: APN end
+
+struct Composition <: AbstractComp
+    type::AbstractPCTType
+    body::PCTVector
+end
+
+struct RevComposition <: AbstractComp 
     type::AbstractPCTType
     body::PCTVector
 end
 
 function composite(funcs::Vararg)
     make_node(Composition, pct_vec(funcs...))
+end
+
+function rev_composite(funcs::Vararg)
+    make_node(RevComposition, pct_vec(funcs...))
 end
 
 abstract type FermionicField <: AbstractMap end
@@ -396,6 +410,21 @@ function conjugate(n::PrimitiveCall)
     end
 end
 
+function primitive_call(mapp::APN, args::Vararg)
+    make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
+end
+
 function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
+
+struct Copy  <: Univariate
+    type::AbstractPCTType
+    body::Var
+end
+
+function pct_copy(body::Var)
+    make_node(Copy, body)
+end
+
+name(c::Copy) = name(get_body(c))
