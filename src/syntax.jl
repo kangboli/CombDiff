@@ -27,6 +27,7 @@ macro pit(expr, ctx=interactive_context, use_global_state=false)
 
     statements = filter(n -> isa(n, Statement), top_level_nodes)
     domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
+    sizes = map(get_expr, filter(n -> isa(n, SizeNode), top_level_nodes))
     maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
     return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
@@ -44,6 +45,7 @@ macro pit(expr, ctx=interactive_context, use_global_state=false)
     rhs = :(
         begin
             _ctx = $(ctx)
+            $(sizes...)
             $(domains...)
             $(maps_types...)
             ($(return_node), _ctx)
@@ -233,6 +235,7 @@ function parse_node(n::Expr)
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
         n.args[1] == Symbol("@domain") && return parse_domain_node(n)
+        n.args[1] == Symbol("@size") && return parse_size_node(n)
     end
     n.head == Symbol("->") && return parse_map_node(n)
     if n.head == :call
@@ -309,12 +312,18 @@ function parse_maptype_node(s::Expr)
     s = purge_line_numbers(s)
     @assert s.args[1] == Symbol("@space")
     name = s.args[2]
+    type_params = nothing
+    if isa(name, Expr) && name.head == :curly
+        type_params = name.args[2:end]
+        name = name.args[1]
+    end
     block = s.args[3]
 
     parse_pair(::Val{:symmetries}, t::Expr) = t
     parse_pair(::Val{:linear}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
         bound_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
+        bound_type(a::Expr) = :(parametrize_type(_ctx[$(QuoteNode(a.args[1]))], $(map(parse_node, a.args[2:end])...)))
         params = :(VecType([$([bound_type(a) for a in t.args[1].args]...)]))
         return_type = :($(bound_type(first(t.args[2].args))))
         return (params, return_type)
@@ -325,9 +334,15 @@ function parse_maptype_node(s::Expr)
     supported_properties = [:symmetries, :linear]
     properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
     dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
+    maptype = :(MapType($(pairs[:type]...), $(dict),))
+
+    if type_params !== nothing
+        type_params = map(parse_node, type_params)
+        maptype = :(ParametricMapType([$(type_params...)], $(maptype)))
+    end
+
     return MapTypeNode(:(push_type!(_ctx, $(QuoteNode(name)),
-        MapType($(pairs[:type]...), $(dict),);
-        replace=true)))
+        $(maptype); replace=true)))
 end
 
 struct DomainNode
@@ -338,6 +353,11 @@ get_expr(n::DomainNode) = n.expr
 
 function parse_domain_node(n::Expr)
     name = n.args[2]
+    type_params = nothing
+    if isa(name, Expr) && name.head == :curly
+        type_params = name.args[2:end]
+        name = name.args[1]
+    end
     block = n.args[3]
     periodic = QuoteNode(false)
     contractable = QuoteNode(true)
@@ -349,24 +369,49 @@ function parse_domain_node(n::Expr)
         (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use."
         lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
-        periodic = QuoteNode(haskey(pairs, :periodic) && (pairs[:periodic]))
-        tensorize = QuoteNode(haskey(pairs, :tensorize) && (pairs[:tensorize]))
-        symmetric = QuoteNode(haskey(pairs, :symmetric) && (pairs[:symmetric]))
-        contractable = QuoteNode(haskey(pairs, :contractable) ? (pairs[:contractable]) : true)
+        periodic = haskey(pairs, :periodic) && (pairs[:periodic])
+        tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])
+        symmetric = haskey(pairs, :symmetric) && (pairs[:symmetric])
+        contractable = haskey(pairs, :contractable) ? (pairs[:contractable]) : true
     else
         base = n.args[3]
         lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
     end
-    return DomainNode(:(
-        push_type!(_ctx, $(QuoteNode(name)), inference(Domain(
-            $(base)(), $(lower), $(upper),
-            meta=Dict(:name => $(QuoteNode(name)),
-                :periodic => $(periodic),
-                :tensorize => $(tensorize),
-                :symmetric => $(symmetric),
-                :contractable => $(contractable)
-            )
-        )); replace=true)))
+    domain = :(inference(Domain(
+        $(base)(), $(lower), $(upper),
+        meta=Dict(:name => $(QuoteNode(name)),
+            :periodic => $(periodic),
+            :tensorize => $(tensorize),
+            :symmetric => $(symmetric),
+            :contractable => $(contractable)
+        )
+    ), _ctx))
+    if type_params !== nothing
+        type_params = map(parse_node, type_params)
+        domain = :(ParametricDomain([$(type_params...)], $(domain)))
+    end
+
+    return DomainNode(:(push_type!(_ctx, $(QuoteNode(name)), $(domain)); replace = true))
+end
+
+struct SizeNode
+    expr::Expr
+end
+
+get_expr(n::SizeNode) = n.expr
+
+function parse_size_node(n::Expr)
+    base, names = n.args[2], n.args[3:end]
+    pushes = map(name -> :(
+            push_var!(_ctx, $(QuoteNode(name)),
+            var($(QuoteNode(name)), $(base)())
+        )
+        ), names)
+    return SizeNode(:(
+        begin
+            $(pushes...)
+        end
+    ))
 end
 
 struct Param <: APN end
@@ -526,7 +571,7 @@ function parse_block_node(n::Expr)
     return statement_to_let(statements, return_value)
 end
 
-function statement_to_let(statements::Vector, return_value::Union{Expr, Symbol})
+function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
     return :(pct_let($(bound...), $(args...), $(return_value)))

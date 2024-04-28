@@ -1,4 +1,4 @@
-export TypeContext, inference, partial_inference, push_type!, pop_type!
+export TypeContext, inference, partial_inference, push_type!, pop_type!, push_var!, pop_var!
 
 struct TypeContext
     name_to_type::Dict{Symbol,Vector{<:AbstractPCTType}}
@@ -199,8 +199,7 @@ function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCT
     escalate(get_type(base), get_type(power))
 end
 
-function inference(d::Domain)
-    context = TypeContext()
+function inference(d::Domain, context::TypeContext=TypeContext())
     vars = vcat(variables(lower(d)), variables(upper(d)))
     for v in vars
         get_var(context, get_body(v)) === nothing || continue

@@ -37,7 +37,9 @@ struct N <: ElementType end
 
 base(::T) where {T<:ElementType} = T()
 
-struct Domain <: ElementType
+abstract type AbstractDomain <: ElementType end
+
+struct Domain <: AbstractDomain
     base::ElementType
     lower::APN
     upper::APN
@@ -68,9 +70,9 @@ upper(d::Domain) = d.upper
 meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
 
-function tensorize(m::Domain) 
+function tensorize(m::Domain)
     base(m) == N() || return false
-    haskey(m.meta, :tensorize) && return m.meta[:tensorize] 
+    haskey(m.meta, :tensorize) && return m.meta[:tensorize]
 end
 
 tensorize(t::AbstractPCTType) = false
@@ -89,8 +91,9 @@ Base.length(v::VecType) = length(get_content_type(v))
 Base.getindex(v::VecType, i::Int) = get_content_type(v)[i]
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_content_type(v)), t))
 
+abstract type AbstractMapType <: AbstractPCTType end
 
-struct MapType <: AbstractPCTType
+struct MapType <: AbstractMapType
     bound::VecType
     body::AbstractPCTType
     meta::Dict
@@ -120,7 +123,7 @@ end
 
 function escalate(map_types::Vararg{MapType})
     # TODO: implement this properly
-    bound_types = get_bound_type.(map_types) 
+    bound_types = get_bound_type.(map_types)
     body_type = get_body_type.(map_types)
     #= @assert reduce(isequal, base.(bound_types)) =#
     return MapType(first(bound_types), escalate(body_type...))

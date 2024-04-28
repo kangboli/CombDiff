@@ -2,6 +2,7 @@ module PCT
 
 include("misc.jl")
 include("type.jl")
+include("parametric_type.jl")
 include("nodes.jl")
 include("element.jl")
 include("e_class.jl")
