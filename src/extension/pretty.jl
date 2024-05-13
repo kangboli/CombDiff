@@ -18,9 +18,10 @@ verbose(v::VecType) = "$(join(verbose.(get_content_type(v)), "×"))"
 verbose(::UndeterminedPCTType) = "?"
 
 verbose(::T) where {T<:ElementType} = string(T)
+verbose(t::APN) = pretty(t)
 
 function verbose(d::Domain)
-    name = haskey(meta(d), :name) ? name : ""
+    name = haskey(meta(d), :name) ? meta(d)[:name] : ""
     "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
 

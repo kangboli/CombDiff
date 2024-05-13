@@ -59,26 +59,6 @@ macro pit(expr, ctx=interactive_context, use_global_state=false)
         end))
 
 end
-# elseif return_node === nothing
-#  esc(:(
-#     _, PCT.interactive_context = begin
-#         _ctx = $(ctx)
-#         $(domains...)
-#         $(maps_types...)
-#         ($(return_node), _ctx)
-#     end
-# ))
-# elseif !isempty(return_node_list)
-#  esc(:(
-#     PCT.interactive_result, PCT.interactive_context = begin
-#         _ctx = $(ctx)
-#         $(domains...)
-#         $(maps_types...)
-#         ($(return_node), _ctx)
-#     end
-# ))
-
-# end
 
 """
     @pct(expr, [ctx = :(TypeContext())])
@@ -378,14 +358,14 @@ function parse_domain_node(n::Expr)
         lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
     end
     domain = :(inference(Domain(
-        $(base)(), $(lower), $(upper),
-        meta=Dict(:name => $(QuoteNode(name)),
-            :periodic => $(periodic),
-            :tensorize => $(tensorize),
-            :symmetric => $(symmetric),
-            :contractable => $(contractable)
-        )
-    ), _ctx))
+            $(base)(), $(lower), $(upper),
+            meta=Dict(:name => $(QuoteNode(name)),
+                :periodic => $(periodic),
+                :tensorize => $(tensorize),
+                :symmetric => $(symmetric),
+                :contractable => $(contractable)
+            )
+        ), _ctx))
     if type_params !== nothing
         type_params = map(parse_node, type_params)
         domain = :(ParametricDomain([$(type_params...)], $(domain)))
@@ -402,9 +382,16 @@ get_expr(n::SizeNode) = n.expr
 
 function parse_size_node(n::Expr)
     base, names = n.args[2], n.args[3:end]
+
+    if base in base_domains
+        type = :($(base)())
+    elseif isa(base, Expr)
+        type = :(parametrize_type(_ctx[$(QuoteNode(base.args[1]))], $(map(parse_node, a.args[2:end])...)))
+    end
+
     pushes = map(name -> :(
             push_var!(_ctx, $(QuoteNode(name)),
-            var($(QuoteNode(name)), $(base)())
+            var($(QuoteNode(name)), $(type))
         )
         ), names)
     return SizeNode(:(
@@ -418,10 +405,27 @@ struct Param <: APN end
 
 function parse_map_node(f::Expr)
     @assert f.head == Symbol("->")
-    params = f.args[1].head == :tuple ? f.args[1].args : Vector{Expr}([f.args[1]])
+
+    bound = f.args[1]
+    parametric_types = nothing
+    if bound.head == :call
+        parametric_types = bound.args[1].args
+        bound = bound.args[2:end]
+    elseif bound.head == :tuple
+        params = bound.args
+    else
+        params = Vector{Expr}([bound])
+    end
+
     body = f.args[2]
 
-    return :(pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
+    result_map = :(pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
+    parametric_types === nothing && return result_map
+
+    return :(set_type($(result_map),
+        ParametricMapType($(map(parse_node, parametric_types)),
+            UndeterminedPCTType()
+        )))
 end
 
 
@@ -432,7 +436,13 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 
     if p.head == Symbol("::")
         name, type = p.args
+        type_params = []
+        if isa(type, Expr)
+            type_params = type.args[2:end]
+            type = type.args[1]
+        end
         type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
+        type = :(parametrize_type($(type), $(map(parse_node, type_params)...)))
         isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
     end
     if p.head == :call && p.args[1] == :∈

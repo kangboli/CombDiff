@@ -34,6 +34,24 @@ function param_subst(p::MapType, old::Vector, new::Vector)
 end
 
 function parametrize_type(t::T, args...) where {T <: Union{ParametricDomain, ParametricMapType}}
+    if length(args) == 0 
+        args = fill(infty(), length(get_params(t)))
+    end
     return param_subst(get_param_body(t), get_params(t), [args...])
 end
 
+function parametrize_type(t::T, args...) where {T <: Union{Domain, MapType}} 
+    length(args) == 0 && return t 
+end
+
+function parametrize_type(::N, args...) 
+    length(args) == 1 && return Domain(N(), constant(1), first(args))
+    length(args) == 2 && return Domain(N(), args...)
+    return N()
+end
+
+
+function parametrize_type(::T, args...)  where T <: ElementType
+    length(args) == 2 && return Domain(T(), args...)
+    return T()
+end

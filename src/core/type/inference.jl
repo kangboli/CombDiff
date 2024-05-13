@@ -25,6 +25,7 @@ default_context() = TypeContext(
     ),
     Dict{Symbol,Vector{<:Var}}(
     :Infty => [infty()],
+    :∞ => [infty()],
     )
 )
 
