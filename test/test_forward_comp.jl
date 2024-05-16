@@ -4,7 +4,7 @@ f, _ = @pct begin
     mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))
     vip = (x::RV, y::RV) -> sum(i, x(i) * y(i))
     (batch::RV, Relu::RF) ->
-        pullback((t_2::RM, w::RV, t_1::RM) ->
+        pullback((t_1::RM, t_2::RM, w::RV) ->
             (((x::RV) -> mvp(t_1, x)) ▷
              ((x::RV) -> (i::N) -> Relu(x(i))) ▷
              ((x::RV) -> mvp(t_2, x)) ▷
