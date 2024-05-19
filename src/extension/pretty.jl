@@ -305,7 +305,7 @@ function latex(c::Composition)
 end
 
 function latex(c::RevComposition)
-    join(map(f -> latex(f), reverse(content(get_body(c)))), "▷")
+    join(map(f -> latex(f), reverse(content(get_body(c)))), "▷\\\\")
 end
 
 function pretty(c::Copy)

@@ -538,7 +538,7 @@ function clench_sum(s::Sum)
             isempty(exterior) && continue
             new_v = remove_i(get_bound(s), i)
             new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(get_bound(s)[i], mul(interior...))))
-            push!(result, new_sum; dired=true, name="sum_out")
+            push!(result, new_sum; dired=true, name="sum_clench")
         end
     end
 
@@ -558,8 +558,10 @@ function obvious_clench(s::Sum)
             push!(target, t)
         end
 
+        isempty(exterior) && return result
+
         new_sum = mul(exterior..., pct_sum(content(get_bound(s))..., mul(interior...)))
-        push!(result, new_sum; dired=true, name="sum_out")
+        push!(result, new_sum; dired=true, name="obvious_clench")
     end
 
 
@@ -984,6 +986,6 @@ function neighbors(lt::Let; settings=default_settings)
     append!(result, sub_neighbors(lt; settings=settings))
     append!(result, let_const_bound_delta_prop(lt))
     append!(result, let_const_body_delta_out(lt))
-    append!(result, let_collapse(lt)) 
+    append!(result, let_collapse(lt))
     return result
 end
