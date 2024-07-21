@@ -1,4 +1,4 @@
-module PCT
+module CombDiff
 
 include("core/misc.jl")
 include("core/type/type.jl")

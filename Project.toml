@@ -1,4 +1,4 @@
-name = "PCT"
+name = "CombDiff"
 uuid = "ef708a43-c8a3-43f4-8f65-1f04ee4c5bb0"
 authors = ["Kangbo <li95@llnl.gov>"]
 version = "0.1.0"

@@ -1,4 +1,4 @@
-using PCT
+using CombDiff
 
 f, _ = @pct begin
     mvp = (A::RM, x::RV) -> (i::N) -> sum(j, A(i, j) * x(j))

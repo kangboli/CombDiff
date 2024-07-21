@@ -1,5 +1,7 @@
 # Tensor Calculus
 
+
+
 ## Quadratic Form
 
 As a familiar example, we can differentiate $x^{\dagger} A x$, where $A$ is Hermitian
