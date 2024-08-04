@@ -1,4 +1,4 @@
-using PCT, Test
+using CombDiff, Test
 
 @testset "syntax: domain" begin
     d, ctx = @pct begin

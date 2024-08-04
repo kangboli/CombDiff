@@ -1,4 +1,4 @@
-using PCT, Test
+using CombDiff, Test
 
 @testset "Hartree Fock" begin
 

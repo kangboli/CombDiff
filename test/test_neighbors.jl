@@ -1,4 +1,4 @@
-using PCT, Test
+using CombDiff, Test
 
 @testset "neighbors: primitive calls with symmetries" begin
 

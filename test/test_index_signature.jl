@@ -1,4 +1,4 @@
-using PCT
+using CombDiff
 
 function graphical_test()
     g_1 = @pct f ctx i * (A(i, j) + A(j, i))

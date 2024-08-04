@@ -1,4 +1,4 @@
-using PCT, Test
+using CombDiff, Test
 
 
 #= @testset "e_class: primitive calls and symmetries" begin

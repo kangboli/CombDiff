@@ -1,4 +1,4 @@
-using PCT
+using CombDiff
 f, _ = @pct (A::RM, v::RV) -> sum((i::N, j::N), v(i) * A(i, j) * v(j))
 bf = blaserize(f) |> first
 codegen(bf)
