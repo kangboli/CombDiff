@@ -346,7 +346,7 @@ function parse_domain_node(n::Expr)
     if isa(block, Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
-        (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use."
+        #= (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use." =#
         lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
         periodic = haskey(pairs, :periodic) && (pairs[:periodic])
@@ -452,7 +452,7 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
         if param.head == Symbol("::")
             name, type = param.args
             type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper)))))
+            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper), Dict(:name=>:_λ)))))
         end
         return :(var($(parse_node(param)), $(parse_node(domain))))
     end

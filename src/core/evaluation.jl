@@ -140,6 +140,33 @@ end =#
 
 #= subst(v::Var, ::PrimitiveCall, ::AbstractCall, ::Bool)::Var = v
 subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c =#
+function subst_type(n::ElementType, ::S, ::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return n
+end
+
+function subst_type(n::VecType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return VecType(map(t -> subst_type(t, old, new, replace_dummy), get_content_type(n)))
+end
+
+
+function subst_type(n::Domain, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return Domain(base(n), all_subst(lower(n), old, new, replace_dummy), all_subst(upper(n), old, new, replace_dummy), meta(n))
+end
+
+function subst_type(n::MapType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return MapType(
+        subst_type(get_bound_type(n), old, new, replace_dummy),
+        subst_type(get_body_type(n), old, new, replace_dummy),
+        meta(n)
+    )
+end
+
+
+function all_subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
+    result = subst(n, old, new, replace_dummy)
+    return set_type(result, subst_type(get_type(result), old, new, replace_dummy))
+end
+
 subst(c::Constant, ::Var, ::APN, ::Bool)::Constant = c
 
 function subst(n::Var, old::Var, new::APN, ::Bool)
@@ -163,12 +190,12 @@ function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R
 end
 
 function reconstruct(n::APN, old::APN, new::APN, replace_dummy::Bool)
-    return set_terms(n, [subst(t, old, new, replace_dummy) for t in terms(n)]...)
+    return set_terms(n, [all_subst(t, old, new, replace_dummy) for t in terms(n)]...)
 end
 
 function reconstruct(n::PrimitiveCall, old::APN, new::APN, replace_dummy::Bool)
-    new_args = map(t -> subst(t, old, new), content(args(n)))
-    new_map = subst(mapp(n), old, new, replace_dummy)
+    new_args = map(t -> all_subst(t, old, new), content(args(n)))
+    new_map = all_subst(mapp(n), old, new, replace_dummy)
     return call(new_map, new_args...)
 end
 
@@ -215,7 +242,7 @@ function resolve_conflict(n::T, old::APN, new::APN,
     for c in conflict
         new_prefix = filter(t -> t != "", split(string(name(c)), "_")) |> first
         tmp = set_content(c, first(new_symbol(new, n, old, symbol=Symbol("_$(new_prefix)"))))
-        n = subst(n, c, tmp, true)
+        n = all_subst(n, c, tmp, true)
     end
     return n
 end
@@ -236,12 +263,12 @@ function evaluate(c::Call)
 
     n = evaluate(get_body(mapp(c)))
     for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
-        n = subst(n, old, new)
+        n = all_subst(n, old, new)
     end
     new_args = map(eval_all, args(c))
 
     for (old, new) in zip(new_bound, new_args)
-        n = subst(n, old, new)
+        n = all_subst(n, old, new)
     end
 
     return n
@@ -280,7 +307,7 @@ end
 function has_call(lt::Let)
     has_call(get_body(lt)) && return true
     any(has_call, args(lt)) && return true
-    return any(t -> !isa(t, Copy), get_bound(lt)) 
+    return any(t -> !isa(t, Copy), get_bound(lt))
 end
 
 

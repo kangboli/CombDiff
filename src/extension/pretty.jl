@@ -276,6 +276,10 @@ function Base.show(io::IO, ::MIME"text/plain", m::APN)
     print(io, pretty(m))
 end
 
+function Base.show(io::IO, ::MIME"text/plain", m::AbstractPCTType)
+    print(io, pretty(m))
+end
+
 pretty(n::Negate) = "-$(pretty(get_body(n)))"
 
 pretty(m::Monomial) = "($(pretty(base(m))))^($(pretty(power(m))))"
@@ -364,4 +368,27 @@ end
 function verbose(n::Log)
     "log($(verbose(get_body(n))))::$(get_type(n))"
 end
+
+function pretty(d::ParametricDomain)
+    "{$(join(pretty.(get_params(d)), ", "))} ->> $(pretty(get_param_body(d)))"
+end
+
+function pretty(d::Domain)
+    "$(pretty(base(d))):[$(pretty(lower(d))), $(pretty(upper(d)))]"
+end
+
+function pretty(d::ParametricMapType)
+    "{$(join(pretty.(get_params(d)), ", "))} ->> $(pretty(get_param_body(d)))"
+end
+
+function pretty(m::MapType)
+    "[$(pretty(get_bound_type(m)))->$(pretty(get_body_type(m)))]"
+end
+
+function pretty(v::VecType)
+    "$(join(pretty.(get_content_type(v)), "×"))"
+end
+
+pretty(::T)  where T <: ElementType = string(T)
+    
 

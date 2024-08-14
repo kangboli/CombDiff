@@ -78,10 +78,6 @@ end
 tensorize(t::AbstractPCTType) = false
 tensorize(t::N) = true
 
-function Base.show(io::IO, ::MIME"text/plain", d::Domain)
-    print(io, "$(name(d))∈$(verbose(base(d))):[$(pretty(lower(d))), $(pretty(upper(d)))]")
-end
-
 struct VecType <: AbstractPCTType
     content::Vector{AbstractPCTType}
 end
