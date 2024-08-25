@@ -514,6 +514,8 @@ function contract_delta_neighbors(s::Sum)
             error("Not yet implemented")
         end
         new_sum = pct_sum(indices..., subst(get_body(d), v, replacement))
+        new_sum = indicator(lower(get_type(this)), this, this, upper(get_type(this)), new_sum)
+
         push!(result, new_sum; dired=true, name="contract_delta")
     end
 

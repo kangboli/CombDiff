@@ -282,7 +282,6 @@ upper(d::AbstractDelta) = d.upper
 lower(d::AbstractDelta) = d.lower
 
 content_fields(::Type{T}) where {T<:AbstractDelta} = [:upper, :lower, :body]
-fc(d::AbstractDelta) = d.body
 
 struct Delta <: AbstractDelta
     type::AbstractPCTType
@@ -428,3 +427,27 @@ function pct_copy(body::Var)
 end
 
 name(c::Copy) = name(get_body(c))
+
+struct Indicator <: AbstractDelta
+    type::AbstractPCTType
+    lower::APN
+    upper::APN
+    body::APN
+end
+
+
+function make_delta(::Type{T}, upper_lower::Vararg{APN}) where T <: AbstractDelta
+    upper_lower = collect(upper_lower)
+    content = last(upper_lower)
+    upper_lower = upper_lower[1:end-1]
+    n = length(upper_lower)
+    content = make_node(T, upper_lower[1], upper_lower[n÷2+1], content)
+    if n > 2
+        return make_delta(T, upper_lower[2:n÷2]..., upper_lower[n÷2+2:end]..., content)
+    else
+        return content
+    end
+end
+
+indicator(upper_lower::Vararg{APN}) = make_delta(Indicator, upper_lower...)
+

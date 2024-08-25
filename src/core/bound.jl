@@ -1,5 +1,13 @@
 export Upper, Lower, all_bounds, bound
 
+abstract type ZeroCompare end
+struct IsNeg <: ZeroCompare end
+struct NonNeg <: ZeroCompare end
+struct IsPos <: ZeroCompare end
+struct NonPos <: ZeroCompare end
+struct IsZero <: ZeroCompare end
+struct Uncomparable <: ZeroCompare end
+
 abstract type Bound end
 struct Upper <: Bound end
 struct Lower <: Bound end
@@ -19,7 +27,7 @@ flip(::Lower) = Upper()
 
 function bound(x::Var, y::Var, b::Bound)
     name(x) == name(y) || return y
-    isa(get_type(y), Domain) || return mul(get_sign(b), infty()) 
+    isa(get_type(y), Domain) || return mul(get_sign(b), infty())
     return b(get_type(y))
 end
 
@@ -32,26 +40,38 @@ function bound(x::Var, m::Mul, b::Bound)
     end
 
     prefactor = mul(new_content...)
-    x_bound = get_sign(prefactor) == 1 ? bound(x, x, b) : bound(x, x, flip(b))
+    x_bound = if isa(zero_compare(prefactor), Union{IsPos,NonNeg})
+        bound(x, x, b)
+    elseif isa(zero_compare(prefactor), Union{IsNeg,NonPos})
+        bound(x, x, flip(b))
+    else
+
+    end
     return mul(prefactor, x_bound)
 end
 
 function bound(x::Var, a::Add, b::Bound)
-    return add(map(t->bound(x, t, b), content(a))...)
+    return add(map(t -> bound(x, t, b), content(a))...)
 end
 
 
-function get_sign(c::Constant)
-    return sign(get_body(c))
+function zero_compare(c::Constant)
+    get_body(c) == 0 && return IsZero()
+    get_body(c) > 0 && return IsPos()
+    get_body(c) < 0 && return IsNeg()
 end
 
-function get_sign(t::APN)
-    upper_bounds = all_bounds(t, Upper())
-    lower_bounds = all_bounds(t, Lower())
-    any(b->isa(b, Constant) && get_body(b) < 0, upper_bounds) && return -1
-    any(b->isa(b, Constant) && get_body(b) > 0, lower_bounds) && return 1
-    constant(0) in upper_bounds && constant(0) in lower_bounds && return 0
-    return NaN
+function zero_compare(t::APN)
+    upper_compare = map(zero_compare, all_bounds(t, Upper()))
+    lower_compare = map(zero_compare, all_bounds(t, Lower()))
+
+    IsNeg() in upper_compare && return IsNeg()
+    NonPos() in upper_compare && return NonPos()
+
+    IsPos() in lower_compare && return IsPos()
+    NonNeg() in lower_compare && return NonNeg()
+
+    return Uncomparable()
 end
 
 function all_bounds(t::APN, b::Bound)

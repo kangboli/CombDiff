@@ -181,3 +181,15 @@ function e_class_reduction(::Type{T}, body::S) where {T <: Univariate, S <: APN}
     end
 end
 
+
+function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) where T <: APN
+
+    lower == minfty() && return T, [body], partial_inference(T, body)
+    lower == infty() && return Constant,  [0], I()
+
+    upper == infty() && return T, [body], partial_inference(T, body)    
+    upper == minfty() && return Constant,  [0], I()
+
+    diff = add(upper, mul(constant(-1), lower))
+    isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)    
+end

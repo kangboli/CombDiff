@@ -1,4 +1,4 @@
-using PCT, Test
+using CombDiff, Test
 
 include("test_element.jl")
 include("test_syntax.jl")
