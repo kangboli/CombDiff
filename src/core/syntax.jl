@@ -243,18 +243,6 @@ function parse_node(n::Expr)
     return :()
 end
 
-function parse_quantum_field_node(n::QuoteNode)
-    #= @assert n.head == Symbol(:quote) =#
-    field = n.value
-    if field == :<
-        return :(conjugate(FermiVacuum()))
-    elseif field == :>
-        return :(FermiVacuum())
-    else
-        return :(f_annihilation($(QuoteNode(field))))
-    end
-end
-
 function parse_composite_node(n::Expr)
     f1 = parse_node(n.args[2])
     f2 = parse_node(n.args[3])
@@ -460,11 +448,11 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 end
 
 parse_node(p::Symbol) = :(var($(QuoteNode(p))))
-function parse_node(p::QuoteNode)
+#= function parse_node(p::QuoteNode)
     parse_quantum_field_node(p)
     #= name = "__" * string(p.value)
     :(var(Symbol($(name)))) =#
-end
+end =#
 
 parse_node(i::Number) = :(constant($(i)))
 

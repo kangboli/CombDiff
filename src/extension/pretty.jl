@@ -327,24 +327,6 @@ is_negative(n::Mul) = any(t -> is_negative(t), get_body(n))
 is_negative(n::Constant) = get_body(n) < 0
 is_negative(n::ScalarTensorProduct) = is_negative(n.scalar)
 
-function pretty(c::FermionicFieldAnnihilation)
-    return "$(get_body(c))̂"
-end
-
-function pretty(c::FermionicFieldCreation)
-    return "$(get_body(c))̂'"
-end
-
-verbose(c::FermionicField) = pretty(c)
-
-function latex(c::FermionicFieldAnnihilation)
-    "\\hat{$(get_body(c))}"
-end
-
-function latex(c::FermionicFieldCreation)
-    "\\hat{$(get_body(c))}^{\\dagger}"
-end
-
 function pretty(n::Exp)
     "exp($(pretty(get_body(n))))"
 end

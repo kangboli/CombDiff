@@ -367,6 +367,10 @@ struct Composition <: AbstractComp
     body::PCTVector
 end
 
+"""
+The same thing as Composition. The only difference is how it is printed.
+"""
+
 struct RevComposition <: AbstractComp 
     type::AbstractPCTType
     body::PCTVector
@@ -380,40 +384,16 @@ function rev_composite(funcs::Vararg)
     make_node(RevComposition, pct_vec(funcs...))
 end
 
-abstract type FermionicField <: AbstractMap end
-
-struct FermionicFieldCreation <: FermionicField
-    type::AbstractPCTType
-    body::Symbol
-end
-
-struct FermionicFieldAnnihilation <: FermionicField
-    type::AbstractPCTType
-    body::Symbol
-end
-
-struct FermiVacuumType <: AbstractPCTType end
-struct FermiVacuum <: APN end
-
-conjugate(n::FermionicFieldCreation) = f_annihilation(get_body(n))
-conjugate(n::FermionicFieldAnnihilation) = f_creation(get_body(n))
 
 function conjugate(n::PrimitiveCall)
-    fermi_field = mapp(n)
-    if isa(fermi_field, FermionicFieldCreation)
-        return call(f_annihilation(get_body(fermi_field)), args(n)...)
-    elseif isa(fermi_field, FermionicFieldAnnihilation)
-        return call(f_creation(get_body(fermi_field)), args(n)...)
-    else
-        return make_node(Conjugate, n)
-    end
+    return make_node(Conjugate, n)
 end
 
 function primitive_call(mapp::APN, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FermionicField}, args::Vararg)
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 

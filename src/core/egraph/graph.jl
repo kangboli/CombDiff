@@ -32,7 +32,7 @@ end
 
 const Settings = Dict{Symbol,Bool}
 default_settings = Settings(:clench_sum => false,
-    :symmetry => false, :logging => false, :gcd => true, :blaserize => false)
+    :symmetry => false, :logging => false, :gcd => true, :blaserize => false, :wick => false)
 function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom
