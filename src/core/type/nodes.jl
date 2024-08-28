@@ -393,7 +393,9 @@ function primitive_call(mapp::APN, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall}, args::Vararg)
+abstract type FieldOperators <: TerminalNode end
+
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall, FieldOperators}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 

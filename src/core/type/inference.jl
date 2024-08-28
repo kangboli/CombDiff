@@ -214,6 +214,7 @@ function inference(d::Domain, context::TypeContext=TypeContext())
 end
 
 function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
+    length(term) == 0 && return UndeterminedPCTType()
     bound_type = get_bound_type(get_type(first(content(term))))
     body_type = get_body_type(get_type(last(content(term))))
     return MapType(bound_type, body_type)

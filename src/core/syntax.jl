@@ -210,7 +210,7 @@ const univariate_symbols = [:log, :exp]
 
 function parse_node(n::Expr)
     n = purge_line_numbers(n)
-    #= n.head == Symbol(:quote) && return parse_quantum_field_node(n) =#
+    n.head == Symbol(:quote) && return parse_quantum_field_node(n)
     n.head == :. && return parse_escape_node(n)
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
@@ -231,6 +231,7 @@ function parse_node(n::Expr)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
+        func == :vac_exp && return parse_vac_exp_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         return parse_node(AbstractCall, n)
@@ -448,11 +449,18 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 end
 
 parse_node(p::Symbol) = :(var($(QuoteNode(p))))
-#= function parse_node(p::QuoteNode)
-    parse_quantum_field_node(p)
+function parse_node(p::QuoteNode)
+    return parse_quantum_field_node(p)
     #= name = "__" * string(p.value)
     :(var(Symbol($(name)))) =#
-end =#
+end
+function parse_quantum_field_node(n::QuoteNode)
+    return :(annihilate($(QuoteNode(n.value))))
+end
+
+function parse_vac_exp_node(n::Expr)
+    return :(make_node(VacExp, $(parse_node.(n.args[2:end])...)))
+end
 
 parse_node(i::Number) = :(constant($(i)))
 

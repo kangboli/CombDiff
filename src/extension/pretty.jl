@@ -80,7 +80,11 @@ verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_ty
 
 function pretty(c::Conjugate) 
 
-    conj_symbol(t::MapType) = get_body_type(t) == C() ? "⁺" : "ᵀ" 
+    function conj_symbol(t::MapType) 
+        t == FOT() && return "⁺"
+        get_body_type(t) == C() && return "⁺" 
+        return "ᵀ" 
+    end
     conj_symbol(::ElementType) = "'"
     interior = pretty(get_body(c))
     if isa(c, Map)
