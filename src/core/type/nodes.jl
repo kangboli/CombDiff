@@ -29,7 +29,8 @@ export
     RevComposition,
     pct_exp,
     pct_log, 
-    pct_let
+    pct_let,
+    indicator
 
 abstract type TerminalNode <: APN end
 

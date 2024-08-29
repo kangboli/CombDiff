@@ -164,9 +164,10 @@ verbose(s::Prod) = invoke(verbose, Sum, s)
 
 delta_symbol(::Type{Delta}, latex=false) = latex ? "\\delta" : "δ"
 delta_symbol(::Type{DeltaNot}, latex=false) = latex ? "\\top" : "δ̸"
+delta_symbol(::Type{Indicator}, latex=false) = latex ? "\\mathbb{I}" : "𝕀"
 
 function pretty(d::T) where {T<:AbstractDelta}
-    "$(delta_symbol(T))($(pretty(upper(d))), $(pretty(lower(d))), $(pretty(last(content(d)))))"
+    "$(delta_symbol(T))($(pretty(lower(d))), $(pretty(upper(d))), $(pretty(last(content(d)))))"
 end
 
 function latex(d::T) where {T<:AbstractDelta}
@@ -175,7 +176,7 @@ end
 
 
 function verbose(d::T) where {T<:AbstractDelta}
-    "$(delta_symbol(T))($(verbose(upper(d))), $(verbose(lower(d))),\n" *
+    "$(delta_symbol(T))($(verbose(lower(d))), $(verbose(upper(d))),\n" *
     indent("$(verbose(last(content(d)))))::$(verbose(get_type(d)))")
 end
 
@@ -301,7 +302,7 @@ end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
 
 function pretty(c::Composition)
-    join(map(f -> pretty(f), content(get_body(c))), " ∘\n")
+    join(map(f -> pretty(f), content(get_body(c))), "∘")
 end
 
 function pretty(c::RevComposition)
@@ -377,4 +378,3 @@ end
 
 pretty(::T)  where T <: ElementType = string(T)
     
-

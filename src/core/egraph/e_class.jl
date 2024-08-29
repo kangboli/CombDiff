@@ -157,6 +157,7 @@ flatten_comp(c::AbstractComp) = vcat(flatten_comp.(content(get_body(c)))...)
 flatten_comp(c::APN) = [c]
 
 function e_class_reduction(::Type{T}, term::PCTVector) where T <: AbstractComp
+    length(term) == 1 && return first(content(term))
     body = pct_vec(vcat(flatten_comp.(content(term))...)...)
     return T, [body], partial_inference(T, body)
 end
@@ -184,12 +185,13 @@ end
 
 function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) where T <: APN
 
-    lower == minfty() && return T, [body], partial_inference(T, body)
+    lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
     lower == infty() && return Constant,  [0], I()
 
-    upper == infty() && return T, [body], partial_inference(T, body)    
+    upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)    
     upper == minfty() && return Constant,  [0], I()
 
-    diff = add(upper, mul(constant(-1), lower))
-    isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)    
+    #= diff = add(upper, mul(constant(-1), lower))
+    isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#
+    return Indicator, [lower, upper, body], partial_inference(Indicator, lower, upper, body)
 end

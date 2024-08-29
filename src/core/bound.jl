@@ -34,9 +34,13 @@ end
 
 function bound(x::Var, m::Mul, b::Bound)
     new_content = []
-    for t in content(m)
-        x in variables(t) || (push!(new_content, t) && continue)
-        x == t || error("nonlinear functions not supported")
+    for t in content(get_body(m))
+        if x in variables(t)
+            x == t || error("nonlinear functions not supported")
+        else
+            push!(new_content, t)
+            continue
+        end
     end
 
     prefactor = mul(new_content...)
@@ -51,8 +55,10 @@ function bound(x::Var, m::Mul, b::Bound)
 end
 
 function bound(x::Var, a::Add, b::Bound)
-    return add(map(t -> bound(x, t, b), content(a))...)
+    return add(map(t -> bound(x, t, b), content(get_body(a)))...)
 end
+
+bound(::Var, a::Constant, ::Bound) = a
 
 
 function zero_compare(c::Constant)
@@ -62,8 +68,8 @@ function zero_compare(c::Constant)
 end
 
 function zero_compare(t::APN)
-    upper_compare = map(zero_compare, all_bounds(t, Upper()))
-    lower_compare = map(zero_compare, all_bounds(t, Lower()))
+    upper_compare = map(zero_compare, [all_bounds(t, Upper(), false)...])
+    lower_compare = map(zero_compare, [all_bounds(t, Lower(), false)...])
 
     IsNeg() in upper_compare && return IsNeg()
     NonPos() in upper_compare && return NonPos()
@@ -74,8 +80,10 @@ function zero_compare(t::APN)
     return Uncomparable()
 end
 
-function all_bounds(t::APN, b::Bound)
-    bounds = Set{APN}([first(simplify(t))])
+function all_bounds(t::APN, b::Bound, include_self=true)
+    bounds = Set{APN}()
+    include_self && push!(bounds, t)
+
     for v in variables(t)
         v == infty() && continue
         subtree = all_bounds(bound(v, t, b), b)

@@ -225,6 +225,7 @@ function parse_node(n::Expr)
         (func == :∏ || func == :prod) && return parse_prod_node(n)
         func == :delta && return parse_delta_node(Delta, n)
         func == :delta_not && return parse_delta_node(DeltaNot, n)
+        (func == :indicator || func == :𝕀) && return parse_indicator_node(Indicator, n)
         func == :+ && return parse_add_node(n)
         func == :- && return parse_negate_node(n)
         func == :* && return parse_mul_node(n)
@@ -336,7 +337,7 @@ function parse_domain_node(n::Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
         #= (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use." =#
-        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
+        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()synt
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
         periodic = haskey(pairs, :periodic) && (pairs[:periodic])
         tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])
@@ -448,7 +449,10 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
 
 end
 
-parse_node(p::Symbol) = :(var($(QuoteNode(p))))
+function parse_node(p::Symbol) 
+    (p == :∞  || p == :infty) && return :(infty())
+    :(var($(QuoteNode(p))))
+end
 function parse_node(p::QuoteNode)
     return parse_quantum_field_node(p)
     #= name = "__" * string(p.value)
@@ -585,4 +589,8 @@ end
 
 function parse_pctvector_node(n::Expr)
     return :(pct_vec($(map(parse_node, n.args)...)))
+end
+
+function parse_indicator_node(::Type{Indicator}, n::Expr)
+    return :(indicator($(map(parse_node, n.args[2:end])...)))
 end
