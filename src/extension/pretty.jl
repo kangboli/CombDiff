@@ -302,6 +302,7 @@ end
 latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
 
 function pretty(c::Composition)
+    isempty(content(get_body(c))) && return ":I"
     join(map(f -> pretty(f), content(get_body(c))), "∘")
 end
 

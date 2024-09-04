@@ -1,5 +1,3 @@
-export neighbors, NeighborList, directed, nodes, sub_neighbors
-
 using IterTools
 """
 Equivalent sets for PCT nodes.
@@ -338,6 +336,16 @@ function swallow_neighbors(terms)
     return result
 end
 
+function indicator_swallow_neighbors(terms)
+    result = NeighborList()
+    for (i, x) in enumerate(terms)
+        isa(x, Indicator) || continue
+        rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
+        push!(result, indicator(lower(x), upper(x), mul(get_body(x), rem_terms...)); dired=true, name="indicator swallow mul")
+    end
+    return result
+end
+
 function mul_product_neighbors(terms)
     result = NeighborList()
 
@@ -398,6 +406,7 @@ function neighbors(m::Mul; settings=default_settings)
     append!(result, mul_add_neighbors(terms))
     #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
     append!(result, swallow_neighbors(terms))
+    append!(result, indicator_swallow_neighbors(terms))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
     #= append!(result, prod_const_neighbors(terms)) =#
@@ -870,6 +879,7 @@ end
 function neighbors(d::Delta; settings=default_settings)
     result = NeighborList()
     neighbor_list = neighbors(get_body(d); settings=settings)
+
     for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         push!(result, delta(upper(d), lower(d), t); dired=dir, name=s)
     end
@@ -991,3 +1001,93 @@ function neighbors(lt::Let; settings=default_settings)
     append!(result, let_collapse(lt))
     return result
 end
+
+function delta_swallow_indicator(ind)
+    result = NeighborList()
+    isa(get_body(ind), Delta) || return result
+    d = get_body(ind)
+    new_term = delta(lower(d), upper(d), indicator(lower(ind), upper(ind), get_body(d)))
+    push!(result, new_term; name="delta_swallow_indicator", dired=true)
+    return result
+end
+
+function neighbors(ind::Indicator; settings=default_settings)
+    result = NeighborList()
+    append!(result, delta_swallow_indicator(ind))
+    append!(result, sub_neighbors(ind; settings=settings))
+    return result
+end
+
+function swallow_vac(v)
+    result = NeighborList()
+    T = typeof(get_body(v))
+    T <: AbstractDelta || return result
+    d = get_body(v)
+    new_node = make_node(T, lower(d), upper(d), make_node(VacExp, get_body(d)))
+    push!(result, new_node; name="swallow vac", dired=true)
+    return result
+end
+
+function neighbors(v::VacExp; settings=default_settings)
+    result = NeighborList()
+    append!(result, swallow_vac(v))
+    append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true; preset=settings)))
+    append!(result, distribute_vac(v))
+    append!(result, mul_out_vac(v))
+    append!(result, sum_out_vac(v))
+    return result
+end
+
+
+function distribute_vac(c)
+    result = NeighborList()
+    isa(get_body(c), Add) || return result
+    term = get_body(c)
+    push!(result, add(map(a->make_node(VacExp, a), get_body(term))...); dired=true, name="distribute vac")
+    return result
+end
+
+function mul_out_vac(c)
+    result = NeighborList()
+    mul_term = get_body(c)
+    isa(mul_term, Mul) || return result
+    d = group(t->(is_field_op(t) || isa(t, Composition)), content(get_body(mul_term))) 
+
+    new_term = mul(get(d, false, [])..., make_node(VacExp, mul(get(d, true, [])...)))
+    push!(result, new_term; dired=true, name="mul out vac")
+    return result
+end
+
+function sum_out_vac(c)
+    result = NeighborList()
+    term = get_body(c)
+    isa(term, Sum) || return result
+    new_term = pct_sum(get_bound(term)..., make_node(VacExp, get_body(term)))
+    push!(result, new_term; dired=true, name="sum out vac")
+    return result
+end
+
+
+function neighbors(c::Composition; settings=default_settings)
+    result = NeighborList()
+    settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
+    return result
+end
+
+function comp_expand_neighbors(c)
+    result = NeighborList()
+
+    terms = content(get_body(c))
+
+    for i in 1:length(terms)
+        left, right = terms[1:i-1], terms[i+1:end]
+        t = terms[i]
+        isa(t, Add) || continue
+        new_term = add(map(a->composite(left..., a, right...), get_body(t))...)
+        push!(result, new_term; name="expand comp", dired=true)
+        break
+    end
+    return result
+end
+
+

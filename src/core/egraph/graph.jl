@@ -31,7 +31,7 @@ function PCTGraph(n::APN)
 end
 
 const Settings = Dict{Symbol,Bool}
-default_settings = Settings(:clench_sum => false,
+default_settings = Settings(:clench_sum => false, :expand_comp => false,
     :symmetry => false, :logging => false, :gcd => true, :blaserize => false, :wick => false)
 function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)

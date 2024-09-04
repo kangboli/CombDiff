@@ -30,7 +30,9 @@ export
     pct_exp,
     pct_log, 
     pct_let,
-    indicator
+    indicator,
+    VacExp,
+    vac_exp
 
 abstract type TerminalNode <: APN end
 
@@ -411,6 +413,9 @@ end
 
 name(c::Copy) = name(get_body(c))
 
+"""
+The indicator function is inclusive (the test is lower <= upper)
+"""
 struct Indicator <: AbstractDelta
     type::AbstractPCTType
     lower::APN
@@ -434,3 +439,10 @@ end
 
 indicator(upper_lower::Vararg{APN}) = make_delta(Indicator, upper_lower...)
 
+
+struct VacExp <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+vac_exp(body::APN) = make_node(VacExp, body)

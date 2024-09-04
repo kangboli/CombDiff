@@ -1,4 +1,5 @@
-export annihilate, reduce_vac, vac_exp, anti_commute, VacExp, comp_expansion
+export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField
+using StyledStrings
 
 """
 The fermionic operator as a value.
@@ -10,7 +11,7 @@ end
 
 annihilate(body::Symbol) = make_node(FermionicFieldAnnihilation, body)
 function pretty(f::FermionicFieldAnnihilation)
-    "$(get_body(f))"
+    ":$(get_body(f))"
 end
 
 
@@ -28,6 +29,9 @@ function get_op_name(f::Conjugate)
     get_op_name(get_body(f))
 end
 
+contains_name(f::FermionicFieldAnnihilation, s::Symbol)::Bool = false
+free_and_dummy(::FermionicFieldAnnihilation) = Set{Var}(), Set{Var}()
+
 """
 The type of a fermionic state operator.
 """
@@ -35,6 +39,7 @@ struct FermionicState <: AbstractPCTType end
 
 FermionicOperatorType() = MapType(VecType([FermionicState()]), FermionicState())
 const FOT = FermionicOperatorType
+FField() = MapType(VecType([N()]), FOT())
 
 type_based(::FermionicState, ::ElementType) = false
 
@@ -44,21 +49,20 @@ partial_inference(::Type{FermionicFieldAnnihilation}, body) = MapType(VecType([N
 inference(n::FermionicFieldAnnihilation, _::TypeContext=TypeContext()) = set_type(n, MapType(VecType([N()]), FOT()))
 # the inference for the creation is taken care of implicitly
 
+function subst_type(n::FermionicState, ::S, ::R, replace_dummy=false) where {S <: APN, R <: APN}
+    return n
+end
+
 """
 Vacuum expectation
 """
-
-struct VacExp <: APN
-    type::AbstractPCTType
-    body::APN
-end
 
 
 function reduce_vac(n::APN) 
     set_terms(n, map(reduce_vac, terms(n))...)
 end
 reduce_vac(n::TerminalNode) = n
-reduce_vac(c::VacExp) = vac_exp(get_body(c))
+reduce_vac(c::VacExp) = vac_exp_rewrite(get_body(c))
 
 partial_inference(::Type{VacExp}, body) = R()
 
@@ -68,7 +72,7 @@ function pretty(v::VacExp)
     "⟨$(pretty(get_body(v)))⟩" 
 end
 
-function vac_exp(c::Composition)
+function vac_exp_rewrite(c::Composition)
     terms = content(get_body(c))
     length(terms) == 0 && return constant(1)
 
@@ -79,14 +83,14 @@ function vac_exp(c::Composition)
 
         swapped = composite(left..., t_2, t_1, right...)
         remaining_ops = [left..., right...]
-        commuted = mul(anti_commute(t_1, t_2), vac_exp(composite(remaining_ops...)))
-        return add(commuted, mul(constant(-1), vac_exp(swapped)))
+        commuted = mul(anti_commute(t_1, t_2), vac_exp_rewrite(composite(remaining_ops...)))
+        return add(commuted, mul(constant(-1), vac_exp_rewrite(swapped)))
     end
 
     return constant(0)
 end
 
-vac_exp(::APN) = is_field_op ? constant(0) : error("vac_exp of non-operators is not supported.")
+vac_exp_rewrite(::APN) = is_field_op ? constant(0) : error("vac_exp of non-operators is not supported.")
 
 function anti_commute(a::APN, b::APN)
     #= @assert is_field_op(a) && is_field_op(b) =#
@@ -98,7 +102,7 @@ function anti_commute(a::APN, b::APN)
 end
 
 
-comp_expansion(t::TerminalNode) = t
+#= comp_expansion(t::TerminalNode) = t
 function comp_expansion(t::APN) 
     return set_terms(t, map(comp_expansion, terms(t))...)
 end
@@ -115,7 +119,7 @@ function comp_expansion(c::Composition)
     end
     return c
 end
-
+ =#
 function trunc_hash(n::FermionicFieldAnnihilation, h::UInt, ::Int)
     return hash(get_body(n), h) + FermionicFieldAnnihilation.hash
 end

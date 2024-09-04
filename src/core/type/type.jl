@@ -104,6 +104,10 @@ MapType(bound::APN, content::AbstractPCTType) = MapType(VecType([bound]), conten
 type_based(a::Domain, b::ElementType) = a.base == b
 type_based(a::ElementType, b::ElementType) = a == b
 
+# Refuse the type inference for complicated types for now.
+type_based(a::MapType, ::ElementType) = false
+type_based(a::VecType, ::ElementType) = false
+
 symmetries(c::MapType) = get(c.meta, :symmetries, [])
 
 linear(c::MapType) = get(c.meta, :linear, false)

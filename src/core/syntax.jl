@@ -9,7 +9,7 @@ export parse_node,
     @pluto_support,
     pct_ast_transform_pluto
 
-const base_domains = [:N, :I, :R, :C]
+const base_domains = [:N, :I, :R, :C, :FOT, :FField]
 
 interactive_context = default_context()
 interactive_let = nothing
@@ -459,6 +459,7 @@ function parse_node(p::QuoteNode)
     :(var(Symbol($(name)))) =#
 end
 function parse_quantum_field_node(n::QuoteNode)
+    n.value == :I && return :(composite())
     return :(annihilate($(QuoteNode(n.value))))
 end
 
