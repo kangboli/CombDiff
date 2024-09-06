@@ -326,12 +326,14 @@ function mul_add_neighbors(terms::Vector)
     return result
 end
 
-function swallow_neighbors(terms)
+function swallow_neighbors(m::R) where R <: Union{Mul, Composition}
     result = NeighborList()
+    terms = content(get_body(m))
     for (i, x) in enumerate(terms)
-        isa(x, Delta) || continue
+        T = typeof(x)
+        T <: AbstractDelta || continue
         rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, delta(lower(x), upper(x), mul(get_body(x), rem_terms...)); dired=true, name="swallow")
+        push!(result, make_node(T, lower(x), upper(x), make_node(R, make_node(PCTVector, get_body(x), rem_terms...))); dired=true, name="swallow")
     end
     return result
 end
@@ -405,8 +407,9 @@ function neighbors(m::Mul; settings=default_settings)
     terms = content(get_body(m))
     append!(result, mul_add_neighbors(terms))
     #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
-    append!(result, swallow_neighbors(terms))
+    append!(result, swallow_neighbors(m))
     append!(result, indicator_swallow_neighbors(terms))
+    settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
     #= append!(result, prod_const_neighbors(terms)) =#
@@ -899,8 +902,17 @@ function neighbors(d::Delta; settings=default_settings)
     return result
 end
 
+function dist_conj(c)
+    result = NeighborList()
+    isa(get_body(c), Add) || return result
+    new_term = add(map(conjugate, content(get_body(get_body(c))))...)
+    push!(result, new_term; dired=true, name="dist conj")
+    return result
+end
+
 function neighbors(c::Conjugate; settings=default_settings)
     result = NeighborList()
+    settings[:dist_conj] && append!(result, dist_conj(c))
     append!(result, sub_neighbors(c; settings=settings))
     return result
 end
@@ -1014,7 +1026,28 @@ end
 function neighbors(ind::Indicator; settings=default_settings)
     result = NeighborList()
     append!(result, delta_swallow_indicator(ind))
+    append!(result, eliminate_indicator(ind))
+    settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
+    return result
+end
+
+function dist_ind(ind)
+    result = NeighborList()
+    isa(get_body(ind), Add) || return result
+    new_term = add(map(t->indicator(lower(ind), upper(ind), t), content(get_body(get_body(ind))))...)
+    push!(result, new_term; dired=true, name="dist_ind")
+    return result
+end
+
+function eliminate_indicator(ind)
+    result = NeighborList()
+    diff = add(upper(ind), mul(constant(-1), lower(ind)))
+    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging=>false; preset=default_settings)) |> first
+    compare_result = zero_compare(diff)
+
+    isa(compare_result, Union{IsPos, NonNeg}) || return result
+    push!(result, get_body(ind); dired=true, name="eliminate_indicator")
     return result
 end
 
@@ -1031,7 +1064,7 @@ end
 function neighbors(v::VacExp; settings=default_settings)
     result = NeighborList()
     append!(result, swallow_vac(v))
-    append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true; preset=settings)))
+    append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj=>true; preset=settings)))
     append!(result, distribute_vac(v))
     append!(result, mul_out_vac(v))
     append!(result, sum_out_vac(v))
@@ -1039,6 +1072,9 @@ function neighbors(v::VacExp; settings=default_settings)
 end
 
 
+"""
+⟨ a + b ⟩ = ⟨ a ⟩ + ⟨ b ⟩
+"""
 function distribute_vac(c)
     result = NeighborList()
     isa(get_body(c), Add) || return result
@@ -1051,7 +1087,7 @@ function mul_out_vac(c)
     result = NeighborList()
     mul_term = get_body(c)
     isa(mul_term, Mul) || return result
-    d = group(t->(is_field_op(t) || isa(t, Composition)), content(get_body(mul_term))) 
+    d = group(contains_field, content(get_body(mul_term))) 
 
     new_term = mul(get(d, false, [])..., make_node(VacExp, mul(get(d, true, [])...)))
     push!(result, new_term; dired=true, name="mul out vac")
@@ -1071,6 +1107,9 @@ end
 function neighbors(c::Composition; settings=default_settings)
     result = NeighborList()
     settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
+
+    append!(result, swallow_neighbors(c))
+    append!(result, sub_neighbors(c; settings=settings))
     return result
 end
 
@@ -1085,6 +1124,23 @@ function comp_expand_neighbors(c)
         isa(t, Add) || continue
         new_term = add(map(a->composite(left..., a, right...), get_body(t))...)
         push!(result, new_term; name="expand comp", dired=true)
+        break
+    end
+    return result
+end
+
+
+function mul_expand_neighbors(c)
+    result = NeighborList()
+
+    terms = content(get_body(c))
+
+    for i in 1:length(terms)
+        left, right = terms[1:i-1], terms[i+1:end]
+        t = terms[i]
+        isa(t, Add) || continue
+        new_term = add(map(a->mul(left..., a, right...), get_body(t))...)
+        push!(result, new_term; name="expand mul", dired=true)
         break
     end
     return result

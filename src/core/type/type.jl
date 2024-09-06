@@ -36,6 +36,9 @@ struct C <: ElementType end
 struct N <: ElementType end
 
 base(::T) where {T<:ElementType} = T()
+lower(::ElementType) = minfty()
+lower(::N) = constant(1)
+upper(::ElementType) = infty()
 
 abstract type AbstractDomain <: ElementType end
 

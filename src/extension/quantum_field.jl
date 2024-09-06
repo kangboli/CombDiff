@@ -53,6 +53,11 @@ function subst_type(n::FermionicState, ::S, ::R, replace_dummy=false) where {S <
     return n
 end
 
+
+function subst(n::FermionicFieldAnnihilation, ::S, ::R, replace_dummy=false) where  {S <: APN, R <: APN}
+    return n
+end
+
 """
 Vacuum expectation
 """
@@ -74,6 +79,7 @@ end
 
 function vac_exp_rewrite(c::Composition)
     terms = content(get_body(c))
+
     length(terms) == 0 && return constant(1)
 
     for i in 2:length(terms)
@@ -123,3 +129,10 @@ end
 function trunc_hash(n::FermionicFieldAnnihilation, h::UInt, ::Int)
     return hash(get_body(n), h) + FermionicFieldAnnihilation.hash
 end
+
+function contains_field(n::APN)
+    any(contains_field, terms(n))
+end
+
+contains_field(n::TerminalNode) = false
+contains_field(n::FermionicFieldAnnihilation) = true

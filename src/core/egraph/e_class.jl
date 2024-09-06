@@ -14,7 +14,9 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     process_type(::Type{Mul}) = Mul, [pct_vec(map(conjugate, content(get_body(term)))...)]
     process_type(::Type{Constant}) = Constant, [get_body(term)']
     process_type(::Type{T}) where T <: Contraction = T, [get_bound(term), conjugate(get_body(term))]
-    process_type(::Type{Delta}) = Delta, [lower(term), upper(term), conjugate(get_body(term))]
+    function process_type(::Type{T}) where  {T <: AbstractDelta}
+        T, [lower(term), upper(term), conjugate(get_body(term))]
+    end
     process_type(::Type{Conjugate}) = typeof(get_body(term)), terms(get_body(term))
     process_type(::Type{<:APN}) = Conjugate, [term]
     

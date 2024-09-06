@@ -27,7 +27,6 @@ flip(::Lower) = Upper()
 
 function bound(x::Var, y::Var, b::Bound)
     name(x) == name(y) || return y
-    isa(get_type(y), Domain) || return mul(get_sign(b), infty())
     return b(get_type(y))
 end
 
@@ -44,12 +43,13 @@ function bound(x::Var, m::Mul, b::Bound)
     end
 
     prefactor = mul(new_content...)
+
     x_bound = if isa(zero_compare(prefactor), Union{IsPos,NonNeg})
         bound(x, x, b)
     elseif isa(zero_compare(prefactor), Union{IsNeg,NonPos})
         bound(x, x, flip(b))
     else
-
+        return b(R())
     end
     return mul(prefactor, x_bound)
 end
@@ -68,13 +68,20 @@ function zero_compare(c::Constant)
 end
 
 function zero_compare(t::APN)
-    upper_compare = map(zero_compare, [all_bounds(t, Upper(), false)...])
-    lower_compare = map(zero_compare, [all_bounds(t, Lower(), false)...])
+
+    upper_bounds = [all_bounds(t, Upper(), false)...]
+    lower_bounds = [all_bounds(t, Lower(), false)...]
+    upper_compare = map(zero_compare, upper_bounds)
+    lower_compare = map(zero_compare, lower_bounds)
+
+    IsZero() in lower_compare && IsZero in upper_compare && return IsZero()
 
     IsNeg() in upper_compare && return IsNeg()
+    IsZero() in upper_compare && return NonPos()
     NonPos() in upper_compare && return NonPos()
 
     IsPos() in lower_compare && return IsPos()
+    IsZero() in lower_compare && return NonNeg()
     NonNeg() in lower_compare && return NonNeg()
 
     return Uncomparable()

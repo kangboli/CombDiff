@@ -2,7 +2,7 @@ export SignatureTree, subtrees, tree_dfs_vis, node_type
 
 struct SignatureTree <: AbstractSignatureTree
     node_type::Type  # I avoided parametric type of this intentionally.
-    extra::Union{Var,Constant,Nothing}
+    extra::Any
     subtrees::Vector{Pair{SignatureTree,Int}}
 end
 
@@ -65,6 +65,11 @@ end
 
 function SignatureTree(::S, c::Constant, ::Vector{R}) where {S<:Var,R<:Var}
     return SignatureTree(Constant, c, Vector{SignatureTree}())
+end
+
+
+function SignatureTree(::S, c::T, ::Vector{R}) where {S<:Var,R<:Var, T<: FieldOperators}
+    return SignatureTree(T, c, Vector{SignatureTree}())
 end
 
 const Commtative = Union{Mul,Add}
