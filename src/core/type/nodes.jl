@@ -30,6 +30,7 @@ export
     pct_exp,
     pct_log, 
     pct_let,
+    Indicator,
     indicator,
     VacExp,
     vac_exp
@@ -398,6 +399,7 @@ end
 
 abstract type FieldOperators <: TerminalNode end
 
+
 function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall, FieldOperators}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
@@ -444,5 +446,16 @@ struct VacExp <: APN
     type::AbstractPCTType
     body::APN
 end
-
 vac_exp(body::APN) = make_node(VacExp, body)
+
+struct FermiScalar <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+function fermi_scalar(body)
+    return make_node(FermiScalar, body)
+end
+
+is_field_op(::FermiScalar) = true
+

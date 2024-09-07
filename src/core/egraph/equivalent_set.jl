@@ -1061,9 +1061,24 @@ function swallow_vac(v)
     return result
 end
 
+function extract_scalar(v)
+    result = NeighborList()
+    c = get_body(v)
+    isa(c, Composition) || return result
+    terms = content(get_body(c))
+    for (i, t) in enumerate(terms)
+        isa(t, FermiScalar) || continue
+        new_term = mul(get_body(t), vac_exp(composite(terms[1:end.!=i]...)))
+        push!(result, new_term; dired=true, name="extract_scalar")
+        return result
+    end
+    return result 
+end
+
 function neighbors(v::VacExp; settings=default_settings)
     result = NeighborList()
     append!(result, swallow_vac(v))
+    append!(result, extract_scalar(v))
     append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj=>true; preset=settings)))
     append!(result, distribute_vac(v))
     append!(result, mul_out_vac(v))
@@ -1102,7 +1117,6 @@ function sum_out_vac(c)
     push!(result, new_term; dired=true, name="sum out vac")
     return result
 end
-
 
 function neighbors(c::Composition; settings=default_settings)
     result = NeighborList()
@@ -1146,4 +1160,8 @@ function mul_expand_neighbors(c)
     return result
 end
 
+
+function neighbors(n::FermiScalar; settings=default_settings)
+    return sub_neighbors(n; settings=settings)
+end
 

@@ -1,4 +1,4 @@
-export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField
+export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField, FermionicFieldAnnihilation, FermiScalar, fermi_scalar, IdentityInitializer
 using StyledStrings
 
 """
@@ -10,9 +10,6 @@ struct FermionicFieldAnnihilation <: FieldOperators
 end
 
 annihilate(body::Symbol) = make_node(FermionicFieldAnnihilation, body)
-function pretty(f::FermionicFieldAnnihilation)
-    ":$(get_body(f))"
-end
 
 
 is_annihilation(::APN) = false
@@ -32,6 +29,8 @@ end
 contains_name(f::FermionicFieldAnnihilation, s::Symbol)::Bool = false
 free_and_dummy(::FermionicFieldAnnihilation) = Set{Var}(), Set{Var}()
 
+
+
 """
 The type of a fermionic state operator.
 """
@@ -47,6 +46,11 @@ FermionicFieldType() = MapType(N(), FOT())
 
 partial_inference(::Type{FermionicFieldAnnihilation}, body) = MapType(VecType([N()]), FOT())
 inference(n::FermionicFieldAnnihilation, _::TypeContext=TypeContext()) = set_type(n, MapType(VecType([N()]), FOT()))
+
+
+partial_inference(::Type{FermiScalar}, body) = FOT()
+inference(s::FermiScalar, _::TypeContext=TypeContext()) = set_type(s, FOT())
+
 # the inference for the creation is taken care of implicitly
 
 function subst_type(n::FermionicState, ::S, ::R, replace_dummy=false) where {S <: APN, R <: APN}
@@ -71,11 +75,6 @@ reduce_vac(c::VacExp) = vac_exp_rewrite(get_body(c))
 
 partial_inference(::Type{VacExp}, body) = R()
 
-function pretty(v::VacExp)
-    #= operators = content(get_body(get_body(v)))
-    return "⟨$(join(pretty.(operators), "∘"))⟩" =#
-    "⟨$(pretty(get_body(v)))⟩" 
-end
 
 function vac_exp_rewrite(c::Composition)
     terms = content(get_body(c))

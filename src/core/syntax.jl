@@ -442,15 +442,15 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol})
         if param.head == Symbol("::")
             name, type = param.args
             type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper), Dict(:name=>:_λ)))))
+            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper), Dict(:name => :_λ)))))
         end
         return :(var($(parse_node(param)), $(parse_node(domain))))
     end
 
 end
 
-function parse_node(p::Symbol) 
-    (p == :∞  || p == :infty) && return :(infty())
+function parse_node(p::Symbol)
+    (p == :∞ || p == :infty) && return :(infty())
     :(var($(QuoteNode(p))))
 end
 function parse_node(p::QuoteNode)
@@ -459,7 +459,9 @@ function parse_node(p::QuoteNode)
     :(var(Symbol($(name)))) =#
 end
 function parse_quantum_field_node(n::QuoteNode)
-    n.value == :I && return :(composite())
+    x = :(var(:x, C()))
+    n.value == :II && return :(pct_map($x, fermi_scalar($x)))
+
     return :(annihilate($(QuoteNode(n.value))))
 end
 
@@ -595,3 +597,5 @@ end
 function parse_indicator_node(::Type{Indicator}, n::Expr)
     return :(indicator($(map(parse_node, n.args[2:end])...)))
 end
+
+    

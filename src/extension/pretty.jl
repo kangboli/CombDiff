@@ -96,7 +96,11 @@ end
 
 
 function latex(c::Conjugate)
-    conj_symbol(t::MapType) = get_body_type(t) == C() ? "\\dagger" : "T"
+    function conj_symbol(t::MapType) 
+        t == FOT() && return "\\dagger"
+        get_body_type(t) == C() && return "\\dagger" 
+        return "T"
+    end
     conj_symbol(::ElementType) = "*"
     interior = latex(get_body(c))
     if isa(get_body(c), Map)
@@ -378,4 +382,28 @@ function pretty(v::VecType)
 end
 
 pretty(::T)  where T <: ElementType = string(T)
-    
+
+pretty(f::FermiScalar) = ":I($(pretty(get_body(f))))"
+latex(f::FermiScalar) = "\\mathbf{I}($(latex(get_body(f))))"
+
+function pretty(v::VacExp)
+    "⟨$(pretty(get_body(v)))⟩" 
+end
+
+function latex(v::VacExp)
+    "\\langle $(latex(get_body(v))) \\rangle"
+end
+
+
+function pretty(f::FieldOperators)
+    ":$(get_body(f))"
+end
+
+function latex(f::FieldOperators)
+    "\\mathbf{$(get_body(f))}"
+end
+
+function latex(i::Indicator)
+    "\\mathbb{I}_{$(latex(lower(i))) \\leq $(latex(upper(i)))} $(latex(get_body(i)))"
+end
+
