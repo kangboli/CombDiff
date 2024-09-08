@@ -41,7 +41,10 @@ default_settings = Settings(
     :dist_conj => false,
     :expand_mul => false,
     :expand_comp => false,
-    :dist_ind => true)
+    :dist_ind => true,
+    :telescopic_indicator => false
+
+)
 function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom

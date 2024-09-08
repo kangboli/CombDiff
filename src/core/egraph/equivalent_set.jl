@@ -326,7 +326,7 @@ function mul_add_neighbors(terms::Vector)
     return result
 end
 
-function swallow_neighbors(m::R) where R <: Union{Mul, Composition}
+function swallow_neighbors(m::R) where {R<:Union{Mul,Composition}}
     result = NeighborList()
     terms = content(get_body(m))
     for (i, x) in enumerate(terms)
@@ -813,7 +813,7 @@ function neighbors(s::Sum; settings=default_settings)
         append!(result, sum_sym_neighbors(s))
     end
     append!(result, sum_mul_neighbors(s))
-    append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false; preset=settings)))
+    append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
     return result
 end
 
@@ -1027,6 +1027,7 @@ function neighbors(ind::Indicator; settings=default_settings)
     result = NeighborList()
     append!(result, delta_swallow_indicator(ind))
     append!(result, eliminate_indicator(ind))
+    settings[:telescopic_indicator] && append!(result, telescopic_indicator_elim(ind))
     settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
     return result
@@ -1035,18 +1036,61 @@ end
 function dist_ind(ind)
     result = NeighborList()
     isa(get_body(ind), Add) || return result
-    new_term = add(map(t->indicator(lower(ind), upper(ind), t), content(get_body(get_body(ind))))...)
+    new_term = add(map(t -> indicator(lower(ind), upper(ind), t), content(get_body(get_body(ind))))...)
     push!(result, new_term; dired=true, name="dist_ind")
     return result
 end
 
+function telescopic_indicator_elim(ind)
+    result = NeighborList()
+    uppers, lowers = Vector{APN}([upper(ind)]), Vector{APN}([lower(ind)])
+    body = get_body(ind)
+
+    while isa(body, Indicator)
+        push!(uppers, upper(body))
+        push!(lowers, lower(body))
+        body = get_body(body)
+    end
+
+    for (i, j) in product(1:length(uppers), 1:length(uppers))
+        i == j && continue
+        u_i, l_i = uppers[i], lowers[i]
+        u_j, l_j = uppers[j], lowers[j]
+
+        inclusion = subtract(subtract(u_j, l_j), subtract(u_i, l_i))
+
+        exclusion = add(subtract(u_j, l_j), subtract(u_i, l_i))
+        inclusion = simplify(inclusion; settings=custom_settings(:expand_mul=>true, :logging=>false; preset=default_settings)) |> first
+        exclusion = simplify(exclusion; settings=custom_settings(:expand_mul=>true, :logging=>false; preset=default_settings)) |> first
+
+        inclusion_test = zero_compare(inclusion)
+        exclusion_test = zero_compare(exclusion)
+
+        if isa(inclusion_test, Union{IsZero,NonNeg,IsPos})
+            uppers = uppers[1:end.!=j]
+            lowers = lowers[1:end.!=j]
+            for (l, u) in zip(lowers, uppers)
+                body = indicator(l, u, body)
+            end
+            push!(result, body; dired=true, name="indicator inclusion")
+            return result
+        end
+        if isa(exclusion_test, IsNeg)
+            push!(result, constant(0); dired=true, name="indicator exclusion")
+            return result
+        end
+    end
+    return result
+end
+
+
 function eliminate_indicator(ind)
     result = NeighborList()
     diff = add(upper(ind), mul(constant(-1), lower(ind)))
-    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging=>false; preset=default_settings)) |> first
+    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
     compare_result = zero_compare(diff)
 
-    isa(compare_result, Union{IsPos, NonNeg}) || return result
+    isa(compare_result, Union{IsPos,NonNeg}) || return result
     push!(result, get_body(ind); dired=true, name="eliminate_indicator")
     return result
 end
@@ -1072,16 +1116,16 @@ function extract_scalar(v)
         push!(result, new_term; dired=true, name="extract_scalar")
         return result
     end
-    return result 
+    return result
 end
 
 function neighbors(v::VacExp; settings=default_settings)
     result = NeighborList()
     append!(result, swallow_vac(v))
-    append!(result, extract_scalar(v))
-    append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj=>true; preset=settings)))
     append!(result, distribute_vac(v))
-    append!(result, mul_out_vac(v))
+    append!(result, extract_scalar(v))
+    append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj => true; preset=settings)))
+    #= append!(result, mul_out_vac(v)) =#
     append!(result, sum_out_vac(v))
     return result
 end
@@ -1094,20 +1138,20 @@ function distribute_vac(c)
     result = NeighborList()
     isa(get_body(c), Add) || return result
     term = get_body(c)
-    push!(result, add(map(a->make_node(VacExp, a), get_body(term))...); dired=true, name="distribute vac")
+    push!(result, add(map(a -> make_node(VacExp, a), get_body(term))...); dired=true, name="distribute vac")
     return result
 end
 
-function mul_out_vac(c)
+#= function mul_out_vac(c)
     result = NeighborList()
     mul_term = get_body(c)
     isa(mul_term, Mul) || return result
-    d = group(contains_field, content(get_body(mul_term))) 
+    d = group(contains_field, content(get_body(mul_term)))
 
     new_term = mul(get(d, false, [])..., make_node(VacExp, mul(get(d, true, [])...)))
     push!(result, new_term; dired=true, name="mul out vac")
     return result
-end
+end =#
 
 function sum_out_vac(c)
     result = NeighborList()
@@ -1136,7 +1180,7 @@ function comp_expand_neighbors(c)
         left, right = terms[1:i-1], terms[i+1:end]
         t = terms[i]
         isa(t, Add) || continue
-        new_term = add(map(a->composite(left..., a, right...), get_body(t))...)
+        new_term = add(map(a -> composite(left..., a, right...), get_body(t))...)
         push!(result, new_term; name="expand comp", dired=true)
         break
     end
@@ -1153,7 +1197,7 @@ function mul_expand_neighbors(c)
         left, right = terms[1:i-1], terms[i+1:end]
         t = terms[i]
         isa(t, Add) || continue
-        new_term = add(map(a->mul(left..., a, right...), get_body(t))...)
+        new_term = add(map(a -> mul(left..., a, right...), get_body(t))...)
         push!(result, new_term; name="expand mul", dired=true)
         break
     end

@@ -58,6 +58,7 @@ function fast_rename!(n::Var, old::Var, new::Symbol)::Var
 end
 
 fast_rename!(n::Constant, ::Var, ::Symbol)::Constant = n
+fast_rename!(n::FieldOperators, ::Var, ::Symbol) = n
 
 
 """

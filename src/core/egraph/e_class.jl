@@ -192,6 +192,7 @@ function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) w
 
     upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)    
     upper == minfty() && return Constant,  [0], I()
+    is_zero(body) && return Constant,  [0], I()
 
     #= diff = add(upper, mul(constant(-1), lower))
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#

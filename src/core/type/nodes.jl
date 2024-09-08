@@ -33,7 +33,8 @@ export
     Indicator,
     indicator,
     VacExp,
-    vac_exp
+    vac_exp,
+    subtract
 
 abstract type TerminalNode <: APN end
 
@@ -426,14 +427,14 @@ struct Indicator <: AbstractDelta
 end
 
 
-function make_delta(::Type{T}, upper_lower::Vararg{APN}) where T <: AbstractDelta
-    upper_lower = collect(upper_lower)
-    content = last(upper_lower)
-    upper_lower = upper_lower[1:end-1]
-    n = length(upper_lower)
-    content = make_node(T, upper_lower[1], upper_lower[n÷2+1], content)
+function make_delta(::Type{T}, lower_upper::Vararg{APN}) where T <: AbstractDelta
+    lower_upper = collect(lower_upper)
+    content = last(lower_upper)
+    lower_upper = lower_upper[1:end-1]
+    n = length(lower_upper)
+    content = make_node(T, lower_upper[1], lower_upper[n÷2+1], content)
     if n > 2
-        return make_delta(T, upper_lower[2:n÷2]..., upper_lower[n÷2+2:end]..., content)
+        return make_delta(T, lower_upper[2:n÷2]..., lower_upper[n÷2+2:end]..., content)
     else
         return content
     end
@@ -459,3 +460,6 @@ end
 
 is_field_op(::FermiScalar) = true
 
+function subtract(a::APN, b::APN)
+    return add(a, mul(constant(-1), b))
+end

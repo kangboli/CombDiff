@@ -1,5 +1,4 @@
-export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField, FermionicFieldAnnihilation, FermiScalar, fermi_scalar, IdentityInitializer
-using StyledStrings
+export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField, FermionicFieldAnnihilation, FermiScalar, fermi_scalar
 
 """
 The fermionic operator as a value.
