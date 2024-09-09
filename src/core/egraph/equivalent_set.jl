@@ -1,4 +1,6 @@
 using IterTools
+
+
 """
 Equivalent sets for PCT nodes.
 """
@@ -54,7 +56,7 @@ function Base.show(io::IO, ::MIME"text/latex", n::NeighborList)
     print(io, latex(n))
 end
 
-neighbors(::Union{Var,Constant}; _...) = NeighborList()
+neighbors(::Union{Var,Constant,FieldOperators}; _...) = NeighborList()
 
 function sub_neighbors(c::PrimitiveCall; settings=default_settings)
     result = NeighborList()
@@ -236,6 +238,7 @@ function sub_neighbors(n::Union{Add,Mul}; settings=default_settings)
         neighbor_list = neighbors(body[i]; settings=settings)
         for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(n, set_i(body, i, t)); dired=d, name=s)
+            d && return result
         end
     end
 
@@ -284,14 +287,40 @@ function combine_maps(terms::Vector)
     return add(remaining_terms..., new_maps...)
 end
 
+function combine_factors(a)
+    result = NeighborList()
+    terms = content(get_body(a))
+    term_dict = Dict{APN,Number}()
+    function process_term!(a::Constant)
+        term_dict[constant(1)] = get_body(a) + get(term_dict, constant(1), 0)
+    end
+    function process_term!(a::Mul)
+        is_constant = group(t -> isa(t, Constant), content(get_body(a)))
+        constant_term = get(is_constant, true, [constant(1)]) |> first
+        rest = mul(get(is_constant, false, [])...)
+        term_dict[rest] = get_body(constant_term) + get(term_dict, rest, 0)
+    end
+    function process_term!(a::APN)
+        #= println(typeof(a))
+        println(hash(a)) =#
+        term_dict[a] = 1 + get(term_dict, a, 0)
+    end
+
+    map(process_term!, terms)
+    new_terms = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+
+    new_add = add(new_terms...)
+    new_add == a && return result
+    push!(result, add(new_terms...); dired=true, name="combine factors")
+
+    return result
+end
+
 
 function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(a))
 
-    if settings[:gcd]
-        append!(result, gcd_neighbors(terms))
-    end
     if count(a -> isa(a, Map), content(get_body(a))) > 1
         new_add = combine_maps(content(get_body(a)))
         push!(result, new_add; dired=true, name="combine map")
@@ -304,6 +333,10 @@ function neighbors(a::Add; settings=default_settings)
         directed(sub_result)[i] = true
     end
     append!(result, sub_result)
+    any(directed(result)) && return result
+
+    settings[:gcd] && append!(result, gcd_neighbors(terms))
+    append!(result, combine_factors(a))
     return result
 end
 
@@ -756,6 +789,7 @@ function sub_neighbors(n::APN; settings=default_settings)
         neighbor_list = neighbors(t, settings=settings)
         for (h, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_terms(n, set_at(sub_terms, i, h)...); dired=d, name=s)
+            d && return result
         end
     end
     return result
@@ -910,9 +944,29 @@ function dist_conj(c)
     return result
 end
 
+function conj_comp(c)
+    result = NeighborList()
+    comp = get_body(c)
+    isa(comp, Composition) || return result
+    new_term = composite(map(conjugate, reverse(content(get_body(comp))))...)
+    push!(result, new_term; dired=true, name="conj comp")
+    return result
+end
+
+function conj_scalar_op(c)
+    result = NeighborList()
+    scalar_op = get_body(c)
+    isa(scalar_op, FermiScalar) || return result
+    new_term = fermi_scalar(conjugate(get_body(scalar_op)))
+    push!(result, new_term; dired=true, name="conj scalar op")
+    return result
+end
+
 function neighbors(c::Conjugate; settings=default_settings)
     result = NeighborList()
     settings[:dist_conj] && append!(result, dist_conj(c))
+    append!(result, conj_comp(c))
+    append!(result, conj_scalar_op(c))
     append!(result, sub_neighbors(c; settings=settings))
     return result
 end
@@ -1026,10 +1080,10 @@ end
 function neighbors(ind::Indicator; settings=default_settings)
     result = NeighborList()
     append!(result, delta_swallow_indicator(ind))
-    append!(result, eliminate_indicator(ind))
-    settings[:telescopic_indicator] && append!(result, telescopic_indicator_elim(ind))
     settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
+    #= append!(result, eliminate_indicator(ind)) =#
+    append!(result, telescopic_indicator_elim(ind))
     return result
 end
 
@@ -1041,7 +1095,7 @@ function dist_ind(ind)
     return result
 end
 
-function telescopic_indicator_elim(ind)
+function telescopic_indicator_elim(ind; settings=default_settings)
     result = NeighborList()
     uppers, lowers = Vector{APN}([upper(ind)]), Vector{APN}([lower(ind)])
     body = get_body(ind)
@@ -1052,29 +1106,36 @@ function telescopic_indicator_elim(ind)
         body = get_body(body)
     end
 
+    function remove_indicator!(j)
+        uppers = uppers[1:end.!=j]
+        lowers = lowers[1:end.!=j]
+        for (l, u) in zip(lowers, uppers)
+            body = indicator(l, u, body)
+        end
+        push!(result, body; dired=true, name="indicator inclusion")
+        return result
+    end
+
+
     for (i, j) in product(1:length(uppers), 1:length(uppers))
         i == j && continue
         u_i, l_i = uppers[i], lowers[i]
         u_j, l_j = uppers[j], lowers[j]
 
+        u_i == u_j && l_i == l_j && return remove_indicator!(j)
+
+        settings[:telescopic_indicator] || continue
         inclusion = subtract(subtract(u_j, l_j), subtract(u_i, l_i))
 
         exclusion = add(subtract(u_j, l_j), subtract(u_i, l_i))
-        inclusion = simplify(inclusion; settings=custom_settings(:expand_mul=>true, :logging=>false; preset=default_settings)) |> first
-        exclusion = simplify(exclusion; settings=custom_settings(:expand_mul=>true, :logging=>false; preset=default_settings)) |> first
+        inclusion = simplify(inclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
+        exclusion = simplify(exclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
 
         inclusion_test = zero_compare(inclusion)
         exclusion_test = zero_compare(exclusion)
 
-        if isa(inclusion_test, Union{IsZero,NonNeg,IsPos})
-            uppers = uppers[1:end.!=j]
-            lowers = lowers[1:end.!=j]
-            for (l, u) in zip(lowers, uppers)
-                body = indicator(l, u, body)
-            end
-            push!(result, body; dired=true, name="indicator inclusion")
-            return result
-        end
+        isa(inclusion_test, Union{IsZero,NonNeg,IsPos}) && return remove_indicator!(j)
+
         if isa(exclusion_test, IsNeg)
             push!(result, constant(0); dired=true, name="indicator exclusion")
             return result
@@ -1108,6 +1169,11 @@ end
 function extract_scalar(v)
     result = NeighborList()
     c = get_body(v)
+    if isa(c, FermiScalar)
+        push!(result, get_body(c); dired=true, name="extract_scalar")
+        return result
+    end
+
     isa(c, Composition) || return result
     terms = content(get_body(c))
     for (i, t) in enumerate(terms)
@@ -1119,11 +1185,26 @@ function extract_scalar(v)
     return result
 end
 
+function reduce_vac_early(v)
+    result = NeighborList()
+    c = get_body(v)
+    isa(c, Composition) || return result
+
+    terms = content(get_body(c))
+    all(is_field_op, terms) || return result
+
+    push!(result, reduce_vac(v); dired=true, name="reduce_vac_early")
+
+    return result
+end
+
 function neighbors(v::VacExp; settings=default_settings)
     result = NeighborList()
+
+    settings[:reduce_vac_early] && append!(result, reduce_vac_early(v))
+    append!(result, extract_scalar(v))
     append!(result, swallow_vac(v))
     append!(result, distribute_vac(v))
-    append!(result, extract_scalar(v))
     append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj => true; preset=settings)))
     #= append!(result, mul_out_vac(v)) =#
     append!(result, sum_out_vac(v))
@@ -1165,7 +1246,6 @@ end
 function neighbors(c::Composition; settings=default_settings)
     result = NeighborList()
     settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
-
     append!(result, swallow_neighbors(c))
     append!(result, sub_neighbors(c; settings=settings))
     return result

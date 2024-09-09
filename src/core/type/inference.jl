@@ -122,7 +122,7 @@ end
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: PCTVector
-    return VecType(get_type.([terms...]))
+    return VecType(get_type.(collect(terms)))
 end
 
 function partial_inference(::Type{Map}, terms...)::AbstractPCTType

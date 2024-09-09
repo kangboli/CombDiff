@@ -32,7 +32,7 @@ end
 
 const Settings = Dict{Symbol,Bool}
 default_settings = Settings(
-    :clench_sum => false, 
+    :clench_sum => false,
     :symmetry => false,
     :logging => true,
     :gcd => true,
@@ -42,9 +42,8 @@ default_settings = Settings(
     :expand_mul => false,
     :expand_comp => false,
     :dist_ind => true,
-    :telescopic_indicator => false
-
-)
+    :telescopic_indicator => false,
+    :reduce_vac_early => true)
 function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom
@@ -54,6 +53,13 @@ function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_setti
 end
 const symmetry_settings = custom_settings(:symmetry => true; preset=default_settings)
 const blaserize_settings = custom_settings(:blaserize => true; preset=default_settings)
+
+time_1 = 0
+time_2 = 0
+function reset_time!()
+    global time_1 = 0
+    global time_2 = 0
+end
 
 """
 
@@ -65,17 +71,24 @@ If there is no sink cluster: traverse the subgraph and
 """
 function spanning_tree!(n::APN, seen=PCTGraph(); settings=Dict{Symbol,Bool}())
     push!(nodes(seen), n)
-    push!(hashset(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
+
     if settings[:blaserize]
         neighbor_list = blaserize_neighbors(n)
     else
-        neighbor_list = neighbors(n; settings=settings)
+        global time_1 += @elapsed neighbor_list = neighbors(n; settings=settings)
     end
     reduced_list = Vector{Tuple{APN,Bool,String}}()
-    for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
-        t in hashset(seen) || push!(reduced_list, (t, d, name))
+    if any(directed(neighbor_list))
+        i = findfirst(directed(neighbor_list))
+        push!(reduced_list, (nodes(neighbor_list)[i], true, names(neighbor_list)[i]))
+    else
+        push!(hashset(seen), n)
+        for (t, d, name) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+            t in hashset(seen) || push!(reduced_list, (t, d, name))
+        end
     end
+
 
     for (t, d, name) in sort(reduced_list, by=e -> -e[2])
         push!(edges(seen), node_start => 1 + length(nodes(seen)))

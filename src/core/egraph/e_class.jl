@@ -53,26 +53,6 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     return Monomial, [base, power], partial_inference(Monomial, base, power)
 end
 
-function combine_factors(terms::Vector)
-    term_dict = Dict{APN, Number}()
-    function process_term!(a::Constant)
-        term_dict[constant(1)] = get_body(a) + get(term_dict, constant(1), 0)
-    end
-    function process_term!(a::Mul)
-        is_constant = group(t->isa(t, Constant), content(get_body(a)))
-        constant_term = get(is_constant, true, [constant(1)]) |> first
-        rest = mul(get(is_constant, false, [])...)
-        term_dict[rest] = get_body(constant_term) + get(term_dict, rest, 0)
-    end
-    function process_term!(a::APN)
-        #= println(typeof(a))
-        println(hash(a)) =#
-        term_dict[a] = 1 + get(term_dict, a, 0)
-    end
-    
-    map(process_term!, terms)
-    return [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
-end
 
 #= function combine_maps(terms::Vector)
     map_dict, remaining_terms = Dict{Int, Vector{APN}}(), Vector{APN}()
@@ -103,7 +83,6 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     d = group(t->isa(t, Constant), new_terms)
     const_term = sum(map(get_body, get(d, true, [])), init=0) |> constant
     new_terms = filter(t -> !is_zero(t), [const_term,  get(d, false, [])...])
-    new_terms = combine_factors(new_terms)
 
     #= if count(a->isa(a, Map), new_terms) > 1
         new_terms = combine_maps(new_terms)
@@ -158,9 +137,12 @@ end
 flatten_comp(c::AbstractComp) = vcat(flatten_comp.(content(get_body(c)))...)
 flatten_comp(c::APN) = [c]
 
-function e_class_reduction(::Type{T}, term::PCTVector) where T <: AbstractComp
-    length(term) == 1 && return first(content(term))
-    body = pct_vec(vcat(flatten_comp.(content(term))...)...)
+function e_class_reduction(::Type{T}, v::PCTVector) where T <: AbstractComp
+    if length(v) == 1 
+        op = first(content(v))
+        return typeof(op), terms(op), get_type(op)
+    end
+    body = pct_vec(vcat(flatten_comp.(content(v))...)...)
     return T, [body], partial_inference(T, body)
 end
 
@@ -193,6 +175,8 @@ function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) w
     upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)    
     upper == minfty() && return Constant,  [0], I()
     is_zero(body) && return Constant,  [0], I()
+
+    lower == constant(1) && base(get_type(upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...)    
 
     #= diff = add(upper, mul(constant(-1), lower))
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#

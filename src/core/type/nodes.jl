@@ -104,7 +104,13 @@ range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
 infty() = var(:∞)
-minfty() = mul(constant(-1), infty())
+
+_MINFTY=nothing
+minfty() = if _MINFTY === nothing 
+    global _MINFTY = mul(constant(-1), infty())
+else
+    _MINFTY
+end
 
 struct Conjugate <: APN
     type::AbstractPCTType
