@@ -50,7 +50,6 @@ The purpose is to ensure at construction that
 function make_node(::Type{T}, terms::Vararg;
     type=UndeterminedPCTType()
 ) where {T<:APN}
-
     S, terms, t = e_class_reduction(T, terms...)
     type == UndeterminedPCTType() && (type = t)
     return S(type, terms...)

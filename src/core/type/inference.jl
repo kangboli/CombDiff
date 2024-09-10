@@ -22,6 +22,7 @@ default_context() = TypeContext(
         :RT => [MapType(VecType([N(), N(), N()]), R())],
         :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
         :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
+        :SSym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :neg),),))],
     ),
     Dict{Symbol,Vector{<:Var}}(
     :Infty => [infty()],

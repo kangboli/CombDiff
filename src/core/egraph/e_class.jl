@@ -15,7 +15,7 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     process_type(::Type{Constant}) = Constant, [get_body(term)']
     process_type(::Type{T}) where T <: Contraction = T, [get_bound(term), conjugate(get_body(term))]
     function process_type(::Type{T}) where  {T <: AbstractDelta}
-        T, [lower(term), upper(term), conjugate(get_body(term))]
+        T, [upper(term), lower(term), conjugate(get_body(term))]
     end
     process_type(::Type{Conjugate}) = typeof(get_body(term)), terms(get_body(term))
     process_type(::Type{<:APN}) = Conjugate, [term]
@@ -167,7 +167,7 @@ function e_class_reduction(::Type{T}, body::S) where {T <: Univariate, S <: APN}
 end
 
 
-function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) where T <: APN
+function e_class_reduction(::Type{Indicator}, upper::APN, lower::APN, body::T) where T <: APN
 
     lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
     lower == infty() && return Constant,  [0], I()
@@ -180,5 +180,5 @@ function e_class_reduction(::Type{Indicator}, lower::APN, upper::APN, body::T) w
 
     #= diff = add(upper, mul(constant(-1), lower))
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#
-    return Indicator, [lower, upper, body], partial_inference(Indicator, lower, upper, body)
+    return Indicator, [upper, lower, body], partial_inference(Indicator, upper, lower, body)
 end

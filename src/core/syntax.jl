@@ -595,7 +595,9 @@ function parse_pctvector_node(n::Expr)
 end
 
 function parse_indicator_node(::Type{Indicator}, n::Expr)
-    return :(indicator($(map(parse_node, n.args[2:end])...)))
+    args = map(parse_node, n.args[2:end])
+
+    return :(indicator($(args[2]), $(args[1]), $(args[end])))
 end
 
     

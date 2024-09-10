@@ -427,26 +427,28 @@ The indicator function is inclusive (the test is lower <= upper)
 """
 struct Indicator <: AbstractDelta
     type::AbstractPCTType
-    lower::APN
     upper::APN
+    lower::APN
     body::APN
 end
 
 
-function make_delta(::Type{T}, lower_upper::Vararg{APN}) where T <: AbstractDelta
-    lower_upper = collect(lower_upper)
-    content = last(lower_upper)
-    lower_upper = lower_upper[1:end-1]
-    n = length(lower_upper)
-    content = make_node(T, lower_upper[1], lower_upper[n÷2+1], content)
+function make_delta(::Type{T}, upper_lower::Vararg{APN}) where T <: AbstractDelta
+    upper_lower = collect(upper_lower)
+    content = last(upper_lower)
+    upper_lower = upper_lower[1:end-1]
+    n = length(upper_lower)
+    content = make_node(T, upper_lower[1], upper_lower[n÷2+1], content)
     if n > 2
-        return make_delta(T, lower_upper[2:n÷2]..., lower_upper[n÷2+2:end]..., content)
+        return make_delta(T, upper_lower[2:n÷2]..., upper_lower[n÷2+2:end]..., content)
     else
         return content
     end
 end
 
-indicator(upper_lower::Vararg{APN}) = make_delta(Indicator, upper_lower...)
+function indicator(upper_lower::Vararg{APN}) 
+    make_delta(Indicator, upper_lower...)
+end
 
 
 struct VacExp <: APN

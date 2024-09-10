@@ -133,6 +133,8 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
 
     append!(result, delta_out_pullback_neighbors(c))
     append!(result, let_out_pullback(c))
+    append!(result, sub_neighbors(c; settings=settings))
+
     function apply_symmetry(indices, op)
         # Apply the permutation.
         new_term = set_content(c, mapp(c), args(c)[collect(indices)])
@@ -157,18 +159,26 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
         return new_term
     end
 
-    append!(result, sub_neighbors(c; settings=settings))
+    for (indices, op) in symmetries(get_type(mapp(c)))
+        op == :neg || continue
+        new_term = apply_symmetry(indices, op)
+        if new_term == mul(constant(-1), c)
+            push!(result, constant(0); name="forbidden symmetry")
+            return result
+        end
+    end
 
     settings[:symmetry] || return result
 
     for (indices, op) in symmetries(get_type(mapp(c)))
-        push!(result, apply_symmetry(indices, op); name="symmetry")
+        new_term = apply_symmetry(indices, op)
+        push!(result, new_term; name="symmetry")
     end
 
     return result
 end
 
-function neighbors(::PrimitivePullback; settings=default_settings)
+function neighbors(::PrimitivePullback; _=default_settings)
     return NeighborList()
 end
 
@@ -366,17 +376,20 @@ function swallow_neighbors(m::R) where {R<:Union{Mul,Composition}}
         T = typeof(x)
         T <: AbstractDelta || continue
         rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, make_node(T, lower(x), upper(x), make_node(R, make_node(PCTVector, get_body(x), rem_terms...))); dired=true, name="swallow")
+        push!(result, make_node(T, upper(x), lower(x), make_node(R, make_node(PCTVector, get_body(x), rem_terms...))); dired=true, name="swallow")
     end
     return result
 end
 
+"""
+x ⋅ 𝕀(1, 2, y) -> 𝕀(1, 2, y ⋅ x)
+"""
 function indicator_swallow_neighbors(terms)
     result = NeighborList()
     for (i, x) in enumerate(terms)
         isa(x, Indicator) || continue
         rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))]
-        push!(result, indicator(lower(x), upper(x), mul(get_body(x), rem_terms...)); dired=true, name="indicator swallow mul")
+        push!(result, indicator(upper(x), lower(x), mul(get_body(x), rem_terms...)); dired=true, name="indicator swallow mul")
     end
     return result
 end
@@ -559,7 +572,8 @@ function contract_delta_neighbors(s::Sum)
             error("Not yet implemented")
         end
         new_sum = pct_sum(indices..., subst(get_body(d), v, replacement))
-        new_sum = indicator(lower(get_type(this)), this, this, upper(get_type(this)), new_sum)
+        new_sum = indicator(other, upper(get_type(this)), lower(get_type(this)),  other, new_sum)
+
 
         push!(result, new_sum; dired=true, name="contract_delta")
     end
@@ -788,7 +802,8 @@ function sub_neighbors(n::APN; settings=default_settings)
     for (i, t) in enumerate(sub_terms)
         neighbor_list = neighbors(t, settings=settings)
         for (h, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
-            push!(result, set_terms(n, set_at(sub_terms, i, h)...); dired=d, name=s)
+            new_sub_terms = set_at(sub_terms, i, h)
+            push!(result, set_terms(n, new_sub_terms...); dired=d, name=s)
             d && return result
         end
     end
@@ -1072,7 +1087,7 @@ function delta_swallow_indicator(ind)
     result = NeighborList()
     isa(get_body(ind), Delta) || return result
     d = get_body(ind)
-    new_term = delta(lower(d), upper(d), indicator(lower(ind), upper(ind), get_body(d)))
+    new_term = delta(lower(d), upper(d), indicator(upper(ind), lower(ind), get_body(d)))
     push!(result, new_term; name="delta_swallow_indicator", dired=true)
     return result
 end
@@ -1083,14 +1098,18 @@ function neighbors(ind::Indicator; settings=default_settings)
     settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
     #= append!(result, eliminate_indicator(ind)) =#
-    append!(result, telescopic_indicator_elim(ind))
+    #= append!(result, telescopic_indicator_elim(ind)) =#
     return result
 end
 
+"""
+I(x,y, p + q) -> I(x, y, p) + I(x, y, q)
+"""
 function dist_ind(ind)
     result = NeighborList()
-    isa(get_body(ind), Add) || return result
-    new_term = add(map(t -> indicator(lower(ind), upper(ind), t), content(get_body(get_body(ind))))...)
+    a = get_body(ind)
+    isa(a, Add) || return result
+    new_term = add(map(t -> indicator(upper(ind), lower(ind), t), content(get_body(a)))...)
     push!(result, new_term; dired=true, name="dist_ind")
     return result
 end
@@ -1110,7 +1129,7 @@ function telescopic_indicator_elim(ind; settings=default_settings)
         uppers = uppers[1:end.!=j]
         lowers = lowers[1:end.!=j]
         for (l, u) in zip(lowers, uppers)
-            body = indicator(l, u, body)
+            body = indicator(u, l, body)
         end
         push!(result, body; dired=true, name="indicator inclusion")
         return result
@@ -1161,7 +1180,7 @@ function swallow_vac(v)
     T = typeof(get_body(v))
     T <: AbstractDelta || return result
     d = get_body(v)
-    new_node = make_node(T, lower(d), upper(d), make_node(VacExp, get_body(d)))
+    new_node = make_node(T, upper(d), lower(d), make_node(VacExp, get_body(d)))
     push!(result, new_node; name="swallow vac", dired=true)
     return result
 end
@@ -1191,7 +1210,7 @@ function reduce_vac_early(v)
     isa(c, Composition) || return result
 
     terms = content(get_body(c))
-    all(is_field_op, terms) || return result
+    all(t -> is_creation(t) || is_annihilation(t), terms) || return result
 
     push!(result, reduce_vac(v); dired=true, name="reduce_vac_early")
 
@@ -1243,10 +1262,62 @@ function sum_out_vac(c)
     return result
 end
 
+#= function sum_out_comp(c)
+    result = NeighborList()
+    terms = content(get_body(c))
+    i = findfirst(t->isa(t, Sum), terms)
+    i === nothing && return result
+
+    free = free_and_dummy(pct_vec(terms[1:end.!=i]...)) |> first
+    require_renaming(t) = name(t) in name.(free)
+    symbols = new_symbol(terms..., num=count(require_renaming, content(get_bound(terms[i]))))
+    new_ff = Vector{Var}()
+    summand = get_body(terms[i])
+
+    for (i, t) in enumerate(terms)
+        T = typeof(t)
+        T <: Contraction || continue
+        #= terms[i] = get_body(t) =#
+        terms = set_i(terms, i, get_body(t))
+        new_term = make_node(T, get_bound(t), composite(content(terms)...))
+        push!(result, new_term; name="sum_out_comp", dired=true)
+        return result
+    end
+
+    return result
+end
+ =#
+
+function relax_sum_comp(c::Composition)
+    result = NeighborList()
+    terms = content(get_body(c))
+    i = findfirst(t -> isa(t, Sum), terms)
+    i === nothing && return result
+    free = free_and_dummy(mul(terms[1:end.!=i]...)) |> first
+    require_renaming(t) = name(t) in name.(free)
+    symbols = new_symbol(terms..., num=count(require_renaming, content(get_bound(terms[i]))))
+    new_ff = Vector{Var}()
+    summand = get_body(terms[i])
+    for t in content(get_bound(terms[i]))
+        if require_renaming(t)
+            new_var = var(pop!(symbols), get_type(t))
+            push!(new_ff, new_var)
+            summand = subst(summand, t, new_var)
+        else
+            push!(new_ff, t)
+        end
+    end
+
+    push!(result, pct_sum(new_ff..., composite(set_i(pct_vec(terms...), i, summand)...)); dired=true, name="relax_sum_comp")
+    return result
+end
+
 function neighbors(c::Composition; settings=default_settings)
     result = NeighborList()
     settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
     append!(result, swallow_neighbors(c))
+    #= append!(result, sum_out_comp(c)) =#
+    append!(result, relax_sum_comp(c))
     append!(result, sub_neighbors(c; settings=settings))
     return result
 end

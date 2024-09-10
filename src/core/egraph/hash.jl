@@ -78,7 +78,7 @@ function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
         k = variable_map.keys[i]
         println(Base.isequal(k, sig)) =#
         ks = keys(variable_map)
-        sig in ks
+        sig in ks || return false
         replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
     end
     replaced_expr_2 = remake_node(replaced_expr_2)
