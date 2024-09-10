@@ -78,12 +78,12 @@ latex(c::Call) = "\\left($(latex(mapp(c)))\\right)\\left($(latex(args(c)))\\righ
 
 verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_type(c)))"
 
-function pretty(c::Conjugate) 
+function pretty(c::Conjugate)
 
-    function conj_symbol(t::MapType) 
+    function conj_symbol(t::MapType)
         t == FOT() && return "⁺"
-        get_body_type(t) == C() && return "⁺" 
-        return "ᵀ" 
+        get_body_type(t) == C() && return "⁺"
+        return "ᵀ"
     end
     conj_symbol(::ElementType) = "'"
     interior = pretty(get_body(c))
@@ -96,9 +96,9 @@ end
 
 
 function latex(c::Conjugate)
-    function conj_symbol(t::MapType) 
+    function conj_symbol(t::MapType)
         t == FOT() && return "\\dagger"
-        get_body_type(t) == C() && return "\\dagger" 
+        get_body_type(t) == C() && return "\\dagger"
         return "T"
     end
     conj_symbol(::ElementType) = "*"
@@ -124,7 +124,10 @@ latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(get_body(p)))\\right)"
 
 verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
-pretty(s::Sum) = "∑(($(pretty(get_bound(s)))), $(pretty(get_body(s))))"
+function pretty(s::Sum)
+    bound_string = join(map(verbose, content(get_bound(s))), ",")
+    "∑(($(bound_string)), $(pretty(get_body(s))))"
+end
 
 function latex(s::Sum, paren=false)
     indices = []
@@ -132,7 +135,7 @@ function latex(s::Sum, paren=false)
         append!(indices, content(get_bound(s)))
         s = get_body(s)
     end
-    sum_str = all(i->type_based(get_type(i), R()), indices) ? "\\int" : "\\sum"
+    sum_str = all(i -> type_based(get_type(i), R()), indices) ? "\\int" : "\\sum"
     result = "$(sum_str)_{$(join(latex.(indices),","))}$(latex(s))"
     return paren ? "\\left($(result)\\right)" : result
 end
@@ -278,7 +281,7 @@ function verbose(v::PCTVector, paren=false)
 end
 
 function Base.show(io::IO, ::MIME"text/latex", m::APN)
-    print(io, latexstring("\\begin{array}{l} $(latex(m)) \\end{array}" ))
+    print(io, latexstring("\\begin{array}{l} $(latex(m)) \\end{array}"))
 end
 
 function Base.show(io::IO, ::MIME"text/plain", m::APN)
@@ -381,13 +384,13 @@ function pretty(v::VecType)
     "$(join(pretty.(get_content_type(v)), "×"))"
 end
 
-pretty(::T)  where T <: ElementType = string(T)
+pretty(::T) where {T<:ElementType} = string(T)
 
 pretty(f::FermiScalar) = ":I($(pretty(get_body(f))))"
 latex(f::FermiScalar) = "\\mathbf{I}($(latex(get_body(f))))"
 
 function pretty(v::VacExp)
-    "⟨$(pretty(get_body(v)))⟩" 
+    "⟨$(pretty(get_body(v)))⟩"
 end
 
 function latex(v::VacExp)

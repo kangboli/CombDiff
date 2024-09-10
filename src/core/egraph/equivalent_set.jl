@@ -184,7 +184,7 @@ end
 
 
 """
-Currently, we do not extract powers. For example, `i^2 + i` will be not  
+Currently, we do not extract powers. For example, `i^2 + i` will be not
 factored into `i*(i+1)`.
 """
 function gcd(a::APN, b::APN)
@@ -532,7 +532,7 @@ function sum_mul_neighbors(s::Sum)
 end
 
 """
-sum(j, delta(i, j+k, A(i, j, k))) 
+sum(j, delta(i, j+k, A(i, j, k)))
 sets j -> i - k
 """
 function contract_delta_neighbors(s::Sum)
@@ -572,7 +572,7 @@ function contract_delta_neighbors(s::Sum)
             error("Not yet implemented")
         end
         new_sum = pct_sum(indices..., subst(get_body(d), v, replacement))
-        new_sum = indicator(other, upper(get_type(this)), lower(get_type(this)),  other, new_sum)
+        new_sum = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_sum)
 
 
         push!(result, new_sum; dired=true, name="contract_delta")
@@ -844,6 +844,46 @@ function relax_sum(s::Sum)
     return result
 end
 
+function sum_absorb_indicator(s::Sum)
+    result = NeighborList()
+
+    ind = get_body(s)
+    isa(ind, Indicator) || return result
+    indices = get_bound(s)
+
+    function match_index(ind, indices, f)
+        isa(f(ind), Var) || return nothing
+        return findfirst(t -> name(t) == name(f(ind)), content(indices))
+    end
+
+    i_l = match_index(ind, indices, lower)
+    i_u = match_index(ind, indices, upper)
+
+    if i_l !== nothing
+        curr_type = get_type(indices[i_l])
+        curr_upper, curr_lower = upper(curr_type), lower(curr_type)
+        if curr_upper == upper(ind) || curr_upper == upper(base(curr_type))
+            new_domain = Domain(base(curr_type), curr_lower, upper(ind))
+            new_index = set_type(indices[i_l], new_domain)
+            new_term = pct_sum(set_at(indices, i_l, new_index)..., get_body(ind))
+            push!(result, new_term; dired=true, name="absorb upper bound")
+            return result
+        end
+    end
+    if i_u !== nothing
+        curr_type = get_type(indices[i_u])
+        curr_upper, curr_lower = upper(curr_type), lower(curr_type)
+        if curr_lower == lower(ind) || curr_lower == lower(base(curr_type))
+            new_domain = Domain(base(curr_type), lower(ind), curr_upper)
+            new_index = set_type(indices[i_u], new_domain)
+            new_term = pct_sum(set_at(indices, i_u, new_index)..., get_body(ind))
+            push!(result, new_term; dired=true, name="absorb lower bound")
+            return result
+        end
+    end
+    return result
+end
+
 function neighbors(s::Sum; settings=default_settings)
     result = NeighborList()
 
@@ -857,6 +897,7 @@ function neighbors(s::Sum; settings=default_settings)
     append!(result, sum_out_linear_op(s))
     append!(result, sum_let_const_out(s))
     append!(result, sum_out_delta(s))
+    append!(result, sum_absorb_indicator(s))
     if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))
         append!(result, sum_sym_neighbors(s))
@@ -1083,6 +1124,9 @@ function neighbors(lt::Let; settings=default_settings)
     return result
 end
 
+"""
+I(..., δ(...)) -> δ(..., I(...))
+"""
 function delta_swallow_indicator(ind)
     result = NeighborList()
     isa(get_body(ind), Delta) || return result
@@ -1098,7 +1142,7 @@ function neighbors(ind::Indicator; settings=default_settings)
     settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
     #= append!(result, eliminate_indicator(ind)) =#
-    #= append!(result, telescopic_indicator_elim(ind)) =#
+    append!(result, telescopic_indicator_elim(ind))
     return result
 end
 
@@ -1359,4 +1403,3 @@ end
 function neighbors(n::FermiScalar; settings=default_settings)
     return sub_neighbors(n; settings=settings)
 end
-
