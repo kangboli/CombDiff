@@ -13,14 +13,14 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     t in [N(), I(), R()] && return T, terms(term), get_type(term)
     process_type(::Type{Mul}) = Mul, [pct_vec(map(conjugate, content(get_body(term)))...)]
     process_type(::Type{Constant}) = Constant, [get_body(term)']
-    process_type(::Type{T}) where T <: Contraction = T, [get_bound(term), conjugate(get_body(term))]
-    function process_type(::Type{T}) where  {T <: AbstractDelta}
+    process_type(::Type{T}) where {T<:Contraction} = T, [get_bound(term), conjugate(get_body(term))]
+    function process_type(::Type{T}) where {T<:AbstractDelta}
         T, [upper(term), lower(term), conjugate(get_body(term))]
     end
     process_type(::Type{Conjugate}) = typeof(get_body(term)), terms(get_body(term))
     process_type(::Type{<:APN}) = Conjugate, [term]
-    
-    function inferenced_type(::Type{T}) where T 
+
+    function inferenced_type(::Type{T}) where {T}
         S, terms = process_type(T)
         partial_inference(S, terms...)
     end
@@ -46,10 +46,21 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
     is_zero(power) && return Constant, [1], N()
     is_one(power) && return T, terms(base), get_type(base)
-    if isa(base, Constant) && isa(power, Constant) 
+    if isa(base, Constant) && isa(power, Constant)
         new_const = [get_body(base)^get_body(power)]
-        return Constant, new_const, partial_inference(Constant, new_const)
+        return Constant, new_const, partial_inference(Constant, new_const...)
     end
+
+    if isa(base, Mul)
+        sub_terms = content(get_body(base))
+        i = findfirst(t -> isa(t, Constant), sub_terms)
+        if i !== nothing
+            new_body = pct_vec(monomial(sub_terms[i], power), monomial(mul(sub_terms[1:end.!=i]...), power))
+            new_mul = mul(new_body...)
+            return typeof(new_mul), terms(new_mul), get_type(new_mul)
+        end
+    end
+
     return Monomial, [base, power], partial_inference(Monomial, base, power)
 end
 
@@ -80,9 +91,9 @@ flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
 
 function e_class_reduction(::Type{Add}, term::PCTVector)
     new_terms = vcat(flatten_add.(content(term))...)
-    d = group(t->isa(t, Constant), new_terms)
+    d = group(t -> isa(t, Constant), new_terms)
     const_term = sum(map(get_body, get(d, true, [])), init=0) |> constant
-    new_terms = filter(t -> !is_zero(t), [const_term,  get(d, false, [])...])
+    new_terms = filter(t -> !is_zero(t), [const_term, get(d, false, [])...])
 
     #= if count(a->isa(a, Map), new_terms) > 1
         new_terms = combine_maps(new_terms)
@@ -92,16 +103,16 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     length(new_terms) == 0 && return Constant, [0], I()
     length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
 
-    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...)) 
+    return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
 end
 
 
-function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T <: Contraction, S<:APN}
+function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T<:Contraction,S<:APN}
 
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
     isempty(content(bound)) && return S, terms(summand), get_type(summand)
-    if T == S 
+    if T == S
         new_bound = pct_vec(content(bound)..., content(get_bound(summand))...)
         return T, [new_bound, get_body(summand)], partial_inference(Sum, new_bound, get_body(summand))
     end
@@ -110,6 +121,16 @@ function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T <: 
         body_summand, bound_summand = get_body(summand), get_bound(summand)
         new_sum = pct_sum(bound..., body_summand)
         return Map, [bound_summand, new_sum], partial_inference(Map, bound_summand, new_sum)
+    end
+
+    if S == Mul
+        sub_terms = content(get_body(summand))
+        i = findfirst(t -> isa(t, Constant), sub_terms)
+        if i !== nothing
+            new_body = pct_vec(sub_terms[i], make_node(T, bound, mul(sub_terms[1:end.!=i]...)))
+            new_mul = mul(new_body...)
+            return  typeof(new_mul), terms(new_mul), get_type(new_mul)
+        end
     end
 
     T, [bound, summand], partial_inference(Sum, bound, summand)
@@ -137,8 +158,8 @@ end
 flatten_comp(c::AbstractComp) = vcat(flatten_comp.(content(get_body(c)))...)
 flatten_comp(c::APN) = [c]
 
-function e_class_reduction(::Type{T}, v::PCTVector) where T <: AbstractComp
-    if length(v) == 1 
+function e_class_reduction(::Type{T}, v::PCTVector) where {T<:AbstractComp}
+    if length(v) == 1
         op = first(content(v))
         return typeof(op), terms(op), get_type(op)
     end
@@ -155,9 +176,9 @@ function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
 end
 is_inv(::Type{Exp}, ::Type{Log}) = true
 is_inv(::Type{Log}, ::Type{Exp}) = true
-is_inv(::Type{T}, ::Type{S}) where {T <: APN, S <: APN} = false
+is_inv(::Type{T}, ::Type{S}) where {T<:APN,S<:APN} = false
 
-function e_class_reduction(::Type{T}, body::S) where {T <: Univariate, S <: APN}
+function e_class_reduction(::Type{T}, body::S) where {T<:Univariate,S<:APN}
     if is_inv(T, S)
         stripped = get_body(S)
         return typeof(strip), get_body(stripped), get_type(stripped)
@@ -167,16 +188,16 @@ function e_class_reduction(::Type{T}, body::S) where {T <: Univariate, S <: APN}
 end
 
 
-function e_class_reduction(::Type{Indicator}, upper::APN, lower::APN, body::T) where T <: APN
+function e_class_reduction(::Type{Indicator}, upper::APN, lower::APN, body::T) where {T<:APN}
 
     lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
-    lower == infty() && return Constant,  [0], I()
+    lower == infty() && return Constant, [0], I()
 
-    upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)    
-    upper == minfty() && return Constant,  [0], I()
-    is_zero(body) && return Constant,  [0], I()
+    upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)
+    upper == minfty() && return Constant, [0], I()
+    is_zero(body) && return Constant, [0], I()
 
-    lower == constant(1) && base(get_type(upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...)    
+    lower == constant(1) && base(get_type(upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...)
 
     #= diff = add(upper, mul(constant(-1), lower))
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#

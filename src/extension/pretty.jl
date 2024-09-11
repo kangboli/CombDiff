@@ -87,7 +87,7 @@ function pretty(c::Conjugate)
     end
     conj_symbol(::ElementType) = "'"
     interior = pretty(get_body(c))
-    if isa(c, Map)
+    if isa(get_body(c), Map) || isa(get_body(c), Composition)
         interior = "($(interior))"
     end
 
@@ -103,7 +103,7 @@ function latex(c::Conjugate)
     end
     conj_symbol(::ElementType) = "*"
     interior = latex(get_body(c))
-    if isa(get_body(c), Map)
+    if isa(get_body(c), Map) || isa(get_body(c), Composition)
         interior = "\\left($(interior)\\right)"
     end
 
@@ -136,7 +136,9 @@ function latex(s::Sum, paren=false)
         s = get_body(s)
     end
     sum_str = all(i -> type_based(get_type(i), R()), indices) ? "\\int" : "\\sum"
-    result = "$(sum_str)_{$(join(latex.(indices),","))}$(latex(s))"
+    all_sums = join(map(i -> "$(sum_str)_{$(latex(i)) = $(latex(lower(get_type(i))))}^{$(latex(upper(get_type(i))))}", indices), "")
+    result = "$(all_sums) $(latex(s))"
+    #= result = "$(sum_str)_{$(join(latex.(indices),","))}$(latex(s))" =#
     return paren ? "\\left($(result)\\right)" : result
 end
 

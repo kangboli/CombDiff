@@ -58,7 +58,8 @@ function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
     objectid(n_1) == objectid(n_2) && return true
     length(get_bound(n_1)) == length(get_bound(n_2)) || return false
     sig_set_1, sig_set_2 = Set(signatures!(n_1)), Set(signatures!(n_2))
-    length(sig_set_1) == length(get_bound(n_1)) || return false
+    # This is to make a term equal to itself when there are identical signatures.
+    length(sig_set_1) == length(get_bound(n_1)) || return get_body(n_1) == get_body(n_2)
     sig_set_1 == sig_set_2 || return false
 
     symbols = new_symbol(get_body(n_1), get_body(n_2), num=length(signatures!(n_1)))
