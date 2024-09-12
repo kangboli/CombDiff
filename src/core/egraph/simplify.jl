@@ -129,45 +129,46 @@ end
 
 process_directive(n::Union{Var,Constant}) = n
 
-function absorb_term(t_set, r)
-    r_absorbed = false
+function absorb_single(t_set, r)
     t_rep = first(t_set)
 
-    (typeof(t_rep) == typeof(r) &&
-     (!isa(t_rep, Sum) || length(get_bound(t_rep)) == length(get_bound(t_rep))) &&
-     (first(free_and_dummy(t_rep)) == first(free_and_dummy(r)))) || return t_set, r_absorbed
+    #= typeof(t_rep) == typeof(r) || return t_set, false =#
+    #= !isa(t_rep, Sum) || length(get_bound(t_rep)) == length(get_bound(r)) || return t_set, false =#
+    first(free_and_dummy(t_rep)) == first(free_and_dummy(r)) || return t_set, false
 
-    function absorb(t_set, r)
-        for t in t_set
-            result = simplify(add(t, r); settings=default_settings) |> first
-            isa(result, Add) && continue
-            return simplify(result; settings=custom_settings(:logging => false, preset=symmetry_settings)), true
-        end
-        return t_set, false
+    for t in t_set
+        result = simplify(add(t, r); settings=custom_settings(:logging => false, preset=symmetry_settings)) |> first
+        isa(result, Add) && continue
+        new_set = simplify(result; settings=custom_settings(:logging => false, preset=symmetry_settings))
+        return new_set, true
     end
-
-    t_set, r_absorbed = absorb(t_set, r)
-
-    return t_set, r_absorbed
+    return t_set, false
 end
 
+function absorb_list(t_set, list)
+    remaining = Vector{APN}()
+    for r in list
+        t_set, absorbed = absorb_single(t_set, r)
+        absorbed || push!(remaining, r)
+    end
+    return t_set, remaining
+end
+
+
 function symmetry_reduction(n::Add; settings=default_settings)
-    g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false; preset=settings)) |> first
+    g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging=>false; preset=settings)) |> first
     isa(g, Add) || return g
+    g = add(map(t->first(simplify(t; settings=custom_settings(:logging=>false ;preset=symmetry_settings))), content(get_body(g)))...)
+    
 
     reducibles = content(get_body(g))
     irreducibles = Vector{APN}()
 
     while !isempty(reducibles)
         t, rest... = reducibles
-        empty!(reducibles)
-
+        
         t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings))
-
-        for r in rest
-            t_set, r_absorbed = absorb_term(t_set, t)
-            r_absorbed || push!(reducibles, r)
-        end
+        t_set, reducibles = absorb_list(t_set, rest)
 
         push!(irreducibles, first(t_set))
     end
