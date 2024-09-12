@@ -1,6 +1,10 @@
-# The types in this module is for documentation instead of performance purposes.
+# The types in this module are designed to be comprehensible instead of performance purposes.
 # Do not optimize this code because it is not the bottleneck and is already difficult 
 # to debug.
+#
+# Most functions in this file are mutually recursive, but each of the function is small and 
+# possible to reason about.
+
 export decompose, PComp, as_map, pp, pfuncs
 
 """
@@ -45,10 +49,22 @@ the input and output types can be obtained.
 """
 maptype(b::ABF)::MapType = b.maptype
 
+"""
+get the type of the input
+"""
 input_type(b::ABF)::VecType = get_bound_type(maptype(b))
 
+"""
+get the type of the output
+"""
 output_type(b::ABF)::AbstractPCTType = get_body_type(maptype(b))
 
+"""
+    z_vars(b::ABF)
+
+Make the variablse that represents zs when
+converting a function f to (zs) -> f(zs) in `as_map`.
+"""
 z_vars(b::ABF)::Vector{T} where {T<:Var} = map(var,
     new_symbol(apns(b)...; num=length(input_type(b)), symbol=:_z), get_content_type(input_type(b)))
 
@@ -67,6 +83,9 @@ function zk_vars(b::ABF)
     return zs, ks
 end
 
+"""
+Get the set of expressions captured in the ABF.
+"""
 apns(b::ABF)::Vector{APN} = apns(param(b))
 apns(b::APN)::Vector{APN} = [v_wrap(b)...]
 apns(::Nothing)::Vector{APN} = []
@@ -137,6 +156,10 @@ function decompose(zs::APN, ov::Add)::PComp
     push(decompose(zs, target), BAdd(add(content(rest)...), ptype))
 end
 
+"""
+When decomposing addition or multiplication, one needs to do this to avoid a stackoverflow.
+For example: x -> v + x = x -> (x -> x + v)(x) = x -> (x -> (x -> x + v)(x))(x) = ...
+"""
 function avoid_overflow(zs::APN, ov::APN)::Tuple{APN,PCTVector}
     contains_zs(t) = any(z -> contains_name(t, name(z)), v_wrap(zs))
     i = findfirst(contains_zs, content(get_body(ov)))
@@ -330,6 +353,13 @@ for f in pfuncs(c)
     result = evaluate(call(as_map(f), v_wrap(result)...))
 end =#
 
+"""
+This is a B-rule:
+
+𝒫 (x -> B(f(expr))) = (x, k) -> 𝒫 (x->expr)(x, 𝒫 (f)(expr, k)) + 𝒫 (x -> f)(x, i -> δ(expr, i, k))
+
+Be careful with touching this function. It is very hard to get this right.
+"""
 function pp(c::PComp)::Map
     zs = input(c)
     ys, ks = zk_vars(c)
