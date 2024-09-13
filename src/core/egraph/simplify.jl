@@ -129,51 +129,68 @@ end
 
 process_directive(n::Union{Var,Constant}) = n
 
-function absorb_single(t_set, r)
-    t_rep = first(t_set)
+function are_similar(t, r)
+    first(free_and_dummy(t)) == first(free_and_dummy(r)) || return false
+    get_bound_length(n::APN) = 0
+    get_bound_length(n::Contraction) = length(get_bound(n))
+    function get_bound_length(n::Mul)
+        sub_terms = content(get_body(n))
+        i = findfirst(t -> isa(t, Sum), sub_terms)
+        i === nothing && return 0
+        return length(get_bound(sub_terms[i]))
+    end
+
+    get_bound_length(t) == get_bound_length(r) || return false
+    return true
+end
+
+function absorb_single(t::APN, r_set::Vector{APN})::Tuple{APN, Bool}
+    r_rep = first(r_set)
 
     #= typeof(t_rep) == typeof(r) || return t_set, false =#
     #= !isa(t_rep, Sum) || length(get_bound(t_rep)) == length(get_bound(r)) || return t_set, false =#
-    first(free_and_dummy(t_rep)) == first(free_and_dummy(r)) || return t_set, false
+    are_similar(t, r_rep) || return t, false
 
-    for t in t_set
-        result = simplify(add(t, r); settings=custom_settings(:logging => false, preset=symmetry_settings)) |> first
-        isa(result, Add) && continue
-        new_set = simplify(result; settings=custom_settings(:logging => false, preset=symmetry_settings))
-        return new_set, true
+    for r in r_set
+        #= result = simplify(add(t, r); settings=custom_settings(:logging => false)) |> first =#
+        result = combine_factors(add(t, r))
+        isempty(nodes(result)) && continue
+        #= new_t_set = simplify(first(new_t_set); settings=custom_settings(:logging => false, preset=symmetry_settings)) =#
+        return first(nodes(result)), true
     end
-    return t_set, false
+    return t, false
 end
 
-function absorb_list(t_set, list)
-    remaining = Vector{APN}()
-    for r in list
-        t_set, absorbed = absorb_single(t_set, r)
-        absorbed || push!(remaining, r)
+function absorb_list(t::APN, list::Vector{Vector{APN}})
+    remaining = Vector{Vector{APN}}()
+    for r_set in list
+        t, absorbed = absorb_single(t, r_set)
+        absorbed || push!(remaining, r_set)
+        absorbed && println("absorbed:", pretty(first(r_set)))
     end
-    return t_set, remaining
+    return t, remaining
 end
 
 
 function symmetry_reduction(n::Add; settings=default_settings)
-    g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging=>false; preset=settings)) |> first
+    g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
     isa(g, Add) || return g
-    g = add(map(t->first(simplify(t; settings=custom_settings(:logging=>false ;preset=symmetry_settings))), content(get_body(g)))...)
-    
+    t_sets = map(t -> simplify(t; settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g)))
+    #= g = add(first.(t_sets)...) =#
 
-    reducibles = content(get_body(g))
-    irreducibles = Vector{APN}()
+    reduced = Vector{APN}()
 
-    while !isempty(reducibles)
-        t, rest... = reducibles
-        
-        t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings))
-        t_set, reducibles = absorb_list(t_set, rest)
+    while !isempty(t_sets)
+        t_set, rest... = t_sets
+        t = first(t_set)
 
-        push!(irreducibles, first(t_set))
+        #= t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings)) =#
+        t, t_sets = absorb_list(t, rest)
+
+        push!(reduced, t)
     end
 
-    return add(irreducibles...)
+    return add(reduced...)
 end
 
 function symmetry_reduction(n::APN; settings=default_settings)

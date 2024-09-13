@@ -129,7 +129,7 @@ function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T<:Co
         if i !== nothing
             new_body = pct_vec(sub_terms[i], make_node(T, bound, mul(sub_terms[1:end.!=i]...)))
             new_mul = mul(new_body...)
-            return  typeof(new_mul), terms(new_mul), get_type(new_mul)
+            return typeof(new_mul), terms(new_mul), get_type(new_mul)
         end
     end
 
@@ -188,18 +188,23 @@ function e_class_reduction(::Type{T}, body::S) where {T<:Univariate,S<:APN}
 end
 
 
-function e_class_reduction(::Type{Indicator}, upper::APN, lower::APN, body::T) where {T<:APN}
+function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::T) where {T<:APN}
 
-    lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
-    lower == infty() && return Constant, [0], I()
+    t_lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
+    t_lower == infty() && return Constant, [0], I()
 
-    upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)
-    upper == minfty() && return Constant, [0], I()
+    t_upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)
+    t_upper == minfty() && return Constant, [0], I()
     is_zero(body) && return Constant, [0], I()
 
-    lower == constant(1) && base(get_type(upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...)
+    if t_lower == lower(get_type(t_upper)) || t_upper == upper(get_type(t_lower))
+        return T, terms(body), partial_inference(T, terms(body)...)
+    end
+    #= println(verbose(t_lower))
+    println(verbose(t_upper)) =#
+    #= t_lower == constant(1) && base(get_type(t_upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...) =#
 
     #= diff = add(upper, mul(constant(-1), lower))
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#
-    return Indicator, [upper, lower, body], partial_inference(Indicator, upper, lower, body)
+    return Indicator, [t_upper, t_lower, body], partial_inference(Indicator, t_upper, t_lower, body)
 end

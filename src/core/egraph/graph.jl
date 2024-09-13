@@ -78,7 +78,7 @@ function html_report(l::Logger, report_name="tmp")
         <p> Neighbor Listing: $(l.timers[1]) </p>
         <p> Hashing for Seen: $(l.timers[2]) </p>
         "
-    paragraphs = join(map((i, t, n)->"<p> $(i) <code>$(n)</code>: \\( $(t) \\)</p>", 1:length(l.steps), map(latex, l.steps), l.names), "")
+    paragraphs = join(map((i, t, n)->"<p> $(i) <code>$(n)</code>: \$\$ $(t) \$\$</p>", 1:length(l.steps), map(latex, l.steps), l.names), "")
     html = """
     <!DOCTYPE html>
     <html lang="en">

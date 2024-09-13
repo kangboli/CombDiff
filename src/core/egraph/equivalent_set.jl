@@ -846,6 +846,7 @@ function relax_sum(s::Sum)
     return result
 end
 
+# TODO: Fix the bug of updating the type of the variable being absorbed!.
 function sum_absorb_indicator(s::Sum)
     result = NeighborList()
 
@@ -867,7 +868,8 @@ function sum_absorb_indicator(s::Sum)
         if curr_upper == upper(ind) || curr_upper == upper(base(curr_type))
             new_domain = Domain(base(curr_type), curr_lower, upper(ind))
             new_index = set_type(indices[i_l], new_domain)
-            new_term = pct_sum(set_at(indices, i_l, new_index)..., get_body(ind))
+            new_body = subst(get_body(ind), indices[i_l], new_index)
+            new_term = pct_sum(set_at(indices, i_l, new_index)..., new_body)
             push!(result, new_term; dired=true, name="absorb_upper_bound")
             return result
         end
@@ -878,7 +880,8 @@ function sum_absorb_indicator(s::Sum)
         if curr_lower == lower(ind) || curr_lower == lower(base(curr_type))
             new_domain = Domain(base(curr_type), lower(ind), curr_upper)
             new_index = set_type(indices[i_u], new_domain)
-            new_term = pct_sum(set_at(indices, i_u, new_index)..., get_body(ind))
+            new_body = subst(get_body(ind), indices[i_u], new_index)
+            new_term = pct_sum(set_at(indices, i_u, new_index)..., new_body)
             push!(result, new_term; dired=true, name="absorb_lower_bound")
             return result
         end
