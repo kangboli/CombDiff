@@ -573,9 +573,9 @@ function contract_delta_neighbors(s::Sum)
             #= mul(constant(-1), this) =#
             error("Not yet implemented")
         end
-        new_sum = pct_sum(indices..., subst(get_body(d), v, replacement))
-        new_sum = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_sum)
-
+        new_summan = subst(get_body(d), v, replacement)
+        new_indicator = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_summan)
+        new_sum = pct_sum(indices..., new_indicator)
 
         push!(result, new_sum; dired=true, name="contract_delta")
     end
