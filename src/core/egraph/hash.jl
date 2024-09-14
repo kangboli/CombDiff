@@ -1,3 +1,5 @@
+export perms
+
 function Base.:(==)(n_1::R, n_2::S) where {R<:APN,S<:APN}
     R == S || return false
     objectid(n_1) == objectid(n_2) && return true
@@ -54,41 +56,109 @@ end
 
 remake_node(n::T) where {T<:APN} = make_node(T, terms(n)...; type=get_type(n))
 
+perms(v) = isempty(v) ? [[]] : [[t, p...] for (i, t) in enumerate(v) for p in perms(v[1:end.!=i])]
+
+struct VMap
+    d::Dict{SignatureTree,Pair{Int,Vector{Symbol}}}
+end
+
+function VMap(d::Dict{SignatureTree,Vector{Symbol}})
+    VMap(Dict(k => (0 => v) for (k, v) in d))
+end
+
+function Base.getindex(vm::VMap, sig::SignatureTree)
+    counter, symbols = vm.d[sig]
+    #= isempty(symbols) && error("signatures depleted") =#
+    counter += 1
+    vm.d[sig] =  counter  => symbols
+    return symbols[counter]
+end
+
+function reset!(v::VMap)
+    for k in keys(v.d)
+        v.d[k] = 0=>last(v.d[k])
+    end
+end
+
+struct VMapGenerator
+    symbols::Vector{Symbol}
+    sigs::Vector{SignatureTree}
+end
+
+function all_maps(vmg::VMapGenerator)
+    d = Dict{SignatureTree,Vector{Symbol}}()
+    for (s, sig) in zip(vmg.symbols, vmg.sigs)
+        d[sig] = push!(get(d, sig, []), s)
+    end
+
+    unique_sigs = filter(((_, v),) -> length(v) == 1, d)
+    dup_sigs = filter(((_, v),) -> length(v) >= 1, d)
+
+    return [VMap(merge(unique_sigs, g)) for g in perm_maps(dup_sigs)]
+end
+
+function perm_maps(d_dup::Dict{SignatureTree,Vector{Symbol}})
+    length(d_dup) == 0 && return [d_dup]
+
+    k, rest... = keys(d_dup)
+    result = []
+    for v in perms(d_dup[k])
+        for g in perm_maps(Dict(r => d_dup[r] for r in rest))
+            push!(result, merge(Dict(k => v), g))
+        end
+    end
+    return result
+end
+
+#= function gen_maps(d::Dict{SignatureTree, Vector{Symbol}})
+    d_dup = filter((_, v) -> length(v) > 1, d)
+    length(d_dup) == 0 && return [d]
+
+    k, rest... = keys(d_dup)
+
+
+    length(d_dup) == 1 && return [Dict(first(keys(d)) => p) for p in perms(first(values(d)))]
+
+end =#
+
+
 function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
     objectid(n_1) == objectid(n_2) && return true
     length(get_bound(n_1)) == length(get_bound(n_2)) || return false
     sig_set_1, sig_set_2 = Set(signatures!(n_1)), Set(signatures!(n_2))
     # This is to make a term equal to itself when there are identical signatures.
     sig_set_1 == sig_set_2 || return false
-    if length(sig_set_1) !== length(get_bound(n_1)) 
+    #= if length(sig_set_1) !== length(get_bound(n_1))
         literal_match = get_bound(n_1) == get_bound(n_2) && get_body(n_1) == get_body(n_2)
         #= literal_match || @warn "duplicated index signatures $(pretty(n_1)) vs $(pretty(n_2))" =#
         return literal_match
-    end
+    end =#
 
     symbols = new_symbol(get_body(n_1), get_body(n_2), num=length(signatures!(n_1)))
-    variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols))
+    vmg = VMapGenerator(symbols, signatures!(n_1))
 
-    # The deepcopy is the performance bottleneck of this package.
-    replaced_expr_1 = deepcopy(get_body(n_1))
-    for (index, sig) in zip(content(get_bound(n_1)), signatures!(n_1))
-        replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
+    for variable_map in all_maps(vmg)
+        #= = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols)) =#
+
+        # The deepcopy is the performance bottleneck of this package.
+        replaced_expr_1 = deepcopy(get_body(n_1))
+        for (index, sig) in zip(content(get_bound(n_1)), signatures!(n_1))
+            replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
+        end
+        replaced_expr_1 = remake_node(replaced_expr_1)
+
+        reset!(variable_map)
+        replaced_expr_2 = deepcopy(get_body(n_2))
+        for (index, sig) in zip(content(get_bound(n_2)), signatures!(n_2))
+            #= ks = keys(variable_map)
+            sig in ks || return false =#
+            replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
+        end
+        replaced_expr_2 = remake_node(replaced_expr_2)
+
+        replaced_expr_1 == replaced_expr_2 && return true
     end
-    replaced_expr_1 = remake_node(replaced_expr_1)
-
-    replaced_expr_2 = deepcopy(get_body(n_2))
-    for (index, sig) in zip(content(get_bound(n_2)), signatures!(n_2))
-        #= i, sh = Base.hashindex(sig, length(variable_map.keys))
-        println(i)
-        k = variable_map.keys[i]
-        println(Base.isequal(k, sig)) =#
-        ks = keys(variable_map)
-        sig in ks || return false
-        replaced_expr_2 = fast_rename!(replaced_expr_2, index, variable_map[sig])
-    end
-    replaced_expr_2 = remake_node(replaced_expr_2)
-
-    return replaced_expr_1 == replaced_expr_2
+    return false
 end
 
 function trunc_hash(n::T, h::UInt, level=3) where {T<:Contraction}
