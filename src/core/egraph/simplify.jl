@@ -172,15 +172,18 @@ function absorb_list(t::APN, list::Vector{Vector{APN}})
 end
 
 
-function symmetry_reduction(n::Add; settings=default_settings)
-    g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
+function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
+    println("1: simplifying each term")
+    @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
     isa(g, Add) || return g
-    t_sets = map(t -> simplify(t; settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g)))
+    println("2: enumerating symmetries")
+    @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g)))
     #= g = add(first.(t_sets)...) =#
 
     reduced = Vector{APN}()
 
-    while !isempty(t_sets)
+    println("3: combining")
+    @time while !isempty(t_sets)
         t_set, rest... = t_sets
         t = first(t_set)
 
@@ -193,10 +196,10 @@ function symmetry_reduction(n::Add; settings=default_settings)
     return add(reduced...)
 end
 
-function symmetry_reduction(n::APN; settings=default_settings)
-    set_content(n, vcat(map(t -> symmetry_reduction(t; settings=settings), content(n))...)...)
+function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings)
+    set_content(n, vcat(map(t -> symmetry_reduction(t; logger=logger, settings=settings), content(n))...)...)
 end
 
-function symmetry_reduction(n::TerminalNode; _=default_settings)
+function symmetry_reduction(n::TerminalNode; _=Logger(), _=default_settings)
     return n
 end

@@ -54,7 +54,10 @@ function trunc_hash(v::Var{T}, h::UInt, ::Int) where {T<:AbstractPCTType}
     return hash(name(v), h) + T.hash
 end
 
-remake_node(n::T) where {T<:APN} = make_node(T, terms(n)...; type=get_type(n))
+remake_node(n::T) where {T<:APN} = make_node(T, remake_node.(terms(n))...; type=get_type(n))
+remake_node(n::Symbol) = n
+remake_node(n::Number) = n
+
 
 perms(v) = isempty(v) ? [[]] : [[t, p...] for (i, t) in enumerate(v) for p in perms(v[1:end.!=i])]
 
@@ -70,13 +73,13 @@ function Base.getindex(vm::VMap, sig::SignatureTree)
     counter, symbols = vm.d[sig]
     #= isempty(symbols) && error("signatures depleted") =#
     counter += 1
-    vm.d[sig] =  counter  => symbols
+    vm.d[sig] = counter => symbols
     return symbols[counter]
 end
 
 function reset!(v::VMap)
     for k in keys(v.d)
-        v.d[k] = 0=>last(v.d[k])
+        v.d[k] = 0 => last(v.d[k])
     end
 end
 
@@ -122,6 +125,8 @@ end
 end =#
 
 
+
+
 function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
     objectid(n_1) == objectid(n_2) && return true
     length(get_bound(n_1)) == length(get_bound(n_2)) || return false
@@ -141,14 +146,17 @@ function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Contraction,Prod}}
         #= = Dict(sig => s for (sig, s) in zip(signatures!(n_1), symbols)) =#
 
         # The deepcopy is the performance bottleneck of this package.
-        replaced_expr_1 = deepcopy(get_body(n_1))
+        #= replaced_expr_1 = deepcopy(get_body(n_1)) =#
+        replaced_expr_1 = remake_node(get_body(n_1))
         for (index, sig) in zip(content(get_bound(n_1)), signatures!(n_1))
             replaced_expr_1 = fast_rename!(replaced_expr_1, index, variable_map[sig])
         end
+        # A remake is necessary because renaming breaks e_class invariants.
         replaced_expr_1 = remake_node(replaced_expr_1)
 
         reset!(variable_map)
-        replaced_expr_2 = deepcopy(get_body(n_2))
+        #= replaced_expr_2 = deepcopy(get_body(n_2)) =#
+        replaced_expr_2 = remake_node(get_body(n_2))
         for (index, sig) in zip(content(get_bound(n_2)), signatures!(n_2))
             #= ks = keys(variable_map)
             sig in ks || return false =#

@@ -8,3 +8,11 @@ function group(f::Function, vec::AbstractVector{T}) where T
     end
     return d
 end
+
+function tee(f::Function, vec::AbstractVector{T}) where T
+    d = group(f::Function, vec::AbstractVector{T})
+    
+    return get(d, true, Vector{T}()), get(d, false, Vector{T}())
+end
+
+

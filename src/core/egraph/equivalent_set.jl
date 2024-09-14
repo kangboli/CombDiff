@@ -161,11 +161,15 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
 
     for (indices, op) in symmetries(get_type(mapp(c)))
         op == :neg || continue
-        new_term = apply_symmetry(indices, op)
+        args(c) == args(c)[collect(indices)] || continue
+        push!(result, constant(0); dired=true, name="forbidden_symmetry")
+        return result
+
+        #= new_term = apply_symmetry(indices, op)
         if new_term == mul(constant(-1), c)
-            push!(result, constant(0); name="forbidden_symmetry")
+            push!(result, constant(0); dired=true, name="forbidden_symmetry")
             return result
-        end
+        end =#
     end
 
     settings[:symmetry] || return result
@@ -330,21 +334,21 @@ end
 function neighbors(a::Add; settings=default_settings)
     result = NeighborList()
     terms = content(get_body(a))
-    append!(result, combine_factors(a))
 
     if count(a -> isa(a, Map), content(get_body(a))) > 1
         new_add = combine_maps(content(get_body(a)))
         push!(result, new_add; dired=true, name="combine_map")
     end
     #= append!(result, combine_map_neighbors(terms)) =#
-    append!(result, add_delta_neighbors(terms))
     sub_result = sub_neighbors(a; settings=settings)
-    for (i, t) in enumerate(nodes(sub_result))
+    #= for (i, t) in enumerate(nodes(sub_result))
         isa(t, Add) && length(content(get_body(t))) == length(content(get_body(a))) && continue
         directed(sub_result)[i] = true
-    end
+    end =#
     append!(result, sub_result)
     any(directed(result)) && return result
+    append!(result, add_delta_neighbors(terms))
+    append!(result, combine_factors(a))
 
     settings[:gcd] && append!(result, gcd_neighbors(terms))
     return result
@@ -1270,7 +1274,7 @@ function neighbors(v::VacExp; settings=default_settings)
     result = NeighborList()
 
     settings[:reduce_vac_early] && append!(result, reduce_vac_early(v))
-    append!(result, extract_scalar(v))
+    #= append!(result, extract_scalar(v)) =#
     append!(result, swallow_vac(v))
     append!(result, distribute_vac(v))
     append!(result, sub_neighbors(v; settings=custom_settings(:expand_comp => true, :dist_conj => true; preset=settings)))

@@ -208,3 +208,19 @@ function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::
     isa(zero_compare(diff), Union{NonNeg, IsPos}) && return T, [body], partial_inference(T, body)     =#
     return Indicator, [t_upper, t_lower, body], partial_inference(Indicator, t_upper, t_lower, body)
 end
+
+function repack(n::APN)
+    return typeof(n), terms(n), get_type(n)
+end
+
+function e_class_reduction(::Type{VacExp}, body::T) where T <: APN
+    T == FermiScalar && return repack(get_body(body))
+    T <: AbstractComp || return VacExp, [body], partial_inference(VacExp, body)
+    
+    sub_terms = content(get_body(body))
+    scalars, remains = tee(t->isa(t, FermiScalar), sub_terms)
+    isempty(scalars) && return VacExp, [body], partial_inference(VacExp, body)
+
+    new_term = mul(map(get_body, scalars)..., vac_exp(composite(remains...)))
+    return typeof(new_term), terms(new_term), get_type(new_term)
+end
