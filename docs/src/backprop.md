@@ -32,7 +32,7 @@ df = vdiff(f) |> blaserize
 ```
 
 ```julia
-df = redux(vdiff(eval_all(f)); settings=symmetry_settings) |> blaserize
+df = redux(vdiff(eval_all(f)); settings=symmetry_settings()) |> blaserize
 ```
 
 ```math

@@ -79,6 +79,8 @@ function vac_exp_rewrite(c::Composition)
     terms = content(get_body(c))
 
     length(terms) == 0 && return constant(1)
+    is_annihilation(last(terms)) && return constant(0)
+    is_creation(first(terms)) && return constant(0)
 
     for i in 2:length(terms)
         left, right = terms[1:i-2], terms[i+1:end]

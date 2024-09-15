@@ -16,7 +16,7 @@ A \to \mathcal{P}\left(x \to x^{\dagger}\cdot A\cdot x\right)
 ```
 
 ```julia
-df = redux(vdiff(f), settings=symmetry_settings) |> blaserize
+df = redux(vdiff(f), settings=symmetry_settings()) |> blaserize
 ```
 
 ```math
@@ -46,7 +46,7 @@ T \mapsto \mathcal{P}(x \mapsto \Sigma_{i,j,k}x_{i}\cdot x_{j}\cdot x_{k}\cdot T
 
 You can then differentiate the program to get the gradient, which is just another functional program
 ```julia
-df = redux(vdiff(f); settings=symmetry_settings)
+df = redux(vdiff(f); settings=symmetry_settings())
 ```
 
 Output:
@@ -135,7 +135,7 @@ J \mapsto \mathcal{P}\left(C \mapsto \sum_{i,j,p,q,r,s}J_{p, q, r, s}\cdot C_{s,
 ```
 
 ```julia
-df = redux(vdiff(f); settings=symmetry_settings)
+df = redux(vdiff(f); settings=symmetry_settings())
 ```
 
 ```math
@@ -200,7 +200,7 @@ f, _ = @pct _ ctx (S::Mmn, w::SV) -> pullback((U::Gauge) ->
 ```
 
 ```julia
-df = redux(vdiff(eval_all(f)); settings=symmetry_settings)
+df = redux(vdiff(eval_all(f)); settings=symmetry_settings())
 ```
 
 

@@ -1,5 +1,25 @@
 using IterTools
 
+is_deadend!(::TerminalNode, _) = true
+function is_deadend(n::APN, settings)
+    return objectid(n) in settings[:deadend]
+end
+
+tag_deadend!(::TerminalNode, _) = nothing
+function tag_deadend!(n::APN, settings)
+    push!(settings[:deadend], objectid(n))
+    for t in terms(n)
+        untag_deadend!(t, settings)
+    end
+end
+
+untag_deadend!(::TerminalNode, _) = nothing
+function untag_deadend!(n::APN, settings)
+    delete!(settings[:deadend], objectid(n))
+    for t in terms(n)
+        untag_deadend!(t, settings)
+    end
+end
 
 """
 Equivalent sets for PCT nodes.
@@ -58,7 +78,7 @@ end
 
 neighbors(::Union{Var,Constant,FieldOperators}; _...) = NeighborList()
 
-function sub_neighbors(c::PrimitiveCall; settings=default_settings)
+function sub_neighbors(c::PrimitiveCall; settings=default_settings())
     result = NeighborList()
     a = args(c)
 
@@ -128,7 +148,7 @@ function let_out_pullback(p::PrimitiveCall)
     return result
 end
 
-function neighbors(c::PrimitiveCall; settings=default_settings)
+function neighbors(c::PrimitiveCall; settings=default_settings())
     result = NeighborList()
 
     append!(result, delta_out_pullback_neighbors(c))
@@ -182,7 +202,7 @@ function neighbors(c::PrimitiveCall; settings=default_settings)
     return result
 end
 
-function neighbors(::PrimitivePullback; _=default_settings)
+function neighbors(::PrimitivePullback; _=default_settings())
     return NeighborList()
 end
 
@@ -245,15 +265,18 @@ function add_delta_neighbors(terms::Vector)
     return result
 end
 
-function sub_neighbors(n::Union{Add,Mul}; settings=default_settings)
+function sub_neighbors(n::Union{Add,Mul}; settings=default_settings())
     result = NeighborList()
     body = get_body(n)
-    for i = 1:length(body)
+    p = sortperm(content(body), by=t->is_deadend(t, settings))
+
+    for i = p
         neighbor_list = neighbors(body[i]; settings=settings)
         for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(n, set_i(body, i, t)); dired=d, name=s)
             d && return result
         end
+        any(directed(neighbor_list)) || tag_deadend!(body[i], settings)
     end
 
     return result
@@ -331,7 +354,7 @@ function combine_factors(a)
 end
 
 
-function neighbors(a::Add; settings=default_settings)
+function neighbors(a::Add; settings=default_settings())
     result = NeighborList()
     terms = content(get_body(a))
 
@@ -453,7 +476,7 @@ function prod_const_neighbors(terms)
     return result
 end
 
-function neighbors(m::Mul; settings=default_settings)
+function neighbors(m::Mul; settings=default_settings())
     result = NeighborList()
     terms = content(get_body(m))
     append!(result, mul_add_neighbors(terms))
@@ -468,7 +491,7 @@ function neighbors(m::Mul; settings=default_settings)
     return result
 end
 
-function neighbors(m::Map; settings=default_settings)
+function neighbors(m::Map; settings=default_settings())
     result = NeighborList()
     append!(result, sub_neighbors(m, settings=settings))
     return result
@@ -488,7 +511,7 @@ end
 
 
 
-function neighbors(m::Monomial; settings=default_settings)
+function neighbors(m::Monomial; settings=default_settings())
     result = NeighborList()
     b, p = base(m), power(m)
 
@@ -802,7 +825,7 @@ function set_at(v::Any, i::Integer, h)
     map(j -> j == i ? h : v[j], 1:length(v))
 end
 
-function sub_neighbors(n::APN; settings=default_settings)
+function sub_neighbors(n::APN; settings=default_settings())
     result = NeighborList()
     sub_terms = terms(n)
     for (i, t) in enumerate(sub_terms)
@@ -893,7 +916,7 @@ function sum_absorb_indicator(s::Sum)
     return result
 end
 
-function neighbors(s::Sum; settings=default_settings)
+function neighbors(s::Sum; settings=default_settings())
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
@@ -960,7 +983,7 @@ function prod_sum_neighbors(p::Prod)
 end
 
 
-function neighbors(p::Prod; settings=default_settings)
+function neighbors(p::Prod; settings=default_settings())
     result = NeighborList()
 
     neighbor_list = neighbors(get_body(p), settings=settings)
@@ -978,7 +1001,7 @@ function neighbors(p::Prod; settings=default_settings)
 end
 
 
-function neighbors(d::Delta; settings=default_settings)
+function neighbors(d::Delta; settings=default_settings())
     result = NeighborList()
     neighbor_list = neighbors(get_body(d); settings=settings)
 
@@ -1027,7 +1050,7 @@ function conj_scalar_op(c)
     return result
 end
 
-function neighbors(c::Conjugate; settings=default_settings)
+function neighbors(c::Conjugate; settings=default_settings())
     result = NeighborList()
     settings[:dist_conj] && append!(result, dist_conj(c))
     append!(result, conj_comp(c))
@@ -1063,7 +1086,7 @@ function let_out_vector(v::PCTVector)
     return result
 end
 
-function neighbors(v::PCTVector; settings=default_settings)
+function neighbors(v::PCTVector; settings=default_settings())
     result = NeighborList()
     all(t -> isa(t, Var), content(v)) && return result
     append!(result, let_out_vector(v))
@@ -1072,7 +1095,7 @@ function neighbors(v::PCTVector; settings=default_settings)
 end
 
 
-function neighbors(v::Univariate; settings=default_settings)
+function neighbors(v::Univariate; settings=default_settings())
     return sub_neighbors(v; settings=settings)
 end
 
@@ -1124,7 +1147,7 @@ function let_collapse(lt::Let)
     return result
 end
 
-function neighbors(lt::Let; settings=default_settings)
+function neighbors(lt::Let; settings=default_settings())
     result = NeighborList()
     append!(result, sub_neighbors(lt; settings=settings))
     append!(result, let_const_bound_delta_prop(lt))
@@ -1145,7 +1168,7 @@ function delta_swallow_indicator(ind)
     return result
 end
 
-function neighbors(ind::Indicator; settings=default_settings)
+function neighbors(ind::Indicator; settings=default_settings())
     result = NeighborList()
     append!(result, delta_swallow_indicator(ind))
     settings[:dist_ind] && append!(result, dist_ind(ind))
@@ -1167,7 +1190,7 @@ function dist_ind(ind)
     return result
 end
 
-function telescopic_indicator_elim(ind; settings=default_settings)
+function telescopic_indicator_elim(ind; settings=default_settings())
     result = NeighborList()
     uppers, lowers = Vector{APN}([upper(ind)]), Vector{APN}([lower(ind)])
     body = get_body(ind)
@@ -1200,8 +1223,8 @@ function telescopic_indicator_elim(ind; settings=default_settings)
         inclusion = subtract(subtract(u_j, l_j), subtract(u_i, l_i))
 
         exclusion = add(subtract(u_j, l_j), subtract(u_i, l_i))
-        inclusion = simplify(inclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
-        exclusion = simplify(exclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
+        inclusion = simplify(inclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings())) |> first
+        exclusion = simplify(exclusion; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings())) |> first
 
         inclusion_test = zero_compare(inclusion)
         exclusion_test = zero_compare(exclusion)
@@ -1220,7 +1243,7 @@ end
 function eliminate_indicator(ind)
     result = NeighborList()
     diff = add(upper(ind), mul(constant(-1), lower(ind)))
-    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings)) |> first
+    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings())) |> first
     compare_result = zero_compare(diff)
 
     isa(compare_result, Union{IsPos,NonNeg}) || return result
@@ -1270,7 +1293,7 @@ function reduce_vac_early(v)
     return result
 end
 
-function neighbors(v::VacExp; settings=default_settings)
+function neighbors(v::VacExp; settings=default_settings())
     result = NeighborList()
 
     settings[:reduce_vac_early] && append!(result, reduce_vac_early(v))
@@ -1365,7 +1388,7 @@ function relax_sum_comp(c::Composition)
     return result
 end
 
-function neighbors(c::Composition; settings=default_settings)
+function neighbors(c::Composition; settings=default_settings())
     result = NeighborList()
     settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
     append!(result, swallow_neighbors(c))
@@ -1409,6 +1432,6 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::FermiScalar; settings=default_settings)
+function neighbors(n::FermiScalar; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end

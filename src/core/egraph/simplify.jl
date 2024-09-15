@@ -71,16 +71,16 @@ end
 Redux will be a higher level interface to simplify to reduce the complexity.
 I haven't figured out how to go about this so it just calls simplify right now.
 """
-function redux(n::APN; settings=default_settings)
+function redux(n::APN; settings=default_settings())
     result = simplify(n::APN; settings=settings) |> first
     simplify(result::APN; settings=custom_settings(:clench_sum => true)) |> first
 end
 
-#= function redux(n::Map; settings=default_settings)
+#= function redux(n::Map; settings=default_settings())
     pct_map(get_bound(n)...,  redux(get_body(n); settings=settings))
 end
 
-function redux(n::T; settings=default_settings) where T
+function redux(n::T; settings=default_settings()) where T
     if T == Sum
         settings = custom_settings(:gcd=>false; preset=settings)
     end
@@ -104,7 +104,7 @@ function simplify(n::APN; kwargs...)
     return smallest
 end
 
-function simplify(n::Map; settings=default_settings, logger=Logger())
+function simplify(n::Map; settings=default_settings(), logger=Logger())
     if settings[:blaserize]
         return invoke(simplify, Tuple{APN}, n; settings, logger)
     else
@@ -123,7 +123,7 @@ function process_directive(n::PrimitiveCall)
     length(args(n)) > 1 && error("A directive cannot be applied to multiple arguments")
     new_arg = first(process_directive(args(n)))
     directive == :__vdiff && return vdiff(new_arg)
-    directive == :__sym && return redux(new_arg; settings=symmetry_settings)
+    directive == :__sym && return redux(new_arg; settings=symmetry_settings())
     directive == :__deactivate && pop!(current_ast_transforms())
 end
 
@@ -197,13 +197,13 @@ enum_symmetry(n::TerminalNode; logger=Logger()) = [n]
 
 function enum_symmetry(n::T; logger=Logger())  where T <: APN
     #= [make_node(T, ts...) for ts in  product(map(t->enum_symmetry(t; logger=logger), terms(n))...)] =#
-    #= result = simplify(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings))      =#
-    _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings))     
+    #= result = simplify(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings()))      =#
+    _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings()))     
     return nodes(result)
 end
 
 
-function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
+function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings())
     println("1: simplifying each term")
     @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
     isa(g, Add) || return g
@@ -213,7 +213,7 @@ function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
     error() =#
     
     @time t_sets = map(t->enum_symmetry(t; logger=logger), content(get_body(g)))
-    #= @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g))) =#
+    #= @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings())), content(get_body(g))) =#
     #= @time t_sets = [[Set(s)...] for s in t_sets] =#
     #= g = add(first.(t_sets)...) =#
 
@@ -224,7 +224,7 @@ function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
         t_set, rest... = t_sets
         t = first(t_set)
 
-        #= t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings)) =#
+        #= t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings())) =#
         t, t_sets = absorb_list(t, rest)
 
         push!(reduced, t)
@@ -233,10 +233,10 @@ function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
     return add(reduced...)
 end
 
-function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings)
+function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings())
     set_content(n, vcat(map(t -> symmetry_reduction(t; logger=logger, settings=settings), content(n))...)...)
 end
 
-function symmetry_reduction(n::TerminalNode; _=Logger(), _=default_settings)
+function symmetry_reduction(n::TerminalNode; _=Logger(), _=default_settings())
     return n
 end

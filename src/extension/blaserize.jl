@@ -594,5 +594,5 @@ function blaserize_neighbors(p::PrimitivePullback)
 end
 
 function blaserize(n::APN)
-    return simplify(n; settings=blaserize_settings) |> first
+    return simplify(n; settings=blaserize_settings()) |> first
 end

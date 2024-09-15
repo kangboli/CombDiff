@@ -30,8 +30,14 @@ function PCTGraph(n::APN)
     return g
 end
 
-const Settings = Dict{Symbol,Bool}
-default_settings = Settings(
+const Settings = Dict{Symbol,Any}
+
+# Settings are immediately returned functions so that 
+# a new copy of the settings is created every time.
+# This avoids sharing mutable settings.
+
+
+default_settings() = Settings(
     :clench_sum => false,
     :symmetry => false,
     :logging => true,
@@ -43,8 +49,10 @@ default_settings = Settings(
     :expand_comp => false,
     :dist_ind => true,
     :telescopic_indicator => false,
-    :reduce_vac_early => true)
-function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_settings)::Settings
+    :reduce_vac_early => true,
+    :deadend => Set{UInt64}()
+   )
+function custom_settings(custom...; preset=default_settings())::Settings
     new_settings = deepcopy(preset)
     for (s, b) in custom
         new_settings[s] = b
@@ -52,8 +60,8 @@ function custom_settings(custom::Vararg{Pair{Symbol,Bool}}; preset=default_setti
     new_settings[:gcd] && new_settings[:expand_mul] && error(":expand_mul and :gcd cannot be both set.")
     return new_settings
 end
-const symmetry_settings = custom_settings(:symmetry => true; preset=default_settings)
-const blaserize_settings = custom_settings(:blaserize => true; preset=default_settings)
+const symmetry_settings() = custom_settings(:symmetry => true; preset=default_settings())
+const blaserize_settings() = custom_settings(:blaserize => true; preset=default_settings())
 
 struct Logger
     timers::Vector{Float64}
@@ -123,7 +131,7 @@ If there is no sink cluster: traverse the subgraph and
     2. return the subgraph.
 
 """
-function spanning_tree!(n::APN, seen=PCTGraph(); settings=default_settings, logger=Logger())
+function spanning_tree!(n::APN, seen=PCTGraph(); settings=default_settings(), logger=Logger())
     push!(nodes(seen), n)
     node_start, edge_start = (length(nodes(seen)), length(edges(seen)))
 

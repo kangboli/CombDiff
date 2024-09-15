@@ -17,7 +17,7 @@ H \mapsto \mathcal{P}\left(ψ \mapsto \int_{x,y}ψ\left(x\right)^{*}\cdot H\left
 ```
 
 ```julia
-redux(vdiff(E); settings=symmetry_settings) 
+redux(vdiff(E); settings=symmetry_settings()) 
 ```
 
 ```math
