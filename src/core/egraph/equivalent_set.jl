@@ -390,7 +390,7 @@ function mul_add_neighbors(terms::Vector)
 
             new_monomial = monomial(base(x), add(power(x), power(y)))
             new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
-            push!(result, mul(new_monomial, new_terms...); name="mul_add")
+            push!(result, mul(new_monomial, new_terms...); name="mul_to_power")
         end
     end
     return result
@@ -404,7 +404,7 @@ function swallow_neighbors(m::R) where {R<:Union{Mul,Composition}}
         T <: AbstractDelta || continue
         #= rem_terms = terms[collect(filter(k -> k != i, 1:length(terms)))] =#
         new_r = make_node(R, set_i(terms, i, get_body(x)))
-        push!(result, make_node(T, upper(x), lower(x), new_r); dired=true, name="swallow_$(R)")
+        push!(result, make_node(T, upper(x), lower(x), new_r); dired=true, name="swallow_$(lowercase(string(R)))")
     end
     return result
 end

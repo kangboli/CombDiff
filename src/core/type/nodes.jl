@@ -287,6 +287,12 @@ function pct_product(terms::Vararg)
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
 end
 
+"""
+AbstractDelta should have the field `upper` and `lower` in addition to `body`.
+This is counterinuitive for the indicator functions, where the smaller number 
+is written on the left. The order was decided for no reason when implementing 
+Delta, and Indicator is stuck with the same convention.
+"""
 abstract type AbstractDelta <: APN end
 
 upper(d::AbstractDelta) = d.upper

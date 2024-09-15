@@ -141,6 +141,7 @@ flatten_mul(a::APN) = [a]
 
 function e_class_reduction(::Type{Mul}, term::PCTVector)
     args = vcat(flatten_mul.(content(term))...)
+
     is_constant = group(t -> isa(t, Constant), args)
     args_const = get(is_constant, true, [])
     args = [constant(prod(get_body, args_const, init=1.0)), get(is_constant, false, [])...]
@@ -151,6 +152,13 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     if length(args) == 1
         return typeof(first(args)), terms(first(args)), get_type(first(args))
     end
+
+    i = findfirst(t->isa(t, AbstractDelta), args)
+    if i !== nothing
+        t = args[i]
+        return repack(make_node(typeof(t), upper(t), lower(t), mul(get_body(t), args[1:end.!=i]...)))
+    end
+
     return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
 end
 
