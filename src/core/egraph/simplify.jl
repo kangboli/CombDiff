@@ -129,6 +129,10 @@ end
 
 process_directive(n::Union{Var,Constant}) = n
 
+function fast_combine_factgor(t, r)
+    
+end
+
 function are_similar(t, r)
     first(free_and_dummy(t)) == first(free_and_dummy(r)) || return false
     get_bound_length(n::APN) = 0
@@ -144,24 +148,20 @@ function are_similar(t, r)
     return true
 end
 
-function absorb_single(t::APN, r_set::Vector{APN})::Tuple{APN, Bool}
+function absorb_single(t::APN, r_set)::Tuple{APN, Bool}
     r_rep = first(r_set)
 
-    #= typeof(t_rep) == typeof(r) || return t_set, false =#
-    #= !isa(t_rep, Sum) || length(get_bound(t_rep)) == length(get_bound(r)) || return t_set, false =#
     are_similar(t, r_rep) || return t, false
 
     for r in r_set
-        #= result = simplify(add(t, r); settings=custom_settings(:logging => false)) |> first =#
         result = combine_factors(add(t, r))
         isempty(nodes(result)) && continue
-        #= new_t_set = simplify(first(new_t_set); settings=custom_settings(:logging => false, preset=symmetry_settings)) =#
         return first(nodes(result)), true
     end
     return t, false
 end
 
-function absorb_list(t::APN, list::Vector{Vector{APN}})
+function absorb_list(t::APN, list)
     remaining = Vector{Vector{APN}}()
     for r_set in list
         t, absorbed = absorb_single(t, r_set)
@@ -171,13 +171,50 @@ function absorb_list(t::APN, list::Vector{Vector{APN}})
     return t, remaining
 end
 
+function enum_symmetry(n::Sum; logger=Logger())
+    # The simplication here is necessary because some symmetries can be simplified, 
+    # and some are already simplified. They cannot be combined unless all of them are simplified.
+    new_bodies = map(t->first(simplify(t; settings=custom_settings(:logging=>false))), enum_symmetry(get_body(n); logger=logger))
+    return map(t->pct_sum(get_bound(n)..., t), [Set(new_bodies)...])
+end
+
+function enum_symmetry(n::Mul; logger=Logger()) 
+    t, rest... = content(get_body(n))
+    t_syms = enum_symmetry(t; logger=logger)
+    rest_syms = enum_symmetry(mul(rest...); logger=logger)
+    result = [mul(s, r) for s in t_syms for r in rest_syms]
+    #= println(pretty(t))
+    println(length(t_syms))
+    println(pretty(mul(rest...)))
+    println(length(rest_syms))
+    println(pretty(n))
+    println([length(Set(result))...])
+    println() =#
+    return result
+end
+
+enum_symmetry(n::TerminalNode; logger=Logger()) = [n]
+
+function enum_symmetry(n::T; logger=Logger())  where T <: APN
+    #= [make_node(T, ts...) for ts in  product(map(t->enum_symmetry(t; logger=logger), terms(n))...)] =#
+    #= result = simplify(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings))      =#
+    _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings))     
+    return nodes(result)
+end
+
 
 function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings)
     println("1: simplifying each term")
     @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
     isa(g, Add) || return g
     println("2: enumerating symmetries")
-    @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g)))
+    #= result = enum_symmetry(content(get_body(g))[3]; logger=logger)
+    println.(pretty.(result))
+    error() =#
+    
+    @time t_sets = map(t->enum_symmetry(t; logger=logger), content(get_body(g)))
+    #= @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings)), content(get_body(g))) =#
+    #= @time t_sets = [[Set(s)...] for s in t_sets] =#
     #= g = add(first.(t_sets)...) =#
 
     reduced = Vector{APN}()

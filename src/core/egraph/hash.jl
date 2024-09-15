@@ -172,14 +172,16 @@ end
 function trunc_hash(n::T, h::UInt, level=3) where {T<:Contraction}
     level == 0 && return hash(T, h)
 
-    dummy_removed = deepcopy(get_body(n))
+    #= dummy_removed = deepcopy(get_body(n)) =#
+    dummy_removed = remake_node(get_body(n))
     for index in content(get_bound(n))
         dummy_removed = fast_rename!(dummy_removed, index, :dummy)
     end
     symbols = new_symbol(dummy_removed, num=length(signatures!(n)))
     variable_map = Dict(sig => s for (sig, s) in zip(signatures!(n), symbols))
 
-    replaced_expr = deepcopy(get_body(n))
+    #= replaced_expr = deepcopy(get_body(n)) =#
+    replaced_expr = remake_node(get_body(n))
     for (index, sig) in zip(content(get_bound(n)), signatures!(n))
         replaced_expr = fast_rename!(replaced_expr, index, variable_map[sig])
     end
@@ -225,10 +227,12 @@ end
 
 
 function pct_size(n::APN)
-    return sum(pct_size, content(n)) + 1
+    return sum(pct_size, content(n)) 
 end
 
 pct_size(v::TerminalNode) = 1
+pct_size(c::Constant) = abs(get_body(c)) == 1 ? 0 : 1
+
 
 function Base.isless(n_1::R, n_2::S) where {R<:APN,S<:APN}
     R == S || return R.hash < S.hash
