@@ -96,7 +96,7 @@ function vac_exp_rewrite(c::Composition)
     return constant(0)
 end
 
-vac_exp_rewrite(::APN) = is_field_op ? constant(0) : error("vac_exp of non-operators is not supported.")
+vac_exp_rewrite(n::APN) = is_field_op(n) ? constant(0) : error("vac_exp of non-operators is not supported.")
 
 function anti_commute(a::APN, b::APN)
     #= @assert is_field_op(a) && is_field_op(b) =#

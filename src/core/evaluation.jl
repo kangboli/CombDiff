@@ -287,6 +287,7 @@ function evaluate(l::Let)
         end
     end
     if !isempty(substs)
+        # TODO: Bug! This does not consider the case where one variable is part of the other.
         new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...))
     else
         new_call = evaluate(get_body(l))

@@ -153,7 +153,7 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
         return typeof(first(args)), terms(first(args)), get_type(first(args))
     end
 
-    i = findfirst(t->isa(t, AbstractDelta), args)
+    i = findfirst(t -> isa(t, AbstractDelta), args)
     if i !== nothing
         t = args[i]
         return repack(make_node(typeof(t), upper(t), lower(t), mul(get_body(t), args[1:end.!=i]...)))
@@ -166,12 +166,62 @@ end
 flatten_comp(c::AbstractComp) = vcat(flatten_comp.(content(get_body(c)))...)
 flatten_comp(c::APN) = [c]
 
+
+"""
+Taken from Permutation.jl
+"""
+function perm_sign(p::Vector)
+    n = length(p)
+    result = 0
+    todo = trues(n)
+    while any(todo)
+        k = findfirst(todo)
+        todo[k] = false
+        result += 1 # increment element count
+        j = p[k]
+        while j != k
+            result += 1 # increment element count
+            todo[j] = false
+            j = p[j]
+        end
+        result += 1 # increment cycle count
+    end
+    return isodd(result) ? -1 : 1
+end
+
+function operator_segment(v::Vector)
+    i = findfirst(t -> is_annihilation(t) != is_annihilation(first(v)), v)
+    i === nothing && return [v]
+    return [v[1:i-1], operator_segment(v[i:end])...]
+end
+
+function operator_ordering(ops::Vector)
+    vs = operator_segment(ops)
+    result = []
+    sign = 1
+    for v in vs
+        p = sortperm(v)
+        append!(result, v[p])
+        sign *= perm_sign(p)
+    end
+    return result, sign
+end
+
+
 function e_class_reduction(::Type{T}, v::PCTVector) where {T<:AbstractComp}
     if length(v) == 1
         op = first(content(v))
         return typeof(op), terms(op), get_type(op)
     end
-    body = pct_vec(vcat(flatten_comp.(content(v))...)...)
+    subterms = vcat(flatten_comp.(content(v))...)
+
+    #= if all(t -> is_creation(t) || is_annihilation(t), subterms)
+        subterms, sign = operator_ordering(subterms)
+        if sign == -1
+            return repack(composite(fermi_scalar(constant(sign)), make_node(T, pct_vec(subterms...))))
+        end
+    end =#
+    body = pct_vec(subterms...)
     return T, [body], partial_inference(T, body)
 end
 
@@ -221,12 +271,12 @@ function repack(n::APN)
     return typeof(n), terms(n), get_type(n)
 end
 
-function e_class_reduction(::Type{VacExp}, body::T) where T <: APN
+function e_class_reduction(::Type{VacExp}, body::T) where {T<:APN}
     T == FermiScalar && return repack(get_body(body))
     T <: AbstractComp || return VacExp, [body], partial_inference(VacExp, body)
-    
+
     sub_terms = content(get_body(body))
-    scalars, remains = tee(t->isa(t, FermiScalar), sub_terms)
+    scalars, remains = tee(t -> isa(t, FermiScalar), sub_terms)
     isempty(scalars) && return VacExp, [body], partial_inference(VacExp, body)
 
     new_term = mul(map(get_body, scalars)..., vac_exp(composite(remains...)))
