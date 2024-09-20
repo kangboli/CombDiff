@@ -337,7 +337,7 @@ function parse_domain_node(n::Expr)
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
         #= (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use." =#
-        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()synt
+        lower = haskey(pairs, :lower) ? parse_node(pairs[:lower]) : minfty()
         upper = haskey(pairs, :upper) ? parse_node(pairs[:upper]) : infty()
         periodic = haskey(pairs, :periodic) && (pairs[:periodic])
         tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])

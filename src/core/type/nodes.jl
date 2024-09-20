@@ -103,7 +103,7 @@ name(v::Var) = v.body
 range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
-infty() = var(:∞)
+infty() = var(:∞, R())
 
 _MINFTY=nothing
 minfty() = if _MINFTY === nothing 

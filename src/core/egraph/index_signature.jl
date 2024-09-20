@@ -90,7 +90,7 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     trees_to_compare_1 = first.(subtrees(first(first(trees_to_compare_1))))
     trees_to_compare_2 = first.(subtrees(first(first(trees_to_compare_2))))
     # trees_to_compare_1 == trees_to_compare_2
-
+    length(trees_to_compare_1) == length(trees_to_compare_2) || return false
     # TODO: Change this to a sort based comparison
     for t in trees_to_compare_1
         n_1 = count(x -> x == t, trees_to_compare_1)

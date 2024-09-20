@@ -99,8 +99,8 @@ end
 
 function inference(v::Var, context::TypeContext)
     startswith(string(get_body(v)), "__") && return v
-    return last(get_name_to_variable(context)[name(v)])
-    #= set_type(v, get_type(last(get_name_to_variable(context)[name(v)]))) =#
+    new_v = last(get_name_to_variable(context)[name(v)])
+    return set_type(new_v, inference(get_type(new_v), context))
 end
 
 function inference(l::Let, context::TypeContext)
@@ -201,17 +201,26 @@ function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCT
     escalate(get_type(base), get_type(power))
 end
 
+inference(d::AbstractPCTType, ::TypeContext=TypeContext()) = d
+
+# TODO: Properly implement the inference for MapType
+#= function inference(d::MapType, context::TypeContext=TypeContext()) 
+    new_bounds = VecType(map(t->inference(t, context), get_content_type(get_bound_type(d))))
+    return MapType(new_bounds, inference(get_body_type(d), context))
+end =#
+
 function inference(d::Domain, context::TypeContext=TypeContext())
-    vars = vcat(variables(lower(d)), variables(upper(d)))
-    for v in vars
+    #= vars = vcat(variables(lower(d)), variables(upper(d))) =#
+    #= for v in vars
         get_var(context, get_body(v)) === nothing || continue
         push_var!(context, get_body(v), set_type(v, base(d)))
-    end
+    end =#
 
-    return Domain(base(d), 
+    new_domain = Domain(base(d), 
            inference(lower(d), context),
            inference(upper(d), context), 
            meta(d))
+    return new_domain
 end
 
 function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp

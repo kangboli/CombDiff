@@ -237,6 +237,6 @@ function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings()
     set_content(n, vcat(map(t -> symmetry_reduction(t; logger=logger, settings=settings), content(n))...)...)
 end
 
-function symmetry_reduction(n::TerminalNode; _=Logger(), _=default_settings())
+function symmetry_reduction(n::TerminalNode; logger=Logger(), settings=default_settings())
     return n
 end
