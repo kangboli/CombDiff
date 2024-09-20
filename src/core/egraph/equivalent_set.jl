@@ -240,8 +240,9 @@ function gcd_neighbors(terms::Vector)
             i < j || continue
             x_rem, y_rem, common = gcd(x, y)
 
-            is_one(common) && continue
-            is_minus_one(common) && continue
+            isa(common, Constant) && continue
+            #= is_one(common) && continue
+            is_minus_one(common) && continue =#
             push!(result, add(mul(common, add(x_rem, y_rem)),
                     terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]...); name="gcd", dired=true)
         end

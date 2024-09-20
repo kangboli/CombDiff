@@ -75,6 +75,7 @@ end
 const Commtative = Union{Mul,Add}
 
 function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
+    objectid(sig_1) == objectid(sig_2) && return true
     node_type(sig_1) == node_type(sig_2) || return false
 
     trees_to_compare_1 = subtrees(sig_1)

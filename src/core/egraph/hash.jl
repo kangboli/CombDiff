@@ -187,8 +187,14 @@ function trunc_hash(n::T, h::UInt, level=3) where {T<:Contraction}
     end
     return reduce(xor, map(t -> hash(t, h), signatures!(n))) + trunc_hash(replaced_expr, h, level - 1)
 end
+function Base.:(==)(n_1::Add, n_2::Add) 
+    objectid(n_1) == objectid(n_2) && return true
+    c_1, c_2 = content(get_body(n_1)), content(get_body(n_2))
+    length(c_1) == length(c_2) || return false
+    return sort(c_1) == sort(c_2)
+end
 
-function Base.:(==)(n_1::T, n_2::T) where {T<:Union{Mul,Add}}
+function Base.:(==)(n_1::Mul, n_2::Mul) 
     objectid(n_1) == objectid(n_2) && return true
     c_1, c_2 = content(get_body(n_1)), content(get_body(n_2))
     length(c_1) == length(c_2) || return false

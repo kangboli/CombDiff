@@ -130,7 +130,7 @@ end
 process_directive(n::Union{Var,Constant}) = n
 
 function fast_combine_factgor(t, r)
-    
+
 end
 
 function are_similar(t, r)
@@ -148,25 +148,50 @@ function are_similar(t, r)
     return true
 end
 
-function absorb_single(t::APN, r_set)::Tuple{APN, Bool}
-    r_rep = first(r_set)
+
+function strip_const(t::Mul)
+    subterms = content(get_body(t))
+    i = findfirst(t -> isa(t, Constant), subterms)
+    i === nothing && return constant(1), t
+    return subterms[i], mul(subterms[1:end.!=i]...)
+end
+strip_const(t::APN) = constant(1), t
+
+#= function combine(a, r)
+    a_const, a_rest = strip_const(a)
+    r_const, r_rest = strip_const(r)
+    hash(a_rest) == hash(r_rest) || return nothing
+    a_rest == r_rest || return nothing
+    return mul(add(a_const, r_const), a_rest)
+end =#
+
+function absorb_single(t::APN, r_set)::Tuple{APN,Bool}
+    r_rep = first(r_set.nodes)
 
     are_similar(t, r_rep) || return t, false
 
-    for r in r_set
-        result = combine_factors(add(t, r))
+    t_const, t_rest = strip_const(t)
+    t_hash = hash(t_rest)
+    for (r, r_hash) in zip(r_set.nodes, r_set.hashes)
+        r_const, r_rest = strip_const(r)
+        #= r_hash = hash(r_rest) =#
+        #= result = combine(t, r) =#
+        (t_hash == r_hash && t_rest == r_rest) || continue
+        new_const = add(t_const, r_const)
+        return mul(new_const, t_rest), true
+        #= result = combine_factors(add(t, r))
         isempty(nodes(result)) && continue
-        return first(nodes(result)), true
+        return first(nodes(result)), true =#
     end
     return t, false
 end
 
 function absorb_list(t::APN, list)
-    remaining = Vector{Vector{APN}}()
+    remaining = []
     for r_set in list
         t, absorbed = absorb_single(t, r_set)
         absorbed || push!(remaining, r_set)
-        absorbed && println("absorbed:", pretty(first(r_set)))
+        absorbed && println("absorbed:", pretty(first(r_set.nodes)))
     end
     return t, remaining
 end
@@ -174,11 +199,11 @@ end
 function enum_symmetry(n::Sum; logger=Logger())
     # The simplication here is necessary because some symmetries can be simplified, 
     # and some are already simplified. They cannot be combined unless all of them are simplified.
-    new_bodies = map(t->first(simplify(t; settings=custom_settings(:logging=>false))), enum_symmetry(get_body(n); logger=logger))
-    return map(t->pct_sum(get_bound(n)..., t), [Set(new_bodies)...])
+    new_bodies = map(t -> first(simplify(t; settings=custom_settings(:logging => false))), enum_symmetry(get_body(n); logger=logger))
+    return map(t -> pct_sum(get_bound(n)..., t), [Set(new_bodies)...])
 end
 
-function enum_symmetry(n::Mul; logger=Logger()) 
+function enum_symmetry(n::Mul; logger=Logger())
     t, rest... = content(get_body(n))
     t_syms = enum_symmetry(t; logger=logger)
     rest_syms = enum_symmetry(mul(rest...); logger=logger)
@@ -195,24 +220,32 @@ end
 
 enum_symmetry(n::TerminalNode; logger=Logger()) = [n]
 
-function enum_symmetry(n::T; logger=Logger())  where T <: APN
+function enum_symmetry(n::T; logger=Logger()) where {T<:APN}
     #= [make_node(T, ts...) for ts in  product(map(t->enum_symmetry(t; logger=logger), terms(n))...)] =#
     #= result = simplify(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings()))      =#
-    _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings()))     
+    _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings()))
     return nodes(result)
 end
 
+struct HashedSet
+    nodes::Vector
+    hashes::Vector
+end
+
+HashedSet(nodes) = HashedSet(nodes, hash.(last.(strip_const.(nodes))))
 
 function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings())
     println("1: simplifying each term")
-    @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
+    @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => true; preset=settings)) |> first
     isa(g, Add) || return g
     println("2: enumerating symmetries")
     #= result = enum_symmetry(content(get_body(g))[3]; logger=logger)
     println.(pretty.(result))
     error() =#
-    
-    @time t_sets = map(t->enum_symmetry(t; logger=logger), content(get_body(g)))
+
+    @time t_sets = map(t -> enum_symmetry(t; logger=logger), content(get_body(g)))
+    hashed_sets = HashedSet.(t_sets)
+    #= hashes = map(s->map(t->hash(last(strip_const(t))), s), t_sets) =#
     #= @time t_sets = map(t -> simplify(t; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings())), content(get_body(g))) =#
     #= @time t_sets = [[Set(s)...] for s in t_sets] =#
     #= g = add(first.(t_sets)...) =#
@@ -220,12 +253,12 @@ function symmetry_reduction(n::Add; logger=Logger(), settings=default_settings()
     reduced = Vector{APN}()
 
     println("3: combining")
-    @time while !isempty(t_sets)
-        t_set, rest... = t_sets
-        t = first(t_set)
+    @time while !isempty(hashed_sets)
+        h_set, rest... = hashed_sets
+        t = first(h_set.nodes)
 
         #= t_set = simplify(t; settings=custom_settings(:logging => false, preset=symmetry_settings())) =#
-        t, t_sets = absorb_list(t, rest)
+        t, hashed_sets = absorb_list(t, rest)
 
         push!(reduced, t)
     end
@@ -237,6 +270,6 @@ function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings()
     set_content(n, vcat(map(t -> symmetry_reduction(t; logger=logger, settings=settings), content(n))...)...)
 end
 
-function symmetry_reduction(n::TerminalNode; logger=Logger(), settings=default_settings())
+function symmetry_reduction(n::TerminalNode; kwargs...)
     return n
 end

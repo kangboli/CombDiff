@@ -99,7 +99,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
         new_terms = combine_maps(new_terms)
     end =#
 
-    sort!(new_terms)
+    #= sort!(new_terms) =#
     length(new_terms) == 0 && return Constant, [0], I()
     length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
 
