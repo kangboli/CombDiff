@@ -236,6 +236,7 @@ function pct_size(n::APN)
     return sum(pct_size, content(n)) 
 end
 
+pct_size(v::Conjugate) = 1 + pct_size(get_body(v))
 pct_size(v::TerminalNode) = 1
 pct_size(c::Constant) = abs(get_body(c)) == 1 ? 0 : 1
 

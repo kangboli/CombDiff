@@ -408,6 +408,11 @@ function map_cancel_neighbors(m::Map)
     return result
 end
 
+"""
+(i, j) -> x * A(i, j)
+->
+x ⋅ (i, j) -> A(i, j)
+"""
 function map_out_neighbors(m::Map)
     result = NeighborList()
     bounds = content(get_bound(m))
@@ -422,6 +427,7 @@ function map_out_neighbors(m::Map)
         d = group(contain_bound, subterms)
         inner = get(d, true, [])
         outer = get(d, false, [])
+        isempty(outer) && return result
         new_terms = scalar_tensor_product(mul(outer...), pct_map(bounds..., mul(inner...)))
         push!(result, new_terms; dired=true, name="map out neighbors")
     end
@@ -553,11 +559,15 @@ function blaserize_neighbors(m::Mul)
     return result
 end
 
+"""
+𝒫 (...)(zs, k) -> k 𝒫 (...)(zs, 1)
+"""
 function gradient_neighbors(c::AbstractCall)
     result = NeighborList()
     isa(mapp(c), AbstractPullback) || return result
     is_pullback_of_univariate(mapp(c)) || return result
     zs..., k = content(args(c))
+    is_one(k) && return result
     new_term = scalar_tensor_product(k, call(mapp(c), zs..., constant(1)))
     push!(result, new_term; dired=true, name="gradient neighbor")
     return result

@@ -1,4 +1,4 @@
-export process_directive, dropp, eval_pullback, symmetry_reduction
+export process_directive, dropp, eval_pullback, symmetry_reduction, fast_symmetry_reduction
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
@@ -62,7 +62,6 @@ function dropp(p::Pullback)
 end
 
 function propagate_k(n::Map, k=constant(1))
-    println(pretty(n))
     zs = get_bound(n)[1:end-1]
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end
@@ -128,10 +127,6 @@ function process_directive(n::PrimitiveCall)
 end
 
 process_directive(n::Union{Var,Constant}) = n
-
-function fast_combine_factgor(t, r)
-
-end
 
 function are_similar(t, r)
     first(free_and_dummy(t)) == first(free_and_dummy(r)) || return false
@@ -271,5 +266,58 @@ function symmetry_reduction(n::APN; logger=Logger(), settings=default_settings()
 end
 
 function symmetry_reduction(n::TerminalNode; kwargs...)
+    return n
+end
+
+inner_hash(r) = hash(last(strip_const(r)))
+
+
+function rescale(n::APN, old_scale::Constant, new_scale::Constant)
+    c, stripped = strip_const(n)
+    return mul(constant(get_body(c) / get_body(old_scale) * get_body(new_scale)), stripped)
+end
+
+function absorb(t_hash_set, rest)
+    remaining = []
+    for r in rest
+        r_const, r_stripped = strip_const(r)
+        r_hash = hash(r_stripped)
+        is = findall(x -> x == r_hash, t_hash_set.hashes)
+        i = findfirst(x -> last(strip_const(x)) == r_stripped, t_hash_set.nodes[is])
+        if i === nothing
+            push!(remaining, r)
+            continue
+        end
+        println("absorbed: ", pretty(r))
+        t_const = first(strip_const(t_hash_set.nodes[is][i]))
+        new_const = add(t_const, r_const)
+        t_hash_set = HashedSet(map(t -> rescale(t, t_const, new_const), t_hash_set.nodes), t_hash_set.hashes)
+    end
+    return t_hash_set, remaining
+end
+
+
+function fast_symmetry_reduction(n::Add; logger=Logger(), settings=default_settings())
+    println("1: simplifying each term")
+    @time g = simplify(n; settings=custom_settings(:expand_mul => true, :gcd => false, :symmetry => false, :logging => false; preset=settings)) |> first
+    isa(g, Add) || return g
+
+    reduced = Vector{APN}()
+    rest = content(get_body(g))
+    while !isempty(rest)
+        t, rest... = rest
+        t_set = enum_symmetry(t; logger=logger)
+        t_hash_set = HashedSet(t_set)
+        t_hash_set, rest = absorb(t_hash_set, rest)
+        push!(reduced, first(t_set))
+    end
+    return add(reduced...)
+end
+
+function fast_symmetry_reduction(n::APN; logger=Logger(), settings=default_settings())
+    set_content(n, vcat(map(t -> fast_symmetry_reduction(t; logger=logger, settings=settings), content(n))...)...)
+end
+
+function fast_symmetry_reduction(n::TerminalNode; kwargs...)
     return n
 end

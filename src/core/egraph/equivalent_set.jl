@@ -269,7 +269,7 @@ end
 function sub_neighbors(n::Union{Add,Mul}; settings=default_settings())
     result = NeighborList()
     body = get_body(n)
-    p = sortperm(content(body), by=t->is_deadend(t, settings))
+    p = sortperm(content(body), by=t -> is_deadend(t, settings))
 
     for i = p
         neighbor_list = neighbors(body[i]; settings=settings)
@@ -601,9 +601,13 @@ function contract_delta_neighbors(s::Sum)
             #= mul(constant(-1), this) =#
             error("Not yet implemented")
         end
-        new_summan = subst(get_body(d), v, replacement)
-        new_indicator = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_summan)
-        new_sum = pct_sum(indices..., new_indicator)
+        new_summand = subst(get_body(d), v, replacement)
+        if isa(get_type(this), ElementType)
+            new_indicator = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_summand)
+            new_sum = pct_sum(indices..., new_indicator)
+        else
+            new_sum = pct_sum(indices..., new_summand)
+        end
 
         push!(result, new_sum; dired=true, name="contract_delta")
     end
@@ -789,6 +793,10 @@ function sum_shift_neighbors(s::Sum)
     return result
 end
 
+"""
+sum(b, let t = ... end)
+-> let t = ... sum(b, ...) end
+"""
 function sum_let_const_out(s::Sum)
     result = NeighborList()
     body = get_body(s)
@@ -802,6 +810,7 @@ function sum_let_const_out(s::Sum)
             push!(interior, b)
         end
     end
+    isempty(interior) && return result
 
     new_term = pct_sum(exterior...,
         pct_let(get_bound(body)..., args(body)...,
@@ -1106,6 +1115,7 @@ function let_const_bound_delta_prop(lt::Let)
     new_args = [args(lt)...]
     body = get_body(lt)
 
+    proped = false
     for i in 1:length(bound)
         v = new_args[i]
         isa(v, Delta) || continue
@@ -1117,7 +1127,9 @@ function let_const_bound_delta_prop(lt::Let)
             new_args[j] = subst(new_args[j], get_body(bound[i]), d)
         end
         body = subst(body, get_body(bound[i]), d)
+        proped = true
     end
+    proped || return result
     push!(result, pct_let(bound..., new_args..., body); dired=true, name="delta_prop")
     return result
 end

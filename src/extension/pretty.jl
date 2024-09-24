@@ -34,7 +34,7 @@ end
 function latex(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ \\left($(latex(range))\\right)" =#
     params = map(v -> "$(latex(v))", content(get_bound(m)))
-    params = length(get_bound(m)) == 1 ? first(params) : "\\left($(join(params, ", "))\\right)"
+    params = length(get_bound(m)) == 1 ? first(params) : "($(join(params, ", ")))"
     if isa(get_body(m), PCTVector)
         return "$(params) \\mapsto $(latex(get_body(m), true))"
     else
@@ -65,6 +65,8 @@ function latex(v::Var)
             rest = ""
         end
         return "\\mathtt{$(components[1])}$(rest)"
+    elseif name(v) == :∞
+        return "\\infty"
     else
         return "$(name(v))"
     end
@@ -74,7 +76,7 @@ verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
 
 pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c))))"
 
-latex(c::Call) = "\\left($(latex(mapp(c)))\\right)\\left($(latex(args(c)))\\right)"
+latex(c::Call) = "($(latex(mapp(c))))($(latex(args(c))))"
 
 verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(verbose(get_type(c)))"
 
@@ -104,7 +106,7 @@ function latex(c::Conjugate)
     conj_symbol(::ElementType) = "*"
     interior = latex(get_body(c))
     if isa(get_body(c), Map) || isa(get_body(c), Composition)
-        interior = "\\left($(interior)\\right)"
+        interior = "($(interior))"
     end
 
     return "$(interior)^{$(conj_symbol(get_type(get_body(c))))}"
@@ -114,13 +116,13 @@ verbose(c::Conjugate) = "$(verbose(get_body(c)))'"
 
 pretty(p::Pullback) = "𝒫($(pretty(get_body(p))))"
 
-latex(p::Pullback) = "\\mathcal{P}\\left($(latex(get_body(p)))\\right)"
+latex(p::Pullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
 verbose(p::Pullback) = "Pullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
 pretty(p::PrimitivePullback) = "𝒫($(pretty(get_body(p))))"
 
-latex(p::PrimitivePullback) = "\\mathcal{P}\\left($(latex(get_body(p)))\\right)"
+latex(p::PrimitivePullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
 verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
@@ -135,11 +137,18 @@ function latex(s::Sum, paren=false)
         append!(indices, content(get_bound(s)))
         s = get_body(s)
     end
-    sum_str = all(i -> type_based(get_type(i), R()), indices) ? "\\int" : "\\sum"
+    differential(v::APN) = "\\mathrm{d} $(latex(v))"
+    if all(i -> type_based(get_type(i), R()), indices)
+        sum_str =  "\\int"
+        d_str = join(differential.(indices), " ")
+    else
+        sum_str = "\\sum"
+        d_str = ""
+    end
     all_sums = join(map(i -> "$(sum_str)_{$(latex(i)) = $(latex(lower(get_type(i))))}^{$(latex(upper(get_type(i))))}", indices), "")
-    result = "$(all_sums) $(latex(s))"
+    result = "$(all_sums) $(latex(s)) $(d_str)"
     #= result = "$(sum_str)_{$(join(latex.(indices),","))}$(latex(s))" =#
-    return paren ? "\\left($(result)\\right)" : result
+    return paren ? "($(result))" : result
 end
 
 function verbose(s::Sum)
@@ -245,7 +254,12 @@ function latex(p::PrimitiveCall)
     end =#
 
     if all(a -> a == N(), bound_types) && length(bound_types) > 0
-        return "$(map_str)_{$(latex(args(p)))}"
+        map_strs = split(map_str, "_")
+        if length(map_strs) == 1  
+            return "$(map_strs[1])_{$(latex(args(p)))}"
+        else
+            return "$(map_strs[1])_{$(map_strs[2]), $(latex(args(p)))}"
+        end
     else
         return "$(map_str)\\left($(latex(args(p)))\\right)"
     end
@@ -320,11 +334,11 @@ function pretty(c::RevComposition)
 end
 
 function latex(c::Composition)
-    join(map(f -> latex(f), content(get_body(c))), "∘")
+    join(map(f -> latex(f), content(get_body(c))), "\\circ")
 end
 
 function latex(c::RevComposition)
-    join(map(f -> latex(f), reverse(content(get_body(c)))), "▷\\\\")
+    join(map(f -> latex(f), reverse(content(get_body(c)))), "\\triangleright \\\\")
 end
 
 function pretty(c::Copy)
@@ -332,7 +346,7 @@ function pretty(c::Copy)
 end
 
 function latex(c::Copy)
-    "\\%$(pretty(get_body(c)))"
+    "\\%$(latex(get_body(c)))"
 end
 
 
