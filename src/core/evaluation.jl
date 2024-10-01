@@ -275,6 +275,7 @@ function evaluate(c::Call)
     return n
 end
 
+
 function evaluate(l::Let)
     copies, substs, subst_args, copy_args = [], [], [], []
     for (b, a) in zip(get_bound(l), args(l))
@@ -286,11 +287,27 @@ function evaluate(l::Let)
             push!(subst_args, eval_all(a))
         end
     end
+
+    function subst_all(substs, subst_args, body)
+        isempty(substs) && return body
+        old, substs... = substs
+        new, subst_args... = subst_args
+        subst_args = map(t->subst(t, old, new), subst_args) 
+        return subst_all(substs, subst_args, subst(body, old, new))
+    end
+    new_call = evaluate(get_body(l))
+
     if !isempty(substs)
         # TODO: Bug! This does not consider the case where one variable is part of the other.
-        new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...))
-    else
-        new_call = evaluate(get_body(l))
+        #= for i in length(substs)
+            old, new = substs[i], subst_args[i]
+            for j in i+1:length(substs)
+                subst_args[j] = ecall(pct_map(old, subst_args[j]), new)
+            end
+            new_call = ecall(pct_map(old, new_call), new)
+        end =#
+        new_call = subst_all(substs, subst_args, new_call)
+        #= new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...)) =#
     end
     result = pct_let(copies..., copy_args..., new_call)
     return result

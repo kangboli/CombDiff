@@ -291,6 +291,7 @@ function parse_maptype_node(s::Expr)
 
     parse_pair(::Val{:symmetries}, t::Expr) = t
     parse_pair(::Val{:linear}, t::Bool) = t
+    parse_pair(::Val{:off_diag}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
         bound_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
         bound_type(a::Expr) = :(parametrize_type(_ctx[$(QuoteNode(a.args[1]))], $(map(parse_node, a.args[2:end])...)))
@@ -301,7 +302,7 @@ function parse_maptype_node(s::Expr)
 
     pairs = Dict(a.args[1] => parse_pair(Val(a.args[1]), a.args[2]) for a in block.args)
 
-    supported_properties = [:symmetries, :linear]
+    supported_properties = [:symmetries, :linear, :off_diag]
     properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
     dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
     maptype = :(MapType($(pairs[:type]...), $(dict),))

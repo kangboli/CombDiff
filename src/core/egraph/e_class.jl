@@ -95,7 +95,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
     const_term = sum(map(get_body, get(d, true, [])), init=0) |> constant
     new_terms = filter(t -> !is_zero(t), [const_term, get(d, false, [])...])
 
-    if count(a->isa(a, Map), new_terms) > 1
+    if count(a -> isa(a, Map), new_terms) > 1
         new_map = combine_maps(new_terms)
         return repack(new_map)
     end

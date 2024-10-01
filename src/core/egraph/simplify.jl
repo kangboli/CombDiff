@@ -309,7 +309,7 @@ function fast_symmetry_reduction(n::Add; logger=Logger(), settings=default_setti
         t_set = enum_symmetry(t; logger=logger)
         t_hash_set = HashedSet(t_set)
         t_hash_set, rest = absorb(t_hash_set, rest)
-        push!(reduced, first(t_set))
+        push!(reduced, first(t_hash_set.nodes))
     end
     return add(reduced...)
 end

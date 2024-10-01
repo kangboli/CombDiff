@@ -238,7 +238,11 @@ end
 
 pct_size(v::Conjugate) = 1 + pct_size(get_body(v))
 pct_size(v::TerminalNode) = 1
+# negation must not be counted as increasing the size.
+# otherwise some symmetries will be prefered over other symmetries
+# and the simplification will not consider all symmetries.
 pct_size(c::Constant) = abs(get_body(c)) == 1 ? 0 : 1
+pct_size(s::Sum) = length(get_bound(s)) * pct_size(get_body(s)) + sum(pct_size, get_bound(s))
 
 
 function Base.isless(n_1::R, n_2::S) where {R<:APN,S<:APN}

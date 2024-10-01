@@ -148,11 +148,24 @@ function let_out_pullback(p::PrimitiveCall)
     return result
 end
 
+function meta_prop_neighbors(c)
+    result = NeighborList()
+    get(meta(get_type(mapp(c))), :off_diag, false) || return result
+
+    t = first(args(c))
+    for r in args(c)
+        r == t || return result
+    end
+    push!(result, constant(0); dired=true, name="off_diag")
+    return result
+end
+
 function neighbors(c::PrimitiveCall; settings=default_settings())
     result = NeighborList()
 
     append!(result, delta_out_pullback_neighbors(c))
     append!(result, let_out_pullback(c))
+    append!(result, meta_prop_neighbors(c))
     append!(result, sub_neighbors(c; settings=settings))
 
     function apply_symmetry(indices, op)
@@ -484,6 +497,7 @@ function neighbors(m::Mul; settings=default_settings())
     #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
     append!(result, swallow_neighbors(m))
     append!(result, indicator_swallow_neighbors(terms))
+    append!(result, mul_expand_const_neighbors(m))
     settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
@@ -633,7 +647,7 @@ function clench_sum(s::Sum)
             isempty(exterior) && continue
             new_v = remove_i(get_bound(s), i)
             new_sum = pct_sum(content(new_v)..., mul(exterior..., pct_sum(get_bound(s)[i], mul(interior...))))
-            push!(result, new_sum; dired=true, name="sum_clench")
+            push!(result, new_sum; dired=false, name="sum_clench")
         end
     end
 
@@ -858,6 +872,9 @@ end
 #     return delta(upper(delta), lower(delta), pct_sum(ff(s)..., get_body(delta)))
 # end
 
+"""
+sum(i, sum(j, ...)) -> sum((i,j), ...)
+"""
 function relax_sum(s::Sum)
     result = NeighborList()
     isa(get_body(s), Mul) || return result
@@ -932,10 +949,10 @@ function neighbors(s::Sum; settings=default_settings())
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
     #= settings[:clench_sum] && append!(result, obvious_clench(s)) =#
-    #= append!(result, obvious_clench(s)) =#
-    append!(result, relax_sum(s))
+    append!(result, obvious_clench(s))
+    settings[:clench_sum] || append!(result, relax_sum(s))
 
-    #= settings[:clench_sum] && append!(result, clench_sum(s)) =#
+    settings[:clench_sum] && append!(result, clench_sum(s))
     append!(result, sum_out_linear_op(s))
     append!(result, sum_let_const_out(s))
     append!(result, sum_out_delta(s))
@@ -1025,7 +1042,9 @@ function neighbors(d::Delta; settings=default_settings())
         # double-delta
         Set([i, j]) == Set([p, q]) && push!(result, get_body(d); dired=true, name="double_delta")
         # delta-ex
-        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
+        # there is currently no need to consider delta exchange
+        # because the multi-index sum is implemented as a single node.
+        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
     end
 
     # TODO: use equivalence instead of equality
@@ -1427,6 +1446,19 @@ function comp_expand_neighbors(c)
     return result
 end
 
+function mul_expand_const_neighbors(c)
+    result = NeighborList()
+    subterms = content(get_body(c))
+    isa(first(subterms), Constant) || return result
+    i = findfirst(t->isa(t, Add), subterms)
+    i === nothing && return result
+
+    rest = subterms[1:end.!=i]
+
+    new_add = add(map(t->mul(first(subterms), t), content(get_body(subterms[i])))...)
+    push!(result, mul(rest[2:end]..., new_add); name="expand_const", dired=true)
+    return result
+end
 
 function mul_expand_neighbors(c)
     result = NeighborList()

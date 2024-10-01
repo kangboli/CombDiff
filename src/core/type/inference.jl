@@ -7,6 +7,12 @@ end
 
 get_name_to_type(context::TypeContext) = context.name_to_type
 get_name_to_variable(context::TypeContext) = context.name_to_variable
+function find_var_by_name(context::TypeContext, n::Symbol) 
+    d = get_name_to_variable(context)
+    n_vars =  get(d, n, [])
+    !isempty(n_vars) && return last(n_vars)
+    error("variable \"$(n)\" not found")
+end
 
 default_context() = TypeContext(
     Dict{Symbol,Vector{<:AbstractPCTType}}(
@@ -99,7 +105,7 @@ end
 
 function inference(v::Var, context::TypeContext)
     startswith(string(get_body(v)), "__") && return v
-    new_v = last(get_name_to_variable(context)[name(v)])
+    new_v = find_var_by_name(context, name(v))
     return set_type(new_v, inference(get_type(new_v), context))
 end
 
@@ -225,6 +231,10 @@ end
 
 function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
     length(term) == 0 && return UndeterminedPCTType()
+    if any(t->isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))  
+        types = join(get_type.(term), "\n")
+        error("Cannot add/subtract numbers with operators/matrices: $(pretty(term))\n $(types)")
+    end
     bound_type = get_bound_type(get_type(first(content(term))))
     body_type = get_body_type(get_type(last(content(term))))
     return MapType(bound_type, body_type)

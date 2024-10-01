@@ -67,6 +67,9 @@ function latex(v::Var)
         return "\\mathtt{$(components[1])}$(rest)"
     elseif name(v) == :∞
         return "\\infty"
+    elseif occursin("_", string(name(v)))
+        start, rest...  = split(string(name(v)), "_")
+        return "$(start)_{$(join(rest, ","))}"
     else
         return "$(name(v))"
     end
@@ -189,7 +192,7 @@ function pretty(d::T) where {T<:AbstractDelta}
 end
 
 function latex(d::T) where {T<:AbstractDelta}
-    "$(delta_symbol(T, true))_{$(latex(lower(d)))}^{$(latex(upper(d)))}$(latex(last(content(d))))"
+    "$(delta_symbol(T, true))_{$(latex(lower(d)))}^{$(latex(upper(d)))}($(latex(last(content(d)))))"
 end
 
 
@@ -225,13 +228,15 @@ end
 
 
 function pretty(m::Add)
-    signed = map(t -> is_negative(t) ? pretty(t) : "+$(pretty(t))", content(get_body(m)))
-    return "($(strip(join(signed, ""), '+')))"
+    return "($(join(map(t->pretty(t), content(get_body(m))), "+")))"
+    #= signed = map(t -> is_negative(t) ? pretty(t) : "+$(pretty(t))", content(get_body(m)))
+    return "($(strip(join(signed, ""), '+')))" =#
 end
 
 function latex(m::Add)
-    signed = map(t -> is_negative(t) ? latex(t) : "+$(latex(t))", content(get_body(m)))
-    return "\\left($(strip(join(signed, ""), '+'))\\right)"
+    return "($(join(map(t->latex(t), content(get_body(m))), "+")))"
+    #= signed = map(t -> is_negative(t) ? latex(t) : "+$(latex(t))", content(get_body(m)))
+    return "($(strip(join(signed, ""), '+')))" =#
 end
 
 function verbose(a::Add)
@@ -244,7 +249,7 @@ pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
 
 function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
-        return "\\nabla \\left($(latex(get_body(mapp(p))))\\right)\\left($(latex(args(p)[1:end-1]))\\right)"
+        return "\\nabla ($(latex(get_body(mapp(p)))))($(latex(args(p)[1:end-1])))"
     end
 
     bound_types = get_content_type(get_bound_type(get_type(mapp(p))))
@@ -268,9 +273,8 @@ end
 verbose(p::PrimitiveCall) = "$(verbose(mapp(p)))($(verbose(args(p))))::$(verbose(get_type(p)))"
 
 
-pretty(c::Constant) = "$(get_body(c))"
-
-latex(c::Constant) = "$(get_body(c))"
+pretty(c::Constant) = is_negative(c) ? "($(get_body(c)))" : "$(get_body(c))"
+latex(c::Constant) = pretty(c)
 
 verbose(c::Constant) = "$(get_body(c))::$(verbose(get_type(c)))"
 
@@ -334,7 +338,7 @@ function pretty(c::RevComposition)
 end
 
 function latex(c::Composition)
-    join(map(f -> latex(f), content(get_body(c))), "\\circ")
+    join(map(f -> latex(f), content(get_body(c))), " \\circ ")
 end
 
 function latex(c::RevComposition)
