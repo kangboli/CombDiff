@@ -50,6 +50,8 @@ default_settings() = Settings(
     :dist_ind => true,
     :telescopic_indicator => false,
     :reduce_vac_early => true,
+    :extract_intermediate => false,
+    :skip_self_as_intermediate => false,
     :deadend => Set{UInt64}()
    )
 function custom_settings(custom...; preset=default_settings())::Settings
@@ -199,9 +201,9 @@ end
 
 function log_edge(n, t, d, name, i)
     println(i, " ", name)
-    #= println(pretty(n))
+    println(pretty(n))
     println(typeof(t))
-    println(pretty(t)) =#
+    println(pretty(t))
     d || println("<->")
     d && println("-->")
     println()

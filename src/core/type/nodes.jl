@@ -34,7 +34,8 @@ export
     indicator,
     VacExp,
     vac_exp,
-    subtract
+    subtract,
+    pct_copy
 
 abstract type TerminalNode <: APN end
 

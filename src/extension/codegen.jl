@@ -26,16 +26,16 @@ function codegen(n::Sum)
     loop = codegen(summand)
 
     for (b, s) in zip(get_bound(n), sizes)
-        loop = :(@inbounds for $(codegen(b)) in 1:$(s)
-            _sum += $(loop)
-        end)
+        loop = :(
+            let _sum = 0
+                @inbounds for $(codegen(b)) in 1:$(s)
+                    _sum += $(loop)
+                end
+                _sum
+            end
+        )
     end
-    return :(
-        let _sum = 0
-            $(loop)
-            _sum
-        end
-    )
+    return loop
 end
 
 codegen(v::Var) = get_body(v)
@@ -54,7 +54,7 @@ end
 
 function codegen(m::Map)
     sizes = map(b -> find_dimensions(b, get_body(m)), content(get_bound(m)))
-    if any(isempty, sizes) || any(b->!tensorize(get_type(b)), content(get_bound(m)))
+    if any(isempty, sizes) || any(b -> !tensorize(get_type(b)), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
             begin
                 $(codegen(get_body(m)))
@@ -84,7 +84,7 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
-    if all(t->base(get_type(t)) == N() || base(get_type(t)) == I(), args(c))
+    if all(t -> base(get_type(t)) == N() || base(get_type(t)) == I(), args(c))
         :($(codegen(mapp(c)))[$(codegen.(args(c))...)])
     else
         :($(codegen(mapp(c)))($(codegen.(args(c))...)))
@@ -141,3 +141,16 @@ end
 function codegen(n::BlasIndexing)
     :($(codegen(mapp(n)))[$(map(codegen, content(args(n)))...)])
 end
+
+codegen(n::Copy) = codegen(get_body(n))
+
+
+function codegen(n::Let)
+    assignments = [:($(codegen(b)) = $(codegen(a))) for (b, a) in zip(get_bound(n), args(n))]
+    return :(
+        let $(assignments...)
+            $(codegen(get_body(n)))
+        end
+    )
+end
+

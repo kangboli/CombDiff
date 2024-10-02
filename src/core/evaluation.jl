@@ -29,14 +29,10 @@ free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
 
 own_dummy(::APN) = Set{Var}()
 
-function own_dummy(c::Contraction)
-    return Set{Var}(content(get_bound(c)))
-end
-
-function own_dummy(m::Map)
-    extract_var(n::Var) = [n]
-    extract_var(n::PrimitiveCall) = [mapp(n), content(args(n))...]
-    return Set{Var}(vcat(map(extract_var, content(get_bound(m)))...))
+function own_dummy(c::T) where T <: Union{PermInv, Let, Map}
+    strip_copy(v::Var) = v
+    strip_copy(v::Copy) = get_body(v)
+    return Set{Var}(map(strip_copy, content(get_bound(c))))
 end
 
 variables(v::Var)::Vector{Var} = [v]

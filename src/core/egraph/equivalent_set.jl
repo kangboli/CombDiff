@@ -1,5 +1,3 @@
-using IterTools
-
 is_deadend!(::TerminalNode, _) = true
 function is_deadend(n::APN, settings)
     return objectid(n) in settings[:deadend]
@@ -383,6 +381,8 @@ function neighbors(a::Add; settings=default_settings())
         directed(sub_result)[i] = true
     end =#
     append!(result, sub_result)
+
+    append!(result, let_out_mul_add(a))
     any(directed(result)) && return result
     append!(result, add_delta_neighbors(terms))
     append!(result, combine_factors(a))
@@ -498,6 +498,7 @@ function neighbors(m::Mul; settings=default_settings())
     append!(result, swallow_neighbors(m))
     append!(result, indicator_swallow_neighbors(terms))
     append!(result, mul_expand_const_neighbors(m))
+    append!(result, let_out_mul_add(m))
     settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
     #= append!(result, mul_product_neighbors(terms)) =#
     #= append!(result, dist_neighbors(terms)) =#
@@ -508,7 +509,12 @@ end
 
 function neighbors(m::Map; settings=default_settings())
     result = NeighborList()
-    append!(result, sub_neighbors(m, settings=settings))
+    if isa(get_body(m), Contraction)
+        settings = custom_settings(:skip_self_as_intermediate => true; preset=settings)
+    end
+    append!(result, sub_neighbors(m; settings=settings))
+
+    append!(result, map_let_out(m))
     return result
 end
 
@@ -808,10 +814,11 @@ function sum_shift_neighbors(s::Sum)
 end
 
 """
+TODO: Allow the bound variables to pass through
 sum(b, let t = ... end)
 -> let t = ... sum(b, ...) end
 """
-function sum_let_const_out(s::Sum)
+function bound_let_out(s::Sum) 
     result = NeighborList()
     body = get_body(s)
     isa(get_body(s), Let) || return result
@@ -826,10 +833,39 @@ function sum_let_const_out(s::Sum)
     end
     isempty(interior) && return result
 
-    new_term = pct_sum(exterior...,
-        pct_let(get_bound(body)..., args(body)...,
-            pct_sum(interior..., get_body(body))))
-    push!(result, new_term; dired=true, name="let_out")
+    constructor = pct_sum 
+    new_term = pct_let(get_bound(body)..., args(body)...,
+        constructor(interior..., get_body(body)))
+    if !isempty(exterior)
+        new_term = constructor(exterior..., new_term)
+    end
+    push!(result, new_term; dired=true, name="let_out_sum")
+    return result
+end
+
+function map_let_out(s::Map) 
+    result = NeighborList()
+    body = get_body(s)
+    isa(get_body(s), Let) || return result
+    all(t->isa(get_type(t), ElementType) && base(get_type(t)) == N(), content(get_bound(s))) || return result
+    interior, exterior = [], []
+    for b in get_bound(s)
+        free_let = union!(get_free(get_bound(body)), get_free(args(body)))
+        if any(t -> get_body(t) == get_body(b), free_let)
+            push!(exterior, b)
+        else
+            push!(interior, b)
+        end
+    end
+    length(interior) == length(get_bound(s)) || return result
+
+    constructor = pct_map
+    new_term = pct_let(get_bound(body)..., args(body)...,
+        constructor(interior..., get_body(body)))
+    if !isempty(exterior)
+        new_term = constructor(exterior..., new_term)
+    end
+    push!(result, new_term; dired=true, name="let_out_map")
     return result
 end
 
@@ -943,18 +979,38 @@ function sum_absorb_indicator(s::Sum)
     return result
 end
 
+function extract_intermediate_neighbors(s::Sum)
+    result = NeighborList()
+    free, _ = free_and_dummy(s)
+    free = filter(t -> isa(get_type(t), ElementType) && base(get_type(t)) == N(), free)
+    if isempty(free)
+        #= return result =#
+        t = var(first(new_symbol(s; symbol=:_intm)), get_type(s))
+        new_term = pct_let(pct_copy(t), s, t)
+    else
+        new_term = pct_map(free..., s)
+        t = var(first(new_symbol(s; symbol=:_intm)), get_type(new_term))
+        new_term = pct_let(pct_copy(t), new_term, call(t, free...))
+    end
+    push!(result, new_term; dired=true, name="extract_intermediate")
+    return result
+end
+
 function neighbors(s::Sum; settings=default_settings())
     result = NeighborList()
 
     append!(result, contract_delta_neighbors(s))
     append!(result, sum_dist_neighbors(s))
     #= settings[:clench_sum] && append!(result, obvious_clench(s)) =#
+    settings[:extract_intermediate] && !settings[:skip_self_as_intermediate] &&
+        append!(result, extract_intermediate_neighbors(s))
+    settings = custom_settings(:skip_self_as_intermediate => false; preset=settings)
     append!(result, obvious_clench(s))
     settings[:clench_sum] || append!(result, relax_sum(s))
 
     settings[:clench_sum] && append!(result, clench_sum(s))
     append!(result, sum_out_linear_op(s))
-    append!(result, sum_let_const_out(s))
+    append!(result, bound_let_out(s))
     append!(result, sum_out_delta(s))
     append!(result, sum_absorb_indicator(s))
     if settings[:symmetry]
@@ -1088,6 +1144,19 @@ function neighbors(c::Conjugate; settings=default_settings())
     return result
 end
 
+function let_out_mul_add(n::T) where {T<:Union{Mul,Add}}
+    result = let_out_vector(get_body(n))
+    isempty(result) && return result
+
+    new_let = first(first(result))
+    new_let = pct_let(get_bound(new_let)..., args(new_let)...,
+        make_node(T, get_body(new_let)))
+
+    result = NeighborList()
+    push!(result, new_let; dired=true, name="let_out_mul_add")
+    return result
+end
+
 """
 (x, p, let p = q; f(p) end)
 
@@ -1177,6 +1246,33 @@ function let_collapse(lt::Let)
     args(lt) == args(inner_lt) || return result
     push!(result, pct_let(get_bound(lt)..., args(lt)..., get_body(inner_lt)); dired=true, name="let_collapse")
     return result
+end
+
+function sub_neighbors(lt::Let; settings=settings)
+
+    result = NeighborList()
+    lt_args = args(lt)
+    p = sortperm(content(lt_args), by=t -> is_deadend(t, settings))
+
+    for i = p
+        # Base case of the intermediate extraction
+        neighbor_list = neighbors(lt_args[i]; settings=custom_settings(:skip_self_as_intermediate=>true, preset=settings))
+        for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+            push!(result, set_content(lt, get_bound(lt), set_i(lt_args, i, t), get_body(lt)); dired=d, name=s)
+            d && return result
+        end
+        any(directed(neighbor_list)) || tag_deadend!(lt_args[i], settings)
+    end
+
+    neighbor_list = neighbors(get_body(lt); settings=settings)
+    for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        push!(result, set_content(lt, get_bound(lt), lt_args, t); dired=d, name=s)
+        d && return result
+    end
+    any(directed(neighbor_list)) || tag_deadend!(get_body(lt), settings)
+
+    return result
+
 end
 
 function neighbors(lt::Let; settings=default_settings())
@@ -1450,12 +1546,12 @@ function mul_expand_const_neighbors(c)
     result = NeighborList()
     subterms = content(get_body(c))
     isa(first(subterms), Constant) || return result
-    i = findfirst(t->isa(t, Add), subterms)
+    i = findfirst(t -> isa(t, Add), subterms)
     i === nothing && return result
 
     rest = subterms[1:end.!=i]
 
-    new_add = add(map(t->mul(first(subterms), t), content(get_body(subterms[i])))...)
+    new_add = add(map(t -> mul(first(subterms), t), content(get_body(subterms[i])))...)
     push!(result, mul(rest[2:end]..., new_add); name="expand_const", dired=true)
     return result
 end

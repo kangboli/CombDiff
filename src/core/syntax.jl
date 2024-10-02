@@ -535,9 +535,14 @@ function parse_let_node(l::Expr)
     args = []
 
     function parse_subst!(a::Expr)
-        @assert a.head == Symbol("=")
-        push!(bounds, :($(parse_node(a.args[1]))))
-        push!(args, :($(parse_node(a.args[2]))))
+        if a.head == Symbol("=")
+            push!(bounds, :($(parse_node(a.args[1]))))
+            push!(args, :($(parse_node(a.args[2]))))
+        else
+            a = a.args[1]
+            push!(bounds, :(pct_copy($(parse_node(a.args[1])))))
+            push!(args, :($(parse_node(a.args[2]))))
+        end
     end
 
     parse_subst!.(substitutions)

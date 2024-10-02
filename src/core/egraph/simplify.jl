@@ -1,4 +1,4 @@
-export process_directive, dropp, eval_pullback, symmetry_reduction, fast_symmetry_reduction
+export process_directive, dropp, eval_pullback, symmetry_reduction, fast_symmetry_reduction, clench
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
@@ -103,14 +103,14 @@ function simplify(n::APN; kwargs...)
     return smallest
 end
 
-function simplify(n::Map; settings=default_settings(), logger=Logger())
+#= function simplify(n::Map; settings=default_settings(), logger=Logger())
     if settings[:blaserize]
         return invoke(simplify, Tuple{APN}, n; settings, logger)
     else
         simplified_nodes = simplify(get_body(n); settings=settings, logger=logger)
         return map(t -> make_node(Map, get_bound(n), t), simplified_nodes)
     end
-end
+end =#
 
 process_directive(n::APN) = set_content(n, map(process_directive, content(n))...)
 
@@ -321,3 +321,55 @@ end
 function fast_symmetry_reduction(n::TerminalNode; kwargs...)
     return n
 end
+
+function clench(s::Sum; logger=Logger(), settings=default_settings())
+    return first(simplify(s; logger=logger,
+            settings=custom_settings(:clench_sum => true; preset=settings)))
+end
+
+function clench(n::Add; kwargs...)
+    subterms = content(get_body(n))
+    subterms = map(t -> clench(t; kwargs...), subterms)
+    return add(subterms...)
+end
+
+function clench(n::TerminalNode; kwargs...)
+    return n
+end
+
+function clench(n::APN; logger=Logger(), settings=default_settings())
+    set_content(n, vcat(map(t -> clench(t; logger=logger, settings=settings), content(n))...)...)
+end
+
+#= function extract_intermediate(n::TerminalNode; kwargs...)
+    return n, []
+end
+function extract_intermediate(m::Sum; skip_self=false)
+    new_summand, intermediates = extract_intermediate(get_body(m))
+
+    new_term = pct_sum(get_bound(m)..., new_summand)
+    skip_self && return new_term, intermediates
+
+    free, _ = free_and_dummy(m)
+    new_term = pct_map(free..., new_term)
+    t = var(new_symbol(m, first.(intermediates)...; symbol=:__intm), get_type(new_term))
+    push!(intermediates, t => new_term)
+
+    return call(t, free...), intermediates
+end
+
+function extract_intermediate(m::Map; kwargs...)
+    body = get_body(m)
+    if isa(body, Sum) 
+        return extract_intermediate(body; skip_self=true)
+    end
+
+    if isa(body, Add)
+        subterms = content(get_body(body))
+        for t in subterms
+        end
+        extract_intermediate()
+    end
+end
+
+ =#

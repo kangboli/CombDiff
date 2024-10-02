@@ -74,8 +74,8 @@ meta(m::Domain) = m.meta
 meta(m::AbstractPCTType) = m.meta
 
 function tensorize(m::Domain)
-    base(m) == N() || return false
-    haskey(m.meta, :tensorize) && return m.meta[:tensorize]
+    base(m) == N() 
+    #= haskey(m.meta, :tensorize) && return m.meta[:tensorize] =#
 end
 
 tensorize(t::AbstractPCTType) = false

@@ -232,17 +232,20 @@ function Base.:(==)(d_1::T, d_2::T) where {T<:AbstractDelta}
 end
 
 
-function pct_size(n::APN)
-    return sum(pct_size, content(n)) 
+function pct_size(n::APN, scope=1)
+    return sum(t->pct_size(t, scope), content(n)) 
 end
 
-pct_size(v::Conjugate) = 1 + pct_size(get_body(v))
-pct_size(v::TerminalNode) = 1
+pct_size(v::Conjugate, scope=1) = 1 + pct_size(get_body(v), scope)
+pct_size(::TerminalNode, scope=1) = scope
 # negation must not be counted as increasing the size.
 # otherwise some symmetries will be prefered over other symmetries
 # and the simplification will not consider all symmetries.
-pct_size(c::Constant) = abs(get_body(c)) == 1 ? 0 : 1
-pct_size(s::Sum) = length(get_bound(s)) * pct_size(get_body(s)) + sum(pct_size, get_bound(s))
+pct_size(c::Constant, _=1) = abs(get_body(c)) == 1 ? 0 : 1
+function pct_size(s::Sum, scope=1) 
+    result = length(get_bound(s)) + pct_size(get_body(s), scope+length(get_bound(s)))
+    return result
+end
 
 
 function Base.isless(n_1::R, n_2::S) where {R<:APN,S<:APN}

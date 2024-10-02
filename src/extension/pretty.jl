@@ -68,7 +68,7 @@ function latex(v::Var)
     elseif name(v) == :∞
         return "\\infty"
     elseif occursin("_", string(name(v)))
-        start, rest...  = split(string(name(v)), "_")
+        start, rest... = split(string(name(v)), "_")
         return "$(start)_{$(join(rest, ","))}"
     else
         return "$(name(v))"
@@ -142,7 +142,7 @@ function latex(s::Sum, paren=false)
     end
     differential(v::APN) = "\\mathrm{d} $(latex(v))"
     if all(i -> type_based(get_type(i), R()), indices)
-        sum_str =  "\\int"
+        sum_str = "\\int"
         d_str = join(differential.(indices), " ")
     else
         sum_str = "\\sum"
@@ -260,7 +260,7 @@ function latex(p::PrimitiveCall)
 
     if all(a -> a == N(), bound_types) && length(bound_types) > 0
         map_strs = split(map_str, "_")
-        if length(map_strs) == 1  
+        if length(map_strs) == 1
             return "$(map_strs[1])_{$(latex(args(p)))}"
         else
             return "$(map_strs[1])_{$(map_strs[2]), $(latex(args(p)))}"
@@ -326,7 +326,22 @@ pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))
 function verbose(l::Let)
     "let $(join(map((f, a) -> indent("$(verbose(f)) = $(verbose(a))"), get_bound(l), args(l)), "\n"))\n$(indent(verbose(get_body(l))))\nend"
 end
-latex(l::Let) = "\\mathrm{let}\\\\ $(join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\"))\\\\$(latex_indent(latex(get_body(l))))\\\\ \\mathrm{end}"
+function latex(l::Let, paren=true)
+    inner_str = if isa(get_body(l), Let) 
+        latex(get_body(l), false)
+    else
+        latex_indent(latex(get_body(l)))
+    end
+
+    bound_str = join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\")
+
+    if paren
+        "\\mathrm{let}\\\\$(bound_str)\\\\$(inner_str)\\\\\\mathrm{end}"
+    else
+        return "$(bound_str)\\\\$(inner_str)"
+    end
+end
+
 
 function pretty(c::Composition)
     isempty(content(get_body(c))) && return ":I"
