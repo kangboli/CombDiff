@@ -979,6 +979,7 @@ function sum_absorb_indicator(s::Sum)
     return result
 end
 
+# Extract Couple cluster intermediates
 function extract_intermediate_neighbors(s::Sum)
     result = NeighborList()
     free, _ = free_and_dummy(s)

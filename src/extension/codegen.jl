@@ -154,3 +154,11 @@ function codegen(n::Let)
     )
 end
 
+
+function codegen(n::Indicator)
+    :(if $(codegen(lower(n))) <= $(codegen(upper(n)))
+        $(codegen(get_body(n)))
+    else
+        0
+    end)
+end

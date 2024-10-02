@@ -92,8 +92,8 @@ function redux(n::Union{Var, Constant}; _...)
 end
  =#
 
-function simplify(n::APN; kwargs...)
-    g = last(spanning_tree!(n; kwargs...))
+function simplify(n::APN; settings=default_settings(), logger=Logger())
+    g = last(spanning_tree!(n; settings=settings, logger=logger))
     min_size = minimum(pct_size, nodes(g))
     smallest = Vector{APN}()
 
