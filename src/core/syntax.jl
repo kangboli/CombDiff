@@ -232,6 +232,7 @@ function parse_node(n::Expr)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
+        func == :∇ && return parse_grad_node(n)
         func == :vac_exp && return parse_vac_exp_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
@@ -250,6 +251,9 @@ function parse_composite_node(n::Expr)
     f2 = parse_node(n.args[3])
 
     return :(composite($(f1), $(f2)))
+end
+function parse_grad_node(n::Expr)
+    :(call(nabla(), ($(parse_node(n.args[2])))))
 end
 
 function parse_reverse_composite_node(n::Expr)

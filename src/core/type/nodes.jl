@@ -23,6 +23,7 @@ export
     get_body,
     minfty,
     infty,
+    nabla,
     composite,
     rev_composite,
     Composition,
@@ -105,6 +106,10 @@ range(v::Var) = v.range
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
 var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
 infty() = var(:∞, R())
+# nabla maps one input to one output. 
+# for now we only need to know of the number of input/output, but 
+# we need to figure out the actual (parametric) type at some point.
+nabla() = var(:∇, MapType(VecType([UndeterminedPCTType()]), VecType([UndeterminedPCTType()]), Dict(:linear=>true)))
 
 _MINFTY=nothing
 minfty() = if _MINFTY === nothing 

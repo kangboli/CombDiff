@@ -49,6 +49,7 @@ default_settings() = Settings(
     :expand_comp => false,
     :dist_ind => true,
     :telescopic_indicator => false,
+    :sum_absorb_indicator => true,
     :reduce_vac_early => true,
     :extract_intermediate => false,
     :skip_self_as_intermediate => false,
@@ -201,9 +202,9 @@ end
 
 function log_edge(n, t, d, name, i)
     println(i, " ", name)
-    println(pretty(n))
-    println(typeof(t))
-    println(pretty(t))
+    # println(pretty(n))
+    # println(typeof(t))
+    # println(pretty(t))
     d || println("<->")
     d && println("-->")
     println()

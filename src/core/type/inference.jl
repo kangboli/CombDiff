@@ -33,6 +33,7 @@ default_context() = TypeContext(
     Dict{Symbol,Vector{<:Var}}(
     :Infty => [infty()],
     :∞ => [infty()],
+    :∇ => [nabla()],
     )
 )
 
@@ -143,6 +144,11 @@ end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
     mapp = first(terms)
+    if mapp == nabla()
+        t = first(terms[2])
+        return MapType(get_bound_type(get_type(t)), v_unwrap(get_bound_type(get_type(t))))
+    end
+
     if isa(mapp, Var) && startswith(string(get_body(mapp)), "__")
         length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
         return get_type(last(terms))

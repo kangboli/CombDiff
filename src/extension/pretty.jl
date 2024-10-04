@@ -101,6 +101,9 @@ end
 
 
 function latex(c::Conjugate)
+    get_body(c) == nabla() &&
+    return "∇⋅"
+
     function conj_symbol(t::MapType)
         t == FOT() && return "\\dagger"
         get_body_type(t) == C() && return "\\dagger"
@@ -117,17 +120,12 @@ end
 
 verbose(c::Conjugate) = "$(verbose(get_body(c)))'"
 
-pretty(p::Pullback) = "𝒫($(pretty(get_body(p))))"
+pretty(p::T) where T <: AbstractPullback = "𝒫($(pretty(get_body(p))))"
 
-latex(p::Pullback) = "\\mathcal{P}($(latex(get_body(p))))"
+latex(p::AbstractPullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
-verbose(p::Pullback) = "Pullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
+verbose(p::T) where T <: AbstractPullback = "$(T)($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
-pretty(p::PrimitivePullback) = "𝒫($(pretty(get_body(p))))"
-
-latex(p::PrimitivePullback) = "\\mathcal{P}($(latex(get_body(p))))"
-
-verbose(p::PrimitivePullback) = "PrimitivePullback($(verbose(get_body(p))))::$(verbose(get_type(p)))"
 
 function pretty(s::Sum)
     bound_string = join(map(verbose, content(get_bound(s))), ",")
@@ -445,3 +443,4 @@ function latex(i::Indicator)
     "\\mathbb{I}_{$(latex(lower(i))) \\leq $(latex(upper(i)))} $(latex(get_body(i)))"
 end
 
+pretty(s::Union{Symbol, Number}) = string(s)

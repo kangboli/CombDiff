@@ -249,15 +249,15 @@ end
 
 function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::T) where {T<:APN}
 
-    t_lower == minfty() && return T, terms(body), partial_inference(T, terms(body)...)
+    t_lower == minfty() && return repack(body)
     t_lower == infty() && return Constant, [0], I()
 
-    t_upper == infty() && return T, terms(body), partial_inference(T, terms(body)...)
+    t_upper == infty() && return repack(body)
     t_upper == minfty() && return Constant, [0], I()
     is_zero(body) && return Constant, [0], I()
 
     if t_lower == lower(get_type(t_upper)) || t_upper == upper(get_type(t_lower))
-        return T, terms(body), partial_inference(T, terms(body)...)
+        return repack(body)
     end
     #= println(verbose(t_lower))
     println(verbose(t_upper)) =#

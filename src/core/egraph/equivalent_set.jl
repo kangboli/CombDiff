@@ -683,6 +683,17 @@ function obvious_clench(s::Sum)
     return result
 end
 
+function sum_out_primitive_pullback(s::Sum)
+    result = NeighborList()
+    summand = get_body(s)
+    isa(summand, PrimitiveCall) && isa(mapp(summand), PrimitivePullback) || return result
+    k_type = get_body_type(get_type(get_body(mapp(summand))))
+    isa(k_type, VecType) && error("moving contraction into a nontrivial pullback is not yet supported")
+    new_pullback = primitive_call(mapp(summand), args(summand)[1:end-1]...,
+        pct_sum(get_bound(s)..., last(args(summand))))
+    push!(result, new_pullback; dired=true, name="pullback_sum_out")
+    return result
+end
 function sum_out_linear_op(s::Sum)
     result = NeighborList()
     summand = get_body(s)
@@ -818,7 +829,7 @@ TODO: Allow the bound variables to pass through
 sum(b, let t = ... end)
 -> let t = ... sum(b, ...) end
 """
-function bound_let_out(s::Sum) 
+function bound_let_out(s::Sum)
     result = NeighborList()
     body = get_body(s)
     isa(get_body(s), Let) || return result
@@ -833,7 +844,7 @@ function bound_let_out(s::Sum)
     end
     isempty(interior) && return result
 
-    constructor = pct_sum 
+    constructor = pct_sum
     new_term = pct_let(get_bound(body)..., args(body)...,
         constructor(interior..., get_body(body)))
     if !isempty(exterior)
@@ -843,11 +854,11 @@ function bound_let_out(s::Sum)
     return result
 end
 
-function map_let_out(s::Map) 
+function map_let_out(s::Map)
     result = NeighborList()
     body = get_body(s)
     isa(get_body(s), Let) || return result
-    all(t->isa(get_type(t), ElementType) && base(get_type(t)) == N(), content(get_bound(s))) || return result
+    all(t -> isa(get_type(t), ElementType) && base(get_type(t)) == N(), content(get_bound(s))) || return result
     interior, exterior = [], []
     for b in get_bound(s)
         free_let = union!(get_free(get_bound(body)), get_free(args(body)))
@@ -979,6 +990,18 @@ function sum_absorb_indicator(s::Sum)
     return result
 end
 
+function sum_eliminate_dead_bound(s::Sum)
+    result = NeighborList()
+    for b in get_bound(s)
+        u, l = upper(get_type(b)), lower(get_type(b))
+        diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false)) |> first
+        compare = zero_compare(diff)
+        compare == IsNeg() || continue
+        push!(result, constant(0); dired=true, name="dead_bound")
+    end
+    return result
+end
+
 # Extract Couple cluster intermediates
 function extract_intermediate_neighbors(s::Sum)
     result = NeighborList()
@@ -1013,13 +1036,15 @@ function neighbors(s::Sum; settings=default_settings())
     append!(result, sum_out_linear_op(s))
     append!(result, bound_let_out(s))
     append!(result, sum_out_delta(s))
-    append!(result, sum_absorb_indicator(s))
+    settings[:sum_absorb_indicator] && append!(result, sum_absorb_indicator(s))
+    append!(result, sum_out_primitive_pullback(s))
     if settings[:symmetry]
         append!(result, sum_shift_neighbors(s))
         append!(result, sum_sym_neighbors(s))
     end
     append!(result, sum_mul_neighbors(s))
     append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
+    append!(result, sum_eliminate_dead_bound(s))
     return result
 end
 
@@ -1101,7 +1126,7 @@ function neighbors(d::Delta; settings=default_settings())
         # delta-ex
         # there is currently no need to consider delta exchange
         # because the multi-index sum is implemented as a single node.
-        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
+        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
     end
 
     # TODO: use equivalence instead of equality
@@ -1243,9 +1268,50 @@ function let_collapse(lt::Let)
     result = NeighborList()
     inner_lt = get_body(lt)
     isa(inner_lt, Let) || return result
-    get_bound(lt) == get_bound(inner_lt) || return result
-    args(lt) == args(inner_lt) || return result
-    push!(result, pct_let(get_bound(lt)..., args(lt)..., get_body(inner_lt)); dired=true, name="let_collapse")
+    n_b = length(get_bound(lt))
+    n_b == length(get_bound(inner_lt)) || return result
+
+    new_vars = map(var, new_symbol(lt; num=n_b), get_type.(get_bound(lt)))
+    bounds = get_body.(get_bound(lt))
+    inner_bounds = get_body.(get_bound(inner_lt))
+
+    for i in 1:n_b
+        new_arg = args(lt)[i]
+        inner_new_arg = args(inner_lt)[i]
+        for j in 1:i-1
+            new_arg = subst(new_arg, bounds[j], new_vars[j])
+            inner_new_arg = subst(inner_new_arg, inner_bounds[j], new_vars[j])
+        end
+        new_arg == inner_new_arg || return result
+    end
+
+    new_body = get_body(inner_lt)
+    for i in 1:n_b
+        new_body = subst(new_body, inner_bounds[i], bounds[i])
+    end
+    push!(result, pct_let(get_bound(lt)..., args(lt)..., new_body); dired=true, name="let_collapse")
+    return result
+end
+
+# function let_collapse(lt::Let)
+#     result = NeighborList()
+#     inner_lt = get_body(lt)
+#     isa(inner_lt, Let) || return result
+#     get_bound(lt) == get_bound(inner_lt) || return result
+#     args(lt) == args(inner_lt) || return result
+#     push!(result, pct_let(get_bound(lt)..., args(lt)..., get_body(inner_lt)); dired=true, name="let_collapse")
+#     return result
+# end
+
+function unused_let(lt::Let)
+    result = NeighborList()
+    for i in 1:length(get_bound(lt))
+        free = get_free(pct_vec(args(lt)[i+1:end]..., get_body(lt)))
+        name(get_bound(lt)[i]) in name.(free) && continue
+        new_term = pct_let(get_bound(lt)[1:end.!=i]..., args(lt)[1:end.!=i]..., get_body(lt))
+        push!(result, new_term; dired=true, name="unused_let")
+        return result
+    end
     return result
 end
 
@@ -1257,7 +1323,7 @@ function sub_neighbors(lt::Let; settings=settings)
 
     for i = p
         # Base case of the intermediate extraction
-        neighbor_list = neighbors(lt_args[i]; settings=custom_settings(:skip_self_as_intermediate=>true, preset=settings))
+        neighbor_list = neighbors(lt_args[i]; settings=custom_settings(:skip_self_as_intermediate => true, preset=settings))
         for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(lt, get_bound(lt), set_i(lt_args, i, t), get_body(lt)); dired=d, name=s)
             d && return result
@@ -1282,6 +1348,7 @@ function neighbors(lt::Let; settings=default_settings())
     append!(result, let_const_bound_delta_prop(lt))
     append!(result, let_const_body_delta_out(lt))
     append!(result, let_collapse(lt))
+    # append!(result,unused_let(lt))
     return result
 end
 
@@ -1302,7 +1369,7 @@ function neighbors(ind::Indicator; settings=default_settings())
     append!(result, delta_swallow_indicator(ind))
     settings[:dist_ind] && append!(result, dist_ind(ind))
     append!(result, sub_neighbors(ind; settings=settings))
-    #= append!(result, eliminate_indicator(ind)) =#
+    # append!(result, eliminate_indicator(ind))
     append!(result, telescopic_indicator_elim(ind))
     return result
 end
@@ -1341,7 +1408,7 @@ function telescopic_indicator_elim(ind; settings=default_settings())
     end
 
 
-    for (i, j) in product(1:length(uppers), 1:length(uppers))
+    for (i, j) in Iterators.product(1:length(uppers), 1:length(uppers))
         i == j && continue
         u_i, l_i = uppers[i], lowers[i]
         u_j, l_j = uppers[j], lowers[j]
@@ -1371,12 +1438,15 @@ end
 
 function eliminate_indicator(ind)
     result = NeighborList()
-    diff = add(upper(ind), mul(constant(-1), lower(ind)))
-    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :logging => false; preset=default_settings())) |> first
+    diff = subtract(upper(ind), lower(ind))
+    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :gcd=>false, :logging => false; preset=default_settings())) |> first
     compare_result = zero_compare(diff)
 
-    isa(compare_result, Union{IsPos,NonNeg}) || return result
-    push!(result, get_body(ind); dired=true, name="eliminate_indicator")
+    if isa(compare_result, Union{IsPos,NonNeg,IsZero})
+        push!(result, get_body(ind); dired=true, name="eliminate_indicator_satisfaction")
+    elseif isa(compare_result, IsNeg)
+        push!(result, constant(0); dired=true, name="eliminate_indicator_violation")
+    end
     return result
 end
 
