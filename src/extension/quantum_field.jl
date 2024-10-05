@@ -90,7 +90,7 @@ function vac_exp_rewrite(c::Composition)
         swapped = composite(left..., t_2, t_1, right...)
         remaining_ops = [left..., right...]
         commuted = mul(anti_commute(t_1, t_2), vac_exp_rewrite(composite(remaining_ops...)))
-        return add(commuted, mul(constant(-1), vac_exp_rewrite(swapped)))
+        return subtract(commuted, vac_exp_rewrite(swapped))
     end
 
     return constant(0)

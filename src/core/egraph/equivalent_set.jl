@@ -994,10 +994,18 @@ function sum_eliminate_dead_bound(s::Sum)
     result = NeighborList()
     for b in get_bound(s)
         u, l = upper(get_type(b)), lower(get_type(b))
-        diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false)) |> first
+        diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false)) |> first
         compare = zero_compare(diff)
         compare == IsNeg() || continue
-        push!(result, constant(0); dired=true, name="dead_bound")
+        inner_type = get_type(get_body(s))
+        new_inner = if isa(inner_type, ElementType)
+            constant(0)
+        elseif inner_type == FOT()
+            fermi_scalar(constant(0))
+        else
+            error("sum of maps is not yet supported")
+        end
+        push!(result, new_inner; dired=true, name="dead_bound")
     end
     return result
 end
@@ -1439,7 +1447,7 @@ end
 function eliminate_indicator(ind)
     result = NeighborList()
     diff = subtract(upper(ind), lower(ind))
-    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :gcd=>false, :logging => false; preset=default_settings())) |> first
+    diff = simplify(diff; settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false; preset=default_settings())) |> first
     compare_result = zero_compare(diff)
 
     if isa(compare_result, Union{IsPos,NonNeg,IsZero})

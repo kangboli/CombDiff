@@ -7,7 +7,8 @@ export parse_node,
     pct_ast_transform,
     current_ast_transforms,
     @pluto_support,
-    pct_ast_transform_pluto
+    pct_ast_transform_pluto,
+    continuition
 
 const base_domains = [:N, :I, :R, :C, :FOT, :FField]
 
@@ -90,8 +91,17 @@ macro pct(f, ctx, expr)
     f == :_ && return esc(:(@pct($(expr), $(ctx))))
     return esc(:(
         let (content, ctx) = @pit($(expr), $(ctx))
-            inference(set_content($(f), content)), ctx
+            inference(continuition($(f), content)), ctx
         end))
+end
+
+function continuition(f::APN, new_body)
+    new_terms..., body = terms(f)
+    if isa(body, Var) && name(body) == :_
+        return set_terms(f, new_terms..., new_body)
+    else
+        return set_terms(f, new_terms..., continuition(body, new_body))
+    end
 end
 
 function pct_ast_transform(expr::Expr, repl=:cmd)
@@ -610,4 +620,4 @@ function parse_indicator_node(::Type{Indicator}, n::Expr)
     return :(indicator($(args[2]), $(args[1]), $(args[end])))
 end
 
-    
+

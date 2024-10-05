@@ -210,10 +210,7 @@ end
 
 
 function e_class_reduction(::Type{T}, v::PCTVector) where {T<:AbstractComp}
-    if length(v) == 1
-        op = first(content(v))
-        return typeof(op), terms(op), get_type(op)
-    end
+    length(v) == 1 && return repack(first(content(v)))
     subterms = vcat(flatten_comp.(content(v))...)
 
     #= if all(t -> is_creation(t) || is_annihilation(t), subterms)
