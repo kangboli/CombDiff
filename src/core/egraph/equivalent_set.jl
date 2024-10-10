@@ -817,7 +817,8 @@ function sum_shift_neighbors(s::Sum)
             inv_shift = isa(shift, Add) ?
                         [mul(constant(-1), t) for t in content(get_body(shift))] :
                         [mul(constant(-1), shift)]
-            push!(result, pct_sum(content(get_bound(s))..., subst(get_body(s), i, add(i, inv_shift...))); name="shift")
+            new_body = simplify(subst(get_body(s), i, add(i, inv_shift...))) |> first
+            push!(result, pct_sum(content(get_bound(s))..., new_body); name="shift")
         end
     end
 
