@@ -46,7 +46,7 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
     is_zero(power) && return Constant, [1], N()
     is_one(power) && return T, terms(base), get_type(base)
-    if isa(base, Constant) && isa(power, Constant)
+    if isa(base, Constant) && isa(power, Constant) && !isa(get_body(base), Integer)
         new_const = [get_body(base)^get_body(power)]
         return Constant, new_const, partial_inference(Constant, new_const...)
     end
@@ -145,7 +145,7 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
 
     is_constant = group(t -> isa(t, Constant), args)
     args_const = get(is_constant, true, [])
-    args = [constant(prod(get_body, args_const, init=1.0)), get(is_constant, false, [])...]
+    args = [constant(prod(get_body, args_const, init=1)), get(is_constant, false, [])...]
     args = filter(t -> !is_one(t), args)
     any(is_zero, args) && return Constant, [0], I()
     isempty(args) && return Constant, [1], N()

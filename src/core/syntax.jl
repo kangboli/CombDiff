@@ -8,7 +8,8 @@ export parse_node,
     current_ast_transforms,
     @pluto_support,
     pct_ast_transform_pluto,
-    continuition
+    continuition,
+    convert_arr_type
 
 const base_domains = [:N, :I, :R, :C, :FOT, :FField]
 
@@ -17,7 +18,7 @@ interactive_let = nothing
 interactive_result = nothing
 interactive_placeholder = nothing
 
-macro pit(expr, ctx=interactive_context, use_global_state=false)
+macro pit(expr, ctx=interactive_context, use_global_state=false, capture_local_scope=false)
     !use_global_state && ctx == interactive_context && error("must give a context if not using the global context")
     expr = purge_line_numbers(expr)
     if isa(expr, Symbol) || isa(expr, Number) || isa(expr, QuoteNode) || expr.head != :block
@@ -239,6 +240,7 @@ function parse_node(n::Expr)
         func == :+ && return parse_add_node(n)
         func == :- && return parse_negate_node(n)
         func == :* && return parse_mul_node(n)
+        (func == :÷ || func == :div) && return parse_div_node(n)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
@@ -254,6 +256,12 @@ function parse_node(n::Expr)
     n.head == :(=) && return parse_statement_node(n)
     n.head == :tuple && return parse_pctvector_node(n)
     return :()
+end
+
+# The handling of division is adhoc.  There will be so many bugs because of this.
+# TODO: Fix this abomination
+function parse_div_node(n)
+    return :(mul($(parse_node(n.args[2])), monomial($(parse_node(n.args[3])), constant(-1))))
 end
 
 function parse_composite_node(n::Expr)
@@ -620,4 +628,19 @@ function parse_indicator_node(::Type{Indicator}, n::Expr)
     return :(indicator($(args[2]), $(args[1]), $(args[end])))
 end
 
+function convert_arr_type(::Type{T}) where T
+    if T.name == Array
+        elem_type, n_dims = T.parameters
+        output_type = if elem_type <: Integer
+            I()
+        elseif elem_type <: Real
+            R()
+        else
+            C()
+        end
+
+        return MapType(VecType(fill(N(), n_dims)), output_type)
+    elseif T.name
+    end
+end
 

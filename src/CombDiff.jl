@@ -16,6 +16,7 @@ include("core/egraph/hash.jl")
 include("core/evaluation.jl")
 include("core/combinatory_diff.jl")
 include("core/syntax.jl")
+include("core/syntax_new.jl")
 
 # The core does not and will not depend on the extensions.
 

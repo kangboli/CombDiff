@@ -9,7 +9,7 @@ end
 
 function find_dimensions(v::Var, c::PrimitiveCall, existing_dims=[])
     i = findfirst(t -> get_body(t) == get_body(v), content(args(c)))
-    i !== nothing && push!(existing_dims, :(size($(codegen(mapp(c))), $(i))))
+    i !== nothing && push!(existing_dims, [:(1), :(size($(codegen(mapp(c))), $(i)))])
     for t in terms(c)
         append!(existing_dims, find_dimensions(v, t))
     end
@@ -20,15 +20,28 @@ function find_dimensions(::Var, ::T) where {T<:Union{Var,Constant}}
     return []
 end
 
+function dimensions(b, summand)
+    isa(get_type(b), ElementType) || return []
+
+    if upper(get_type(b)) == infty() && (lower(get_type(b)) == constant(1) || lower(get_type(b)) == minfty())
+        lu = first(find_dimensions(b, summand))
+        isempty(lu) && error("cannot infer the dimensions")
+        return lu
+    else
+        u, l = upper(get_type(b)), lower(get_type(b))
+        return [codegen(l), codegen(u)]
+    end
+end
+
 function codegen(n::Sum)
     summand = get_body(n)
-    sizes = map(b -> first(find_dimensions(b, summand)), content(get_bound(n)))
+    sizes = map(b -> dimensions(b, summand), content(get_bound(n)))
     loop = codegen(summand)
 
     for (b, s) in zip(get_bound(n), sizes)
         loop = :(
             let _sum = 0
-                @inbounds for $(codegen(b)) in 1:$(s)
+                @inbounds for $(codegen(b)) in $(first(s)):$(last(s))
                     _sum += $(loop)
                 end
                 _sum
@@ -47,13 +60,26 @@ function codegen(a::Add)
     :(+($(codegen.(terms)...)))
 end
 
-function codegen(a::Mul)
-    terms = content(get_body(a))
-    :(*($(codegen.(terms)...)))
+function codegen(m::Mul)
+
+    negative_first = sort(content(get_body(m)), by=is_negative, rev=true)
+
+    d = group(t -> isa(t, Monomial) && power(t) == constant(-1), negative_first)
+    nominators = get(d, false, [constant(1)])
+    denominators = map(base, get(d, true, []))
+
+    isempty(denominators) && return :(*($(codegen.(nominators)...)))
+
+    if all(t -> base(get_type(t)) == I() || base(get_type(t)) == N(), denominators)
+        return :(div($(codegen(mul(nominators...))), $(codegen(mul(denominators...)))))
+    else
+        return :($(codegen(mul(nominators...))) / $(codegen(mul(denominators...))))
+    end
+
 end
 
 function codegen(m::Map)
-    sizes = map(b -> find_dimensions(b, get_body(m)), content(get_bound(m)))
+    sizes = map(b -> dimensions(b, get_body(m)), content(get_bound(m)))
     if any(isempty, sizes) || any(b -> !tensorize(get_type(b)), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
             begin
@@ -62,15 +88,15 @@ function codegen(m::Map)
         ))
     else
         loop = :(_t[$(codegen.(get_bound(m))...)] = $(codegen(get_body(m))))
-        @inbounds for (b, s) in zip(content(get_bound(m)), first.(sizes))
+        @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
             loop = :(
-                for $(codegen(b)) in 1:$(s)
+                for $(codegen(b)) in $(first(s)):$(last(s))
                     $(loop)
                 end
             )
         end
         return :(
-            let _t = zeros($(first.(sizes)...))
+            let _t = zeros($(last.(sizes)...))
                 $(loop)
                 _t
             end
@@ -101,7 +127,7 @@ end
 
 function codegen(d::Delta)
     return :(
-        if $(codege(upper(d))) == $(codegen(lower(d)))
+        if $(codegen(upper(d))) == $(codegen(lower(d)))
             $(codegen(get_body(d)))
         else
             0
@@ -156,9 +182,11 @@ end
 
 
 function codegen(n::Indicator)
-    :(if $(codegen(lower(n))) <= $(codegen(upper(n)))
-        $(codegen(get_body(n)))
-    else
-        0
-    end)
+    :(
+        if $(codegen(lower(n))) <= $(codegen(upper(n)))
+            $(codegen(get_body(n)))
+        else
+            0
+        end
+    )
 end
