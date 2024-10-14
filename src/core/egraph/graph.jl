@@ -48,6 +48,7 @@ default_settings() = Settings(
     :dist_conj => false,
     :expand_mul => false,
     :expand_comp => false,
+    :combine_factors => true,
     :dist_ind => true,
     :telescopic_indicator => false,
     :sum_absorb_indicator => true,

@@ -35,13 +35,13 @@ macro pit(expr, ctx=interactive_context, use_global_state=false, capture_local_s
 
     if !isempty(return_node_list)
         return_node = statement_to_let(statements, first(return_node_list))
-        lhs = :(PCT.interactive_result, PCT.interactive_context)
+        lhs = :(CombDiff.interactive_result, CombDiff.interactive_context)
     elseif !isempty(statements)
         return_node = statement_to_let(statements, :(var($(QuoteNode(:_)))))
-        lhs = :(PCT.interactive_let, PCT.interactive_context)
+        lhs = :(CombDiff.interactive_let, CombDiff.interactive_context)
     else
         return_node = nothing
-        lhs = :(interactive_placeholder, PCT.interactive_context)
+        lhs = :(interactive_placeholder, CombDiff.interactive_context)
     end
 
     rhs = :(
@@ -111,10 +111,10 @@ function pct_ast_transform(expr::Expr, repl=:cmd)
     # @show expr
     # expr.args[2] = expr.args[2].args[1]
     expr = repl == :cmd ? expr.args[1] : expr
-    expr = Expr(:macrocall, Symbol("@pct"), :(PCT.interactive_context), expr.args[1])
+    expr = Expr(:macrocall, Symbol("@pct"), :(CombDiff.interactive_context), expr.args[1])
     return :(
-        let (f, PCT.interactive_context) = $(expr)
-            process_directive(f), PCT.interactive_context
+        let (f, CombDiff.interactive_context) = $(expr)
+            process_directive(f), CombDiff.interactive_context
         end
     )
 end
@@ -128,10 +128,10 @@ function pct_ast_transform_pluto(expr::Expr)
     expr = purge_line_numbers(expr)
     expr = purge_empty_exprs(expr)
 
-    expr = Expr(:macrocall, Symbol("@pct"), :(PCT.interactive_context), expr)
+    expr = Expr(:macrocall, Symbol("@pct"), :(CombDiff.interactive_context), expr)
     expr = :(
-        let (f, PCT.interactive_context) = $(expr)
-            process_directive(f), PCT.interactive_context
+        let (f, CombDiff.interactive_context) = $(expr)
+            process_directive(f), CombDiff.interactive_context
         end
     )
 
@@ -492,8 +492,8 @@ function parse_node(p::QuoteNode)
     :(var(Symbol($(name)))) =#
 end
 function parse_quantum_field_node(n::QuoteNode)
-    x = :(var(:x, C()))
-    n.value == :II && return :(pct_map($x, fermi_scalar($x)))
+    x = :(var(:x, $(C())))
+    n.value == :II && return :($(pct_map)($x, fermi_scalar($x)))
 
     return :(annihilate($(QuoteNode(n.value))))
 end

@@ -32,3 +32,7 @@ function ranged_tensor(::Type{T}, ranges::Vararg) where T <: Number
     return RangedTensor{T, length(dims)}(data, ranges)
 end
 
+function Base.:+(t_1::RangedTensor, t_2::RangedTensor)
+    @assert t_1.ranges == t_2.ranges
+    return RangedTensor(t_1.data + t_2.data, t_1.ranges)
+end

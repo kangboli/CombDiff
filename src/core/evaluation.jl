@@ -1,4 +1,4 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale
 
 function get_free(n::APN)
     free, _ = free_and_dummy(n)
@@ -347,3 +347,7 @@ function deprimitize(p::PrimitivePullback)
 end
 
 deprimitize(t::TerminalNode) = t
+
+scale(n::APN, c::Int) = mul(constant(c), n)
+scale(n::Map, c::Int) = pct_map(get_bound(n)..., scale(get_body(n), c))
+

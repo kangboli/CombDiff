@@ -390,7 +390,7 @@ function neighbors(a::Add; settings=default_settings())
     any(directed(result)) && return result
     time += @elapsed begin
         append!(result, add_delta_neighbors(terms))
-        append!(result, combine_factors(a))
+        settings[:combine_factors] && append!(result, combine_factors(a))
 
         settings[:gcd] && append!(result, gcd_neighbors(terms))
     end

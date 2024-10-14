@@ -1,7 +1,7 @@
 export @nein, @neinshow, @comb, @neintype, @neinspace
 
 macro comb(expr, f=:_, ctx=:(TypeContext()))
-    :(@pct $(f) $(ctx) $(expr.args[1]))
+    esc(:(@pct $(f) $(ctx) $(expr.args[1])))
 end
 
 function nein_base(expr, ctx, interior)
@@ -14,7 +14,7 @@ function nein_base(expr, ctx, interior)
             global_type_names = filter(n->isa(eval(n), AbstractPCTType), global_var_names)
             local_type_names = filter(n->isa(local_vars[n], AbstractPCTType), local_var_names)
 
-            ctx = deepcopy($(ctx))
+            let ctx = deepcopy($(ctx))
             map(n->push_type!(ctx, n, eval(n)), global_type_names)
             map(n->push_type!(ctx, n, local_vars[n]), local_type_names)
 
@@ -35,6 +35,7 @@ function nein_base(expr, ctx, interior)
             global_params = map(var, global_array_names, global_array_types)
             local_params = map(var, local_array_names, local_array_types)
             $(interior)
+            end
         end
     )
 end
@@ -52,7 +53,7 @@ macro nein(expr, f=:_, ctx=:(TypeContext()))
         begin
             $(nein_base(expr, ctx, :(Base.invokelatest(
                 Base.invokelatest(
-                    eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., $(return_node)))))), 
+                    eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., eval_all($(return_node))))))), 
                     eval.(Symbol.(global_array_names))...),
                 [local_vars[n] for n in local_array_names]...))))
         end
