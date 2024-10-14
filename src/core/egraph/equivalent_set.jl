@@ -368,26 +368,33 @@ end
 
 function neighbors(a::Add; settings=default_settings())
     result = NeighborList()
-    terms = content(get_body(a))
+    time = @elapsed begin
+        terms = content(get_body(a))
 
-    if count(a -> isa(a, Map), content(get_body(a))) > 1
-        new_add = combine_maps(content(get_body(a)))
-        push!(result, new_add; dired=true, name="combine_map")
+        if count(a -> isa(a, Map), content(get_body(a))) > 1
+            new_add = combine_maps(content(get_body(a)))
+            push!(result, new_add; dired=true, name="combine_map")
+        end
+        #= append!(result, combine_map_neighbors(terms)) =#
+        sub_result = sub_neighbors(a; settings=settings)
+        #= for (i, t) in enumerate(nodes(sub_result))
+            isa(t, Add) && length(content(get_body(t))) == length(content(get_body(a))) && continue
+            directed(sub_result)[i] = true
+        end =#
+        append!(result, sub_result)
+        let_time = @elapsed append!(result, let_out_mul_add(a))
+
+        settings[:full_log] && println("Let time: $(let_time)")
     end
-    #= append!(result, combine_map_neighbors(terms)) =#
-    sub_result = sub_neighbors(a; settings=settings)
-    #= for (i, t) in enumerate(nodes(sub_result))
-        isa(t, Add) && length(content(get_body(t))) == length(content(get_body(a))) && continue
-        directed(sub_result)[i] = true
-    end =#
-    append!(result, sub_result)
-
-    append!(result, let_out_mul_add(a))
+    settings[:full_log] && println("exploring add: $(time)")
     any(directed(result)) && return result
-    append!(result, add_delta_neighbors(terms))
-    append!(result, combine_factors(a))
+    time += @elapsed begin
+        append!(result, add_delta_neighbors(terms))
+        append!(result, combine_factors(a))
 
-    settings[:gcd] && append!(result, gcd_neighbors(terms))
+        settings[:gcd] && append!(result, gcd_neighbors(terms))
+    end
+    settings[:full_log] && println("exploring add: $(time)")
     return result
 end
 
@@ -404,7 +411,7 @@ function mul_add_neighbors(terms::Vector)
 
             new_monomial = monomial(base(x), add(power(x), power(y)))
             new_terms = terms[collect(filter(k -> k != i && k != j, 1:length(terms)))]
-            push!(result, mul(new_monomial, new_terms...); name="mul_to_power")
+            push!(result, mul(new_monomial, new_terms...); name="mul_to_power", dired=true)
         end
     end
     return result
@@ -491,30 +498,38 @@ function prod_const_neighbors(terms)
 end
 
 function neighbors(m::Mul; settings=default_settings())
+
     result = NeighborList()
-    terms = content(get_body(m))
-    append!(result, mul_add_neighbors(terms))
-    #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
-    append!(result, swallow_neighbors(m))
-    append!(result, indicator_swallow_neighbors(terms))
-    append!(result, mul_expand_const_neighbors(m))
-    append!(result, let_out_mul_add(m))
-    settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
-    #= append!(result, mul_product_neighbors(terms)) =#
-    #= append!(result, dist_neighbors(terms)) =#
-    #= append!(result, prod_const_neighbors(terms)) =#
-    append!(result, sub_neighbors(m; settings=settings))
+    time = @elapsed begin
+        terms = content(get_body(m))
+        append!(result, mul_add_neighbors(terms))
+        #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
+        append!(result, swallow_neighbors(m))
+        append!(result, indicator_swallow_neighbors(terms))
+        append!(result, mul_expand_const_neighbors(m))
+        append!(result, let_out_mul_add(m))
+        settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
+        #= append!(result, mul_product_neighbors(terms)) =#
+        #= append!(result, dist_neighbors(terms)) =#
+        #= append!(result, prod_const_neighbors(terms)) =#
+        append!(result, sub_neighbors(m; settings=settings))
+    end
+    settings[:full_log] && println("exploring mul $(time)")
     return result
 end
 
 function neighbors(m::Map; settings=default_settings())
-    result = NeighborList()
-    if isa(get_body(m), Contraction)
-        settings = custom_settings(:skip_self_as_intermediate => true; preset=settings)
-    end
-    append!(result, sub_neighbors(m; settings=settings))
 
-    append!(result, map_let_out(m))
+    result = NeighborList()
+    time = @elapsed begin
+        if isa(get_body(m), Contraction)
+            settings = custom_settings(:skip_self_as_intermediate => true; preset=settings)
+        end
+        append!(result, sub_neighbors(m; settings=settings))
+
+        append!(result, map_let_out(m))
+    end
+    settings[:full_log] && println("exploring map $(time)")
     return result
 end
 
@@ -1030,30 +1045,35 @@ function extract_intermediate_neighbors(s::Sum)
 end
 
 function neighbors(s::Sum; settings=default_settings())
+
     result = NeighborList()
+    time = @elapsed begin
 
-    append!(result, contract_delta_neighbors(s))
-    append!(result, sum_dist_neighbors(s))
-    #= settings[:clench_sum] && append!(result, obvious_clench(s)) =#
-    settings[:extract_intermediate] && !settings[:skip_self_as_intermediate] &&
-        append!(result, extract_intermediate_neighbors(s))
-    settings = custom_settings(:skip_self_as_intermediate => false; preset=settings)
-    append!(result, obvious_clench(s))
-    settings[:clench_sum] || append!(result, relax_sum(s))
+        append!(result, contract_delta_neighbors(s))
+        append!(result, sum_dist_neighbors(s))
+        #= settings[:clench_sum] && append!(result, obvious_clench(s)) =#
+        settings[:extract_intermediate] && !settings[:skip_self_as_intermediate] &&
+            append!(result, extract_intermediate_neighbors(s))
+        settings = custom_settings(:skip_self_as_intermediate => false; preset=settings)
+        append!(result, obvious_clench(s))
+        settings[:clench_sum] || append!(result, relax_sum(s))
 
-    settings[:clench_sum] && append!(result, clench_sum(s))
-    append!(result, sum_out_linear_op(s))
-    append!(result, bound_let_out(s))
-    append!(result, sum_out_delta(s))
-    settings[:sum_absorb_indicator] && append!(result, sum_absorb_indicator(s))
-    append!(result, sum_out_primitive_pullback(s))
-    if settings[:symmetry]
-        append!(result, sum_shift_neighbors(s))
-        append!(result, sum_sym_neighbors(s))
+        settings[:clench_sum] && append!(result, clench_sum(s))
+        append!(result, sum_out_linear_op(s))
+        append!(result, bound_let_out(s))
+        append!(result, sum_out_delta(s))
+        settings[:sum_absorb_indicator] && append!(result, sum_absorb_indicator(s))
+        append!(result, sum_out_primitive_pullback(s))
+        if settings[:symmetry]
+            append!(result, sum_shift_neighbors(s))
+            append!(result, sum_sym_neighbors(s))
+        end
+        append!(result, sum_mul_neighbors(s))
+        append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
+        append!(result, sum_eliminate_dead_bound(s))
     end
-    append!(result, sum_mul_neighbors(s))
-    append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
-    append!(result, sum_eliminate_dead_bound(s))
+
+    settings[:full_log] && println("exploring sum $(time)")
     return result
 end
 
@@ -1210,12 +1230,26 @@ function let_out_vector(v::PCTVector)
 
     let_term = content(v)[i]
     new_vec = Vector{APN}(map(var, new_symbol(; num=length(v)), get_type.(content(v))))
+    new_params = []
+    new_args = []
+
+    for j in 1:length(v)
+        j == i && continue
+        free = get_free(content(v)[j])
+        if any(t -> name(t) in name.(free), get_bound(let_term))
+            push!(new_params, new_vec[j])
+            push!(new_args, content(v)[j])
+        else
+            new_vec[j] = content(v)[j]
+        end
+    end
+
     new_vec[i] = get_body(let_term)
 
-    new_map = pct_map(new_vec[1:end.!=i]..., pct_let(get_bound(let_term)...,
+    new_map = pct_map(new_params..., pct_let(get_bound(let_term)...,
         args(let_term)..., pct_vec(new_vec...)))
 
-    push!(result, evaluate(call(new_map, content(v)[1:end.!=i]...)); dired=true, name="let_out_vector")
+    @time push!(result, evaluate(call(new_map, new_args...)); dired=true, name="let_out_vector")
     return result
 end
 
@@ -1352,12 +1386,17 @@ function sub_neighbors(lt::Let; settings=settings)
 end
 
 function neighbors(lt::Let; settings=default_settings())
+
     result = NeighborList()
-    append!(result, sub_neighbors(lt; settings=settings))
-    append!(result, let_const_bound_delta_prop(lt))
-    append!(result, let_const_body_delta_out(lt))
-    append!(result, let_collapse(lt))
-    # append!(result,unused_let(lt))
+    time = @elapsed begin
+        append!(result, sub_neighbors(lt; settings=settings))
+        append!(result, let_const_bound_delta_prop(lt))
+        append!(result, let_const_body_delta_out(lt))
+        append!(result, let_collapse(lt))
+        # append!(result,unused_let(lt))
+    end
+
+    settings[:full_log] && println("exploring let $(time)")
     return result
 end
 
@@ -1653,6 +1692,7 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::FermiScalar; settings=default_settings())
+function neighbors(n::Union{FermiScalar,IntDiv}; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
+

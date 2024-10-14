@@ -36,7 +36,9 @@ export
     VacExp,
     vac_exp,
     subtract,
-    pct_copy
+    pct_copy,
+    domain_indicator,
+    int_div
 
 abstract type TerminalNode <: APN end
 
@@ -462,6 +464,9 @@ function indicator(upper_lower::Vararg{APN})
     make_delta(Indicator, upper_lower...)
 end
 
+function domain_indicator(i::Var, d::Domain, c::APN)
+    indicator(upper(d), i, indicator(i, lower(d), c))
+end
 
 struct VacExp <: APN
     type::AbstractPCTType
@@ -483,3 +488,17 @@ is_field_op(::FermiScalar) = true
 function subtract(a::APN, b::APN)
     return add(a, mul(constant(-1), b))
 end
+
+struct IntDiv <: APN
+    type::AbstractPCTType
+    nom::APN
+    denom::APN
+end
+
+content_fields(::Type{IntDiv}) = [:nom, :denom]
+
+int_div(nom, denom) = make_node(IntDiv, nom, denom)
+
+get_nom(n::IntDiv) = n.nom
+get_denom(n::IntDiv) = n.denom
+

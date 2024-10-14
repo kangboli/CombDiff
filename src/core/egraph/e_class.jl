@@ -46,8 +46,8 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
     is_zero(base) && return Constant, [0], I()
     is_zero(power) && return Constant, [1], N()
     is_one(power) && return T, terms(base), get_type(base)
-    if isa(base, Constant) && isa(power, Constant) && !isa(get_body(base), Integer)
-        new_const = [get_body(base)^get_body(power)]
+    if isa(base, Constant) && isa(power, Constant) # && !isa(get_body(base), Integer)
+        new_const = [float(get_body(base))^get_body(power)]
         return Constant, new_const, partial_inference(Constant, new_const...)
     end
 
@@ -243,19 +243,34 @@ function e_class_reduction(::Type{T}, body::S) where {T<:Univariate,S<:APN}
     end
 end
 
+function remove_dup_indicator(t_upper::APN, t_lower::APN, n::APN)
+    set_terms(n, map(t -> remove_dup_indicator(t_upper, t_lower, t), terms(n))...)
+end
+
+function remove_dup_indicator(t_upper::APN, t_lower::APN, n::Indicator)
+    upper(n) == t_upper && lower(n) == t_lower && return get_body(n) # duplicates in body have been removed if code gets here.
+    set_terms(n, map(t -> remove_dup_indicator(t_upper, t_lower, t), terms(n))...)
+end
+
+remove_dup_indicator(::APN, ::APN, n::TerminalNode) = n
 
 function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::T) where {T<:APN}
 
     t_lower == minfty() && return repack(body)
     t_lower == infty() && return Constant, [0], I()
+    upper(get_type(t_lower)) == t_upper && return repack(body)
 
     t_upper == infty() && return repack(body)
     t_upper == minfty() && return Constant, [0], I()
+    lower(get_type(t_upper)) == t_lower && return repack(body)
+
     is_zero(body) && return Constant, [0], I()
 
     if t_lower == lower(get_type(t_upper)) || t_upper == upper(get_type(t_lower))
         return repack(body)
     end
+
+    #= body = remove_dup_indicator(t_upper, t_lower, body) =#
     #= println(verbose(t_lower))
     println(verbose(t_upper)) =#
     #= t_lower == constant(1) && base(get_type(t_upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...) =#

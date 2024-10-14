@@ -16,6 +16,10 @@ end
 
 default_context() = TypeContext(
     Dict{Symbol,Vector{<:AbstractPCTType}}(
+        :N => [N()],
+        :I => [I()],
+        :R => [R()],
+        :C => [C()],
         :CV => [MapType(VecType([N()]), C())],
         :RV => [MapType(VecType([N()]), R())],
         :CF => [MapType(VecType([C()]), C())],
@@ -29,6 +33,10 @@ default_context() = TypeContext(
         :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
         :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
         :SSym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :neg),),))],
+        :R4 => [MapType(VecType([N(), N(), N(), N()]), R())],
+        :R3 => [MapType(VecType([N(), N(), N()]), R())],
+        :C4 => [MapType(VecType([N(), N(), N(), N()]), C())],
+        :C3 => [MapType(VecType([N(), N(), N()]), C())],
     ),
     Dict{Symbol,Vector{<:Var}}(
     :Infty => [infty()],
@@ -207,6 +215,11 @@ end
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
     get_type(last(terms))
+end
+
+
+function partial_inference(::Type{IntDiv}, terms...)::AbstractPCTType 
+    return I()
 end
 
 function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCTType

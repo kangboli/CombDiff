@@ -9,7 +9,7 @@ export parse_node,
     @pluto_support,
     pct_ast_transform_pluto,
     continuition,
-    convert_arr_type
+    convert_pct_type
 
 const base_domains = [:N, :I, :R, :C, :FOT, :FField]
 
@@ -234,13 +234,14 @@ function parse_node(n::Expr)
         (func == :∑ || func == :sum) && return parse_contraction_node(Sum, n)
         (func == :∫ || func == :int) && return parse_contraction_node(Integral, n)
         (func == :∏ || func == :prod) && return parse_prod_node(n)
-        func == :delta && return parse_delta_node(Delta, n)
+        (func == :delta || func == :δ) && return parse_delta_node(Delta, n)
         func == :delta_not && return parse_delta_node(DeltaNot, n)
         (func == :indicator || func == :𝕀) && return parse_indicator_node(Indicator, n)
+        (func == :in || func == :∈) && return parse_domain_indicator_node(Indicator, n)
         func == :+ && return parse_add_node(n)
         func == :- && return parse_negate_node(n)
         func == :* && return parse_mul_node(n)
-        (func == :÷ || func == :div) && return parse_div_node(n)
+        (func == :÷ || func == :div || func == :/) && return parse_div_node(n)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
@@ -261,7 +262,14 @@ end
 # The handling of division is adhoc.  There will be so many bugs because of this.
 # TODO: Fix this abomination
 function parse_div_node(n)
-    return :(mul($(parse_node(n.args[2])), monomial($(parse_node(n.args[3])), constant(-1))))
+    nom = parse_node(n.args[2])
+    denominator = parse_node(n.args[3])
+    
+    if n.args[1] == :/
+        return :(mul($(nom), monomial($(denominator), constant(-1))))
+    else
+        return :(int_div($(nom), $(denominator)))
+    end
 end
 
 function parse_composite_node(n::Expr)
@@ -356,7 +364,8 @@ function parse_domain_node(n::Expr)
     contractable = QuoteNode(true)
     symmetric = QuoteNode(false)
     tensorize = QuoteNode(true)
-    if isa(block, Expr)
+    domain = :()
+    if isa(block, Expr) && block.head == :block
         pairs = Dict(a.args[1] => a.args[2] for a in block.args)
         base = haskey(pairs, :base) ? pairs[:base] : :N
         #= (haskey(pairs, :lower) || haskey(pairs, :upper)) && @warn "Domain boundaries are not yet properly implemented. Do not use." =#
@@ -366,19 +375,20 @@ function parse_domain_node(n::Expr)
         tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])
         symmetric = haskey(pairs, :symmetric) && (pairs[:symmetric])
         contractable = haskey(pairs, :contractable) ? (pairs[:contractable]) : true
-    else
-        base = n.args[3]
-        lower, upper = parse_node(n.args[4]), parse_node(n.args[5])
-    end
-    domain = :(inference(Domain(
+        domain = :(inference(Domain(
             $(base)(), $(lower), $(upper),
             meta=Dict(:name => $(QuoteNode(name)),
-                :periodic => $(periodic),
-                :tensorize => $(tensorize),
-                :symmetric => $(symmetric),
-                :contractable => $(contractable)
-            )
+                      :periodic => $(periodic),
+                      :tensorize => $(tensorize),
+                      :symmetric => $(symmetric),
+                      :contractable => $(contractable)
+                      )
         ), _ctx))
+    elseif isa(block, Expr) && block.head == :curly
+        param_args = parse_node.(block.args[2:end])
+        domain_name = block.args[1]
+        domain = :(parametrize_type(_ctx[$(QuoteNode(domain_name))], $(param_args...)))
+    end
     if type_params !== nothing
         type_params = map(parse_node, type_params)
         domain = :(ParametricDomain([$(type_params...)], $(domain)))
@@ -528,12 +538,12 @@ function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
     else
-        params = [s.args[2]]
+        params = s.args[2:end-1]
     end
 
     param_nodes = (n -> parse_node(Param, n)).(params)
     constructor = T == Sum ? pct_sum : pct_int
-    return :($(constructor)($(param_nodes...), $(parse_node(s.args[3]))))
+    return :($(constructor)($(param_nodes...), $(parse_node(s.args[end]))))
 end
 
 function parse_prod_node(s::Expr)
@@ -541,11 +551,11 @@ function parse_prod_node(s::Expr)
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
     else
-        params = [s.args[2]]
+        params = s.args[2:end-1]
     end
 
     param_nodes = (n -> parse_node(Param, n)).(params)
-    return :(pct_product($(param_nodes...), $(parse_node(s.args[3]))))
+    return :(pct_product($(param_nodes...), $(parse_node(s.args[end]))))
 end
 
 function parse_let_node(l::Expr)
@@ -586,7 +596,7 @@ end
 
 
 function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
-    @assert d.args[1] in [:delta, :delta_not]
+    @assert d.args[1] in [:delta, :delta_not, :δ]
     upper_params = isa(d.args[2], Symbol) ? [d.args[2]] : d.args[2].args
     lower_params = isa(d.args[3], Symbol) ? [d.args[3]] : d.args[3].args
     upper_nodes = map(n -> parse_node(Param, n), upper_params)
@@ -628,19 +638,39 @@ function parse_indicator_node(::Type{Indicator}, n::Expr)
     return :(indicator($(args[2]), $(args[1]), $(args[end])))
 end
 
-function convert_arr_type(::Type{T}) where T
-    if T.name == Array
-        elem_type, n_dims = T.parameters
-        output_type = if elem_type <: Integer
-            I()
-        elseif elem_type <: Real
-            R()
-        else
-            C()
-        end
+function parse_domain_indicator_node(Indicator, n)
+    i = parse_node(n.args[2])
+    d = :(_ctx[$(QuoteNode(n.args[3]))])
+    body = parse_node(n.args[end])
 
-        return MapType(VecType(fill(N(), n_dims)), output_type)
-    elseif T.name
+    return :(domain_indicator($(i), $(d), $(body)))
+end
+
+function convert_pct_type(::T) where T <: Number
+    if T <: Integer
+        return I()
+    elseif T <: Real
+        return R()
+    elseif T <: Number
+        return C()
+    else
+        error("type $(T) not supported")
     end
+end
+
+function convert_pct_type(tensor::RangedTensor{S, T}) where {S <: Number, T}
+    return  MapType(VecType([Domain(N(), constant(l), constant(u)) for (l, u) in tensor.ranges]), convert_pct_type(S(0)))
+end
+
+function convert_pct_type(::T) where T
+    elem_type, n_dims = if T.name.name == :Array
+         T.parameters
+    elseif T.name.name == :Vector
+        first(T.parameters), 1
+    else
+        error("type $(T) not supported")
+    end
+    output_type = convert_pct_type(elem_type(0))
+    return MapType(VecType(fill(N(), n_dims)), output_type)
 end
 

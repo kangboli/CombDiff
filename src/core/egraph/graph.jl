@@ -41,6 +41,7 @@ default_settings() = Settings(
     :clench_sum => false,
     :symmetry => false,
     :logging => true,
+    :full_log => false,
     :gcd => true,
     :blaserize => false,
     :wick => false,

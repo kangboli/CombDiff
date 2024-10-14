@@ -67,9 +67,14 @@ function contains_name(n::APN, s::Symbol)::Bool
     return false
 end
 
-contains_name(v::Var, s::Symbol)::Bool = name(v) == s
+contains_name(v::Var, s::Symbol)::Bool = name(v) == s || contains_name(get_type(v), s)
 
 contains_name(c::Constant, ::Symbol)::Bool = false
+
+contains_name(c::MapType, s::Symbol)::Bool = any(t->contains_name(t, s), [get_bound_type(c), get_body_type(c)])
+contains_name(c::VecType, s::Symbol)::Bool = any(t->contains_name(t, s), get_content_type(c))
+contains_name(c::Domain, s::Symbol)::Bool = any(t->contains_name(t, s), [upper(c), lower(c)])
+contains_name(c::AbstractPCTType, s::Symbol)::Bool = false
 
 struct SymbolGenerator
     base_symbol::Symbol

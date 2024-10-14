@@ -213,8 +213,8 @@ function latex(m::Mul)
     if isempty(denominators)
         return "$(join(latex_str.(negative_first), "\\cdot "))"
     else
-        return "\\frac{$(join(latex_str.(nominators), "\\cdot "))}
-        {$(join(latex_str.(denominators), "\\cdot "))}"
+        return "$(join(latex_str.(nominators), "\\cdot ")) / 
+        $(join(latex_str.(denominators), "\\cdot "))"
     end
 end
 
@@ -256,7 +256,7 @@ function latex(p::PrimitiveCall)
         map_str = "\\left($(map_str)\\right)"
     end =#
 
-    if all(a -> a == N(), bound_types) && length(bound_types) > 0
+    if all(a -> base(a) == N(), bound_types) && length(bound_types) > 0
         map_strs = split(map_str, "_")
         if length(map_strs) == 1
             return "$(map_strs[1])_{$(latex(args(p)))}"
@@ -444,3 +444,6 @@ function latex(i::Indicator)
 end
 
 pretty(s::Union{Symbol, Number}) = string(s)
+
+pretty(d::IntDiv) = "div($(pretty(get_nom(d))), $(pretty(get_denom(d))))"
+latex(d::IntDiv) = "div($(latex(get_nom(d))),$(latex(get_denom(d))))"

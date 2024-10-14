@@ -8,7 +8,7 @@ function find_dimensions(v::Var, summand::APN, existing_dims=[])
 end
 
 function find_dimensions(v::Var, c::PrimitiveCall, existing_dims=[])
-    i = findfirst(t -> get_body(t) == get_body(v), content(args(c)))
+    i = findfirst(t -> isa(t, Var) && get_body(t) == get_body(v), content(args(c)))
     i !== nothing && push!(existing_dims, [:(1), :(size($(codegen(mapp(c))), $(i)))])
     for t in terms(c)
         append!(existing_dims, find_dimensions(v, t))
@@ -24,9 +24,9 @@ function dimensions(b, summand)
     isa(get_type(b), ElementType) || return []
 
     if upper(get_type(b)) == infty() && (lower(get_type(b)) == constant(1) || lower(get_type(b)) == minfty())
-        lu = first(find_dimensions(b, summand))
-        isempty(lu) && error("cannot infer the dimensions")
-        return lu
+        lu = find_dimensions(b, summand)
+        isempty(lu) && return []
+        return first(lu)
     else
         u, l = upper(get_type(b)), lower(get_type(b))
         return [codegen(l), codegen(u)]
@@ -70,15 +70,23 @@ function codegen(m::Mul)
 
     isempty(denominators) && return :(*($(codegen.(nominators)...)))
 
-    if all(t -> base(get_type(t)) == I() || base(get_type(t)) == N(), denominators)
-        return :(div($(codegen(mul(nominators...))), $(codegen(mul(denominators...)))))
-    else
-        return :($(codegen(mul(nominators...))) / $(codegen(mul(denominators...))))
-    end
+    # if all(t -> base(get_type(t)) == I() || base(get_type(t)) == N(), denominators)
+    #     return :(div($(codegen(mul(nominators...))), $(codegen(mul(denominators...)))))
+    # else
+    return :($(codegen(mul(nominators...))) / $(codegen(mul(denominators...))))
+    # end
+end
 
+function codegen(i::IntDiv)
+    return :(div($(codegen(get_nom(i))), $(codegen(get_denom(i)))))
 end
 
 function codegen(m::Map)
+
+    if isempty(get_bound(m))
+        return :(() -> $(codegen(get_body(m))))
+    end
+
     sizes = map(b -> dimensions(b, get_body(m)), content(get_bound(m)))
     if any(isempty, sizes) || any(b -> !tensorize(get_type(b)), content(get_bound(m)))
         return :(($(codegen.(get_bound(m))...),) -> (
@@ -87,7 +95,8 @@ function codegen(m::Map)
             end
         ))
     else
-        loop = :(_t[$(codegen.(get_bound(m))...)] = $(codegen(get_body(m))))
+        offset_bounds = map(b->first(simplify(add(subtract(b, lower(get_type(b))), constant(1)); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false))), get_bound(m))
+        loop = :(get_data(_t)[$(codegen.(offset_bounds)...)] = $(codegen(get_body(m))))
         @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
             loop = :(
                 for $(codegen(b)) in $(first(s)):$(last(s))
@@ -95,15 +104,23 @@ function codegen(m::Map)
                 end
             )
         end
+
+        ranges = [Expr(:call, Symbol("=>"), l, r) for (l, r) in sizes]
+
         return :(
-            let _t = zeros($(last.(sizes)...))
+            let _t = ranged_tensor($(codegen(get_type(get_body(m)))), $(ranges...))
                 $(loop)
                 _t
             end
         )
     end
-
 end
+
+codegen(d::Domain) = codegen(base(d))   
+codegen(d::Union{N, I}) = :(Int)
+codegen(d::R) = :(Float64)
+codegen(d::C) = :(ComplexF64)
+
 
 function codegen(c::Conjugate)
     :(conj($(codegen(get_body(c)))))
@@ -111,7 +128,9 @@ end
 
 function codegen(c::PrimitiveCall)
     if all(t -> base(get_type(t)) == N() || base(get_type(t)) == I(), args(c))
-        :($(codegen(mapp(c)))[$(codegen.(args(c))...)])
+        offsets = lower.(get_content_type(get_bound_type(get_type(mapp(c)))))
+        new_args = map((t, o)->first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false) )), content(args(c)), offsets)
+        :(get_data($(codegen(mapp(c))))[$(codegen.(new_args)...)])
     else
         :($(codegen(mapp(c)))($(codegen.(args(c))...)))
     end
@@ -190,3 +209,12 @@ function codegen(n::Indicator)
         end
     )
 end
+#= function Base.getindex(t::RangedTensor, indices::Vararg{Int})
+    return t.data[(1 .+ collect(indices) - first.(t.ranges))...]
+end
+
+
+function Base.setindex!(t::RangedTensor, new_data::Number, indices::Vararg{Int})
+    return t.data[(1 .+ collect(indices) - first.(t.ranges))...] = new_data
+end
+ =#
