@@ -452,7 +452,12 @@ function parse_map_node(f::Expr)
 end
 
 
-function parse_node(::Type{Param}, p::Union{Expr,Symbol})
+function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
+
+    if isa(p, Number)
+        return :(constant($(p)))
+    end
+
     if isa(p, Symbol)
         return :(var($(QuoteNode(p))))
     end
@@ -597,8 +602,8 @@ end
 
 function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     @assert d.args[1] in [:delta, :delta_not, :δ]
-    upper_params = isa(d.args[2], Symbol) ? [d.args[2]] : d.args[2].args
-    lower_params = isa(d.args[3], Symbol) ? [d.args[3]] : d.args[3].args
+    upper_params = isa(d.args[2], Union{Symbol, Number}) ? [d.args[2]] : d.args[2].args
+    lower_params = isa(d.args[3], Union{Symbol, Number}) ? [d.args[3]] : d.args[3].args
     upper_nodes = map(n -> parse_node(Param, n), upper_params)
     lower_nodes = map(n -> parse_node(Param, n), lower_params)
     constructor = T == Delta ? :delta : :delta_not

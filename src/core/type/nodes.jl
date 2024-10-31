@@ -38,7 +38,8 @@ export
     subtract,
     pct_copy,
     domain_indicator,
-    int_div
+    int_div,
+    mul
 
 abstract type TerminalNode <: APN end
 

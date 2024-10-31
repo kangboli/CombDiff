@@ -596,9 +596,17 @@ function sum_mul_neighbors(s::Sum)
     return result
 end
 
+function quick_solve(lhs::T, rhs::APN, v::Var) where T <: APN
+    if T == Var
+        name(lhs) == name(v) 
+    end
+end
+
 """
 sum(j, delta(i, j+k, A(i, j, k)))
 sets j -> i - k
+
+TODO: Clean up this mess
 """
 function contract_delta_neighbors(s::Sum)
     result = NeighborList()
@@ -627,18 +635,26 @@ function contract_delta_neighbors(s::Sum)
             continue
         end
 
+        replacement = other
         if isa(this, Var)
             replacement = other
         elseif isa(this, Add)
-            replacement = add([mul(constant(-1), t) for t in content(get_body(this))]...)
-            replacement = add(other, v, replacement)
+            i = findfirst(t->contains_name(t, name(v)), content(get_body(this))) 
+            v_term = get_body(this)[i]
+            if isa(v_term, Var) 
+                replacement = add([mul(constant(-1), t) for t in content(get_body(this))]...)
+                replacement = add(other, v, replacement)
+            elseif isa(v_term, Mul) && first(get_body(v_term)) == constant(-1)
+                length(get_body(v_term)) == 2 || error("delta with too complicated subscripts are not yet supported")
+                replacement = subtract(add(this, v), other)
+            end
         else
             #= mul(constant(-1), this) =#
             error("Not yet implemented")
         end
         new_summand = subst(get_body(d), v, replacement)
-        if isa(get_type(this), ElementType)
-            new_indicator = indicator(other, upper(get_type(this)), lower(get_type(this)), other, new_summand)
+        if isa(get_type(v), ElementType)
+            new_indicator = indicator(other, upper(get_type(v)), lower(get_type(v)), other, new_summand)
             new_sum = pct_sum(indices..., new_indicator)
         else
             new_sum = pct_sum(indices..., new_summand)
@@ -1163,6 +1179,22 @@ function neighbors(d::Delta; settings=default_settings())
 
     return result
 end
+
+function neighbors(d::DeltaNot; settings=default_settings())
+    result = NeighborList()
+    append!(result, sub_neighbors(d; settings=settings))
+    #= neighbor_list = neighbors(get_body(d); settings=settings)
+
+    for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        push!(result, delta_not(upper(d), lower(d), t); dired=dir, name=s)
+    end =#
+
+    # TODO: use equivalence instead of equality
+    upper(d) == lower(d) && push!(result, constant(0); dired=true, name="delta_not_id")
+
+    return result
+end
+
 
 function dist_conj(c)
     result = NeighborList()

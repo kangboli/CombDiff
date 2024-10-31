@@ -204,6 +204,32 @@ end
 
 pretty(b::BMul) = "*$(pretty(param(b)))"
 
+struct BDelta <: ABF
+    param::APN
+    maptype::MapType
+    delta_type::Type
+end
+
+function decompose(z::APN, ov::T) where {T<:AbstractDelta}
+    (contains_name(upper(ov), name(v_unwrap(z))) || contains_name(lower(ov), name(v_unwrap(z)))) &&
+        error("Delta divergence not yet implemented.")
+    body_type = get_type(get_body(ov))
+    push(decompose(z, get_body(ov)), BDelta(pct_vec(upper(ov), lower(ov)),
+        MapType(v_wrap(body_type), body_type), T))
+end
+
+function as_map(d::BDelta, zs=z_vars(d))::Map
+    if d.delta_type == DeltaNot
+    return pct_map(zs..., make_node(d.delta_type, param(d)..., v_unwrap(zs)))
+    end
+end
+
+function pp(d::BDelta)
+    zs, ks = zk_vars(d)
+    pct_map(zs..., ks..., make_node(d.delta_type, param(d)..., v_unwrap(ks)))
+end
+
+
 """
 Raise to a variable power.
 """
@@ -530,7 +556,7 @@ end
 function decompose(z::APN, ov::AbstractCall)::PComp
     if isa(mapp(ov), PrimitivePullback) && !isa(get_body_type(get_type(mapp(ov))), VecType)
         zs..., k = content(args(ov))
-        if any(t->contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
+        if any(t -> contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
             maptype = MapType(VecType([get_type(k)]), get_type(ov))
             bp = BPullback(pct_vec(mapp(ov), zs...), maptype)
             return push(decompose(z, k), bp)
