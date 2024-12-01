@@ -191,14 +191,22 @@ function absorb_list(t::APN, list)
     return t, remaining
 end
 
-function enum_symmetry(n::Sum; logger=Logger())
+function enum_symmetry(n::Sum; logger=Logger(), settings=default_settings())
     # The simplication here is necessary because some symmetries can be simplified, 
     # and some are already simplified. They cannot be combined unless all of them are simplified.
     new_bodies = map(t -> first(simplify(t; settings=custom_settings(:logging => false))), enum_symmetry(get_body(n); logger=logger))
-    return map(t -> pct_sum(get_bound(n)..., t), [Set(new_bodies)...])
+    body_set = [Set(new_bodies)...]
+    settings[:shift] || settings[:even_sym] || return map(t -> pct_sum(get_bound(n)..., t), body_set)
+
+    result = []
+    for t in body_set
+        append!(result, simplify(pct_sum(get_bound(n)..., t); settings=custom_settings(
+            :symmetry => false, :even_sym => true, :shift => true)))
+    end
+    return result
 end
 
-function enum_symmetry(n::Mul; logger=Logger())
+function enum_symmetry(n::Mul; logger=Logger(), _...)
     t, rest... = content(get_body(n))
     t_syms = enum_symmetry(t; logger=logger)
     rest_syms = enum_symmetry(mul(rest...); logger=logger)
@@ -213,9 +221,9 @@ function enum_symmetry(n::Mul; logger=Logger())
     return result
 end
 
-enum_symmetry(n::TerminalNode; logger=Logger()) = [n]
+enum_symmetry(n::TerminalNode; _...) = [n]
 
-function enum_symmetry(n::T; logger=Logger()) where {T<:APN}
+function enum_symmetry(n::T; logger=Logger(), _...) where {T<:APN}
     #= [make_node(T, ts...) for ts in  product(map(t->enum_symmetry(t; logger=logger), terms(n))...)] =#
     #= result = simplify(n; logger=logger, settings=custom_settings(:logging=>false; preset=symmetry_settings()))      =#
     _, result = spanning_tree!(n; logger=logger, settings=custom_settings(:logging => false; preset=symmetry_settings()))
@@ -306,7 +314,7 @@ function fast_symmetry_reduction(n::Add; logger=Logger(), settings=default_setti
     rest = content(get_body(g))
     while !isempty(rest)
         t, rest... = rest
-        t_set = enum_symmetry(t; logger=logger)
+        t_set = enum_symmetry(t; logger=logger, settings=settings)
         t_hash_set = HashedSet(t_set)
         t_hash_set, rest = absorb(t_hash_set, rest)
         push!(reduced, first(t_hash_set.nodes))
@@ -324,7 +332,7 @@ end
 
 function clench(s::Sum; logger=Logger(), settings=default_settings())
     return first(simplify(s; logger=logger,
-            settings=custom_settings(:clench_sum => true; preset=settings)))
+        settings=custom_settings(:clench_sum => true; preset=settings)))
 end
 
 function clench(n::Add; kwargs...)

@@ -256,7 +256,7 @@ function latex(p::PrimitiveCall)
         map_str = "\\left($(map_str)\\right)"
     end =#
 
-    if all(a -> base(a) == N(), bound_types) && length(bound_types) > 0
+    if all(a -> isa(a, ElementType) && base(a) == N(), bound_types) && length(bound_types) > 0
         map_strs = split(map_str, "_")
         if length(map_strs) == 1
             return "$(map_strs[1])_{$(latex(args(p)))}"

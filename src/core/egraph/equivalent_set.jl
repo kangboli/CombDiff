@@ -173,7 +173,7 @@ function neighbors(c::PrimitiveCall; settings=default_settings())
         op == :conj && return conjugate(new_term)
         op == :id && return new_term
         op == :neg && return mul(constant(-1), new_term)
-        if op == :ineg
+        if op in [:ineg, :inegc]
             new_args = []
             for (i, a) in enumerate(content(args(c)))
                 if i in indices
@@ -182,9 +182,14 @@ function neighbors(c::PrimitiveCall; settings=default_settings())
                     push!(new_args, a)
                 end
             end
-            return set_content(c, mapp(c), pct_vec(new_args...))
+            negated = set_content(c, mapp(c), pct_vec(new_args...))
+            if op == :ineg
+                return negated
+            else
+                return conjugate(negated)
+            end
         end
-        op == :inegc && error("Not yet properly implemented")
+        #= op == :inegc && error("Not yet properly implemented") =#
         #= return conjugate(set_content(c, mapp(c),
             [mul(constant(-1), t) for t in args(c)[collect(indices)]])) =#
         return new_term
@@ -340,22 +345,10 @@ function combine_factors(a)
     result = NeighborList()
     terms = content(get_body(a))
     term_dict = Dict{APN,Number}()
-    function process_term!(a::Constant)
-        term_dict[constant(1)] = get_body(a) + get(term_dict, constant(1), 0)
-    end
-    function process_term!(a::Mul)
-        is_constant = group(t -> isa(t, Constant), content(get_body(a)))
-        constant_term = get(is_constant, true, [constant(1)]) |> first
-        rest = mul(get(is_constant, false, [])...)
-        term_dict[rest] = get_body(constant_term) + get(term_dict, rest, 0)
-    end
-    function process_term!(a::APN)
-        #= println(typeof(a))
-        println(hash(a)) =#
-        term_dict[a] = 1 + get(term_dict, a, 0)
-    end
 
-    map(process_term!, terms)
+    for t in terms
+        group_term!(t, term_dict)
+    end
     new_terms = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
 
     new_add = add(new_terms...)
@@ -504,9 +497,9 @@ function neighbors(m::Mul; settings=default_settings())
         terms = content(get_body(m))
         append!(result, mul_add_neighbors(terms))
         #= settings[:clench_sum] || append!(result, relax_sum(terms)) =#
-        append!(result, swallow_neighbors(m))
+        settings[:clench_delta] || append!(result, swallow_neighbors(m))
         append!(result, indicator_swallow_neighbors(terms))
-        append!(result, mul_expand_const_neighbors(m))
+        #= append!(result, mul_expand_const_neighbors(m)) =#
         append!(result, let_out_mul_add(m))
         settings[:expand_mul] && append!(result, mul_expand_neighbors(m))
         #= append!(result, mul_product_neighbors(terms)) =#
@@ -596,9 +589,9 @@ function sum_mul_neighbors(s::Sum)
     return result
 end
 
-function quick_solve(lhs::T, rhs::APN, v::Var) where T <: APN
+function quick_solve(lhs::T, rhs::APN, v::Var) where {T<:APN}
     if T == Var
-        name(lhs) == name(v) 
+        name(lhs) == name(v)
     end
 end
 
@@ -639,9 +632,9 @@ function contract_delta_neighbors(s::Sum)
         if isa(this, Var)
             replacement = other
         elseif isa(this, Add)
-            i = findfirst(t->contains_name(t, name(v)), content(get_body(this))) 
+            i = findfirst(t -> contains_name(t, name(v)), content(get_body(this)))
             v_term = get_body(this)[i]
-            if isa(v_term, Var) 
+            if isa(v_term, Var)
                 replacement = add([mul(constant(-1), t) for t in content(get_body(this))]...)
                 replacement = add(other, v, replacement)
             elseif isa(v_term, Mul) && first(get_body(v_term)) == constant(-1)
@@ -720,6 +713,9 @@ function sum_out_primitive_pullback(s::Sum)
     isa(summand, PrimitiveCall) && isa(mapp(summand), PrimitivePullback) || return result
     k_type = get_body_type(get_type(get_body(mapp(summand))))
     isa(k_type, VecType) && error("moving contraction into a nontrivial pullback is not yet supported")
+    for b in get_bound(s)
+        contains_name(mapp(summand), name(b)) && return result
+    end
     new_pullback = primitive_call(mapp(summand), args(summand)[1:end-1]...,
         pct_sum(get_bound(s)..., last(args(summand))))
     push!(result, new_pullback; dired=true, name="pullback_sum_out")
@@ -837,7 +833,7 @@ function find_shift(::T, ::S) where {T<:Var,S<:Union{Var,Constant}}
     return Vector{APN}()
 end
 
-function sum_shift_neighbors(s::Sum)
+function sum_shift_neighbors(s::Sum; settings=default_settings())
     result = NeighborList()
 
     for i in content(get_bound(s))
@@ -848,7 +844,7 @@ function sum_shift_neighbors(s::Sum)
             inv_shift = isa(shift, Add) ?
                         [mul(constant(-1), t) for t in content(get_body(shift))] :
                         [mul(constant(-1), shift)]
-            new_body = simplify(subst(get_body(s), i, add(i, inv_shift...))) |> first
+            new_body = simplify(subst(get_body(s), i, add(i, inv_shift...)); settings=settings) |> first
             push!(result, pct_sum(content(get_bound(s))..., new_body); name="shift")
         end
     end
@@ -1025,6 +1021,7 @@ end
 function sum_eliminate_dead_bound(s::Sum)
     result = NeighborList()
     for b in get_bound(s)
+        isa(get_type(b), ElementType) || continue
         u, l = upper(get_type(b)), lower(get_type(b))
         diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false)) |> first
         compare = zero_compare(diff)
@@ -1080,10 +1077,8 @@ function neighbors(s::Sum; settings=default_settings())
         append!(result, sum_out_delta(s))
         settings[:sum_absorb_indicator] && append!(result, sum_absorb_indicator(s))
         append!(result, sum_out_primitive_pullback(s))
-        if settings[:symmetry]
-            append!(result, sum_shift_neighbors(s))
-            append!(result, sum_sym_neighbors(s))
-        end
+        settings[:shift] && append!(result, sum_shift_neighbors(s; settings=settings))
+        settings[:even_sym] && append!(result, sum_sym_neighbors(s))
         append!(result, sum_mul_neighbors(s))
         append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
         append!(result, sum_eliminate_dead_bound(s))
@@ -1180,9 +1175,38 @@ function neighbors(d::Delta; settings=default_settings())
     return result
 end
 
+function clench_delta(d::DeltaNot)
+    result = NeighborList()
+    isa(get_body(d), Mul) || return result
+
+    f_u, d_u = free_and_dummy(upper(d))
+    f_l, d_l = free_and_dummy(lower(d))
+    isempty(d_u) && isempty(d_l) || return result
+
+    function contain_script_var(n::APN)
+        n_free = get_free(n)
+        for f in union(f_u, f_l)
+            name(f) in name.(n_free) && return true
+        end
+        return false
+    end
+
+    d_script = group(contain_script_var, content(get_body(get_body(d))))
+
+    outer = get(d_script, false, [])
+    isempty(outer) && return result
+    inner = get(d_script, true, [])
+
+    push!(result, mul(outer..., delta_not(upper(d), lower(d), mul(inner...))); dired=true, name="clench delta")
+
+    return result
+end
+
 function neighbors(d::DeltaNot; settings=default_settings())
     result = NeighborList()
     append!(result, sub_neighbors(d; settings=settings))
+
+    settings[:clench_delta] && append!(result, clench_delta(d))
     #= neighbor_list = neighbors(get_body(d); settings=settings)
 
     for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
@@ -1670,7 +1694,7 @@ end
 function neighbors(c::Composition; settings=default_settings())
     result = NeighborList()
     settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
-    append!(result, swallow_neighbors(c))
+    settings[:clench_delta] || append!(result, swallow_neighbors(c))
     #= append!(result, sum_out_comp(c)) =#
     append!(result, relax_sum_comp(c))
     append!(result, sub_neighbors(c; settings=settings))

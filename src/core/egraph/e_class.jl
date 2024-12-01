@@ -61,6 +61,11 @@ function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
         end
     end
 
+    if isa(base, Monomial)
+        new_terms = [base.base, mul(base.power, power)]
+        return Monomial, new_terms, partial_inference(Monomial, new_terms...)
+    end
+
     return Monomial, [base, power], partial_inference(Monomial, base, power)
 end
 
@@ -86,6 +91,34 @@ end
     return [remaining_terms..., new_maps...]
 end =#
 
+is_var_term(v::Var) = true
+is_var_term(v::Constant) = true
+is_var_term(v::Mul) = length(get_body(v)) == 2 && isa(first(get_body(v)), Constant)
+is_var_term(v::APN) = false
+
+
+function group_term!(a::Constant, term_dict)
+    term_dict[constant(1)] = get_body(a) + get(term_dict, constant(1), 0)
+end
+
+function group_term!(a::Mul, term_dict)
+    #= is_constant = group(t -> isa(t, Constant), content(get_body(a)))
+    constant_term = get(is_constant, true, [constant(1)]) |> first
+    rest = mul(get(is_constant, false, [])...)
+    term_dict[rest] = get_body(constant_term) + get(term_dict, rest, 0) =#
+    if isa(first(get_body(a)), Constant)
+        c, rest... = content(get_body(a))
+        rest = mul(rest...)
+    else
+        c, rest = constant(1), a
+    end
+    term_dict[rest] = get_body(c) + get(term_dict, rest, 0)
+end
+function group_term!(a::APN, term_dict)
+    term_dict[a] = 1 + get(term_dict, a, 0)
+end
+
+
 flatten_add(a::APN) = [a]
 flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
 
@@ -102,7 +135,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
 
     #= sort!(new_terms) =#
     length(new_terms) == 0 && return Constant, [0], I()
-    length(new_terms) == 1 && return typeof(first(new_terms)), terms(first(new_terms)), get_type(first(new_terms))
+    length(new_terms) == 1 && return repack(first(new_terms))
 
     return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
 end
@@ -151,14 +184,20 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
     isempty(args) && return Constant, [1], N()
     sort!(args)
     if length(args) == 1
-        return typeof(first(args)), terms(first(args)), get_type(first(args))
+        return repack(first(args))
     end
 
-    i = findfirst(t -> isa(t, AbstractDelta), args)
+    # -1 ⋅ (a + b) -> - a - b. The e class itself needs to be able to do basic cancellations,
+    # which is hard in factorized form.
+    if length(args) == 2 && first(args) == constant(-1) && isa(last(args), Add)
+        return repack(add([mul(constant(-1), t) for t in get_body(last(args))]...))
+    end
+
+    #= i = findfirst(t -> isa(t, AbstractDelta), args)
     if i !== nothing
         t = args[i]
         return repack(make_node(typeof(t), upper(t), lower(t), mul(get_body(t), args[1:end.!=i]...)))
-    end
+    end =#
 
     return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
 end
@@ -222,11 +261,36 @@ function e_class_reduction(::Type{T}, v::PCTVector) where {T<:AbstractComp}
     body = pct_vec(subterms...)
     return T, [body], partial_inference(T, body)
 end
+function e_class_reduction(::Type{DeltaNot}, lower::APN, upper::APN, body::APN)
+    if lower == upper && base(get_type(lower)) == N()
+        return constant(0)
+    else
+        if any(is_zero, [lower, upper])
+            other = is_zero(upper) ? lower : upper
+            if isa(other, Mul) && isa(first(get_body(other)), Constant) &&
+               get_body(first(get_body(other))) < 0
+                upper = mul(constant(-1), other)
+                lower = constant(0)
+            end
+        end
+
+        return DeltaNot, [lower, upper, body], partial_inference(DeltaNot, lower, upper, body)
+    end
+end
 
 function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
-    if lower == upper
-        return typeof(body), terms(body), get_type(body)
+    if lower == upper && base(get_type(lower)) == N()
+        return repack(body)
     else
+        if any(is_zero, [lower, upper])
+            other = is_zero(upper) ? lower : upper
+            if isa(other, Mul) && isa(first(get_body(other)), Constant) &&
+               get_body(first(get_body(other))) < 0
+                upper = mul(constant(-1), other)
+                lower = constant(0)
+            end
+        end
+
         return Delta, [lower, upper, body], partial_inference(Delta, lower, upper, body)
     end
 end
