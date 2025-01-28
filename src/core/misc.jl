@@ -29,6 +29,15 @@ function ranged_tensor(::Type{T}, ranges::Vararg) where T <: Number
     ranges = [l=>r for (l, r) in ranges]
     dims = [1 + r - l for (l, r) in ranges]
     data = zeros(T, dims...)
+    all(r->first(r)==1, ranges) && return data
+    return RangedTensor{T, length(dims)}(data, ranges)
+end
+
+function ranged_tensor(::Type{T}, ranges::Vararg) where T <: AbstractArray
+    ranges = [l=>r for (l, r) in ranges]
+    dims = [1 + r - l for (l, r) in ranges]
+    data = Array{T, length(dims)}(undef, dims...)
+    all(r->first(r)==1, ranges) && return data
     return RangedTensor{T, length(dims)}(data, ranges)
 end
 

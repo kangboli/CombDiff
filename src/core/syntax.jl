@@ -186,7 +186,7 @@ function activate_interactive_mode!()
 end
 
 # There are line number nodes in Julia's AST. They get in the way and are of no 
-# use to as for now, so we are purging them from the start.
+# use to us for now, so we are purging them from the start.
 
 purge_line_numbers(e::Any) = e
 function purge_line_numbers(expr::Expr)
@@ -266,7 +266,7 @@ function parse_div_node(n)
     denominator = parse_node(n.args[3])
     
     if n.args[1] == :/
-        return :(mul($(nom), monomial($(denominator), constant(-1))))
+        return :(CombDiff.mul($(nom), monomial($(denominator), constant(-1))))
     else
         return :(int_div($(nom), $(denominator)))
     end
@@ -523,13 +523,13 @@ end
 
 function parse_negate_node(n::Expr)
     @assert n.args[1] == :-
-    length(n.args) == 2 && return :(mul(constant(-1), $(parse_node(n.args[2]))))
-    return :(add($(parse_node(n.args[2])), mul(constant(-1), $(parse_node(n.args[3])))))
+    length(n.args) == 2 && return :(CombDiff.mul(constant(-1), $(parse_node(n.args[2]))))
+    return :(add($(parse_node(n.args[2])), CombDiff.mul(constant(-1), $(parse_node(n.args[3])))))
 end
 
 function parse_mul_node(m::Expr)
     @assert m.args[1] == :*
-    return :(mul($(parse_node.(m.args[2:end])...)))
+    return :(CombDiff.mul($(parse_node.(m.args[2:end])...)))
 end
 
 
@@ -651,7 +651,7 @@ function parse_domain_indicator_node(Indicator, n)
     return :(domain_indicator($(i), $(d), $(body)))
 end
 
-function convert_pct_type(::T) where T <: Number
+function convert_pct_type(::Type{T}) where T <: Number
     if T <: Integer
         return I()
     elseif T <: Real
@@ -667,8 +667,15 @@ function convert_pct_type(tensor::RangedTensor{S, T}) where {S <: Number, T}
     return  MapType(VecType([Domain(N(), constant(l), constant(u)) for (l, u) in tensor.ranges]), convert_pct_type(S(0)))
 end
 
-function convert_pct_type(::T) where T
-    elem_type, n_dims = if T.name.name == :Array
+#= eltype(::Type{<:AbstractArray{T}}) where {T} = T =#
+function convert_pct_type(::Type{<:AbstractArray{T, D}}) where {T, D} 
+    #= println(S)
+    println(T) =#
+
+    output_type = convert_pct_type(T)
+    return MapType(VecType(fill(N(), D)), output_type)
+
+    #= elem_type, n_dims = if T.name.name == :Array
          T.parameters
     elseif T.name.name == :Vector
         first(T.parameters), 1
@@ -676,6 +683,19 @@ function convert_pct_type(::T) where T
         error("type $(T) not supported")
     end
     output_type = convert_pct_type(elem_type(0))
-    return MapType(VecType(fill(N(), n_dims)), output_type)
+    return MapType(VecType(fill(N(), n_dims)), output_type) =#
+end
+
+function convert_pct_type(::T) where T <: Union{Number, AbstractArray}
+    return convert_pct_type(T)
+end
+
+function convert_pct_type(f::T) where T <: Function
+    _, arg_types... = methods(f)[1].sig.parameters
+    return_type = Base.return_types(f, arg_types)[1]
+
+    return_pct_type = convert_pct_type(return_type)
+    return_arg_type = [convert_pct_type(a) for a in arg_types]
+    return MapType(VecType(return_arg_type), return_pct_type)
 end
 

@@ -73,7 +73,7 @@ function codegen(m::Mul)
     # if all(t -> base(get_type(t)) == I() || base(get_type(t)) == N(), denominators)
     #     return :(div($(codegen(mul(nominators...))), $(codegen(mul(denominators...)))))
     # else
-    return :($(codegen(mul(nominators...))) / $(codegen(mul(denominators...))))
+    return :($(codegen(CombDiff.mul(nominators...))) / $(codegen(CombDiff.mul(denominators...))))
     # end
 end
 
@@ -95,31 +95,75 @@ function codegen(m::Map)
             end
         ))
     else
-        offset_bounds = map(b->first(simplify(add(subtract(b, lower(get_type(b))), constant(1)); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false))), get_bound(m))
-        loop = :(get_data(_t)[$(codegen.(offset_bounds)...)] = $(codegen(get_body(m))))
-        @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
-            loop = :(
-                for $(codegen(b)) in $(first(s)):$(last(s))
+        offset_bounds = map(b -> first(simplify(add(subtract(b, lower(get_type(b))), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), get_bound(m))
+
+        if any(s -> first(s) != 1, sizes)
+
+            loop = :(get_data(_t)[$(codegen.(offset_bounds)...)] = $(codegen(get_body(m))))
+            @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
+                loop = :(
+                    for $(codegen(b)) in $(first(s)):$(last(s))
+                        $(loop)
+                    end
+                )
+            end
+
+            ranges = [Expr(:call, Symbol("=>"), l, r) for (l, r) in sizes]
+
+            return :(
+                let _t = ranged_tensor($(codegen(get_type(get_body(m)))), $(ranges...))
                     $(loop)
+                    _t
                 end
             )
+        else
+            loop = :(_t[$(codegen.(offset_bounds)...)] = $(codegen(get_body(m))))
+            @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
+                loop = :(
+                    for $(codegen(b)) in $(first(s)):$(last(s))
+                        $(loop)
+                    end
+                )
+            end
+
+            ranges = [Expr(:call, Symbol("=>"), l, r) for (l, r) in sizes]
+
+            body_type = get_type(get_body(m)) 
+            
+            if isa(body_type, ElementType)
+                return :(
+                    let _t = zeros($(codegen(body_type)), $(last.(sizes)...))
+                        $(loop)
+                        _t
+                    end
+                )
+            else
+
+                return :(
+                    let _t = Array{$(codegen(body_type)), $(length(sizes))}(undef, $(last.(sizes)...))
+                        $(loop)
+                        _t
+                    end
+                )
+
+            end
+
         end
 
-        ranges = [Expr(:call, Symbol("=>"), l, r) for (l, r) in sizes]
-
-        return :(
-            let _t = ranged_tensor($(codegen(get_type(get_body(m)))), $(ranges...))
-                $(loop)
-                _t
-            end
-        )
     end
 end
 
-codegen(d::Domain) = codegen(base(d))   
-codegen(d::Union{N, I}) = :(Int)
-codegen(d::R) = :(Float64)
-codegen(d::C) = :(ComplexF64)
+codegen(d::Domain) = codegen(base(d))
+codegen(::Union{N,I}) = :(Int)
+codegen(::R) = :(Float64)
+codegen(::C) = :(ComplexF64)
+function codegen(t::MapType)
+    if all(b -> isa(b, ElementType) && base(b) == N(), get_bound_type(t))
+        :(Array{$(codegen(get_body_type(t))), $(length(get_bound_type(t)))})
+    else
+        error("$(pretty(t)) cannot be converted to an array type.")
+    end
+end
 
 
 function codegen(c::Conjugate)
@@ -127,10 +171,14 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
-    if all(t -> base(get_type(t)) == N() || base(get_type(t)) == I(), args(c))
+    if all(t -> isa(get_type(t), ElementType) && (base(get_type(t)) == N() || base(get_type(t)) == I()), args(c))
         offsets = lower.(get_content_type(get_bound_type(get_type(mapp(c)))))
-        new_args = map((t, o)->first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul=>true, :gcd=>false, :logging=>false) )), content(args(c)), offsets)
-        :(get_data($(codegen(mapp(c))))[$(codegen.(new_args)...)])
+        new_args = map((t, o) -> first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), content(args(c)), offsets)
+        if all(x->x==1, get_body.(offsets)) 
+            :($(codegen(mapp(c)))[$(codegen.(new_args)...)])
+        else
+            :(get_data($(codegen(mapp(c))))[$(codegen.(new_args)...)])
+        end
     else
         :($(codegen(mapp(c)))($(codegen.(args(c))...)))
     end

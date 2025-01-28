@@ -443,7 +443,7 @@ fibers(f::AbstractFibration) = f.fibers
 # => z -> b -> f(z)(b) => z -> f(z)
 function as_map(fib::Fibration, zs=z_vars(fib))::Map
     b_fb = as_map(fibers(fib))
-    pct_map(zs..., pct_map(fiber_var(fib)..., evaluate(call(b_fb, zs...))))
+    pct_map(zs..., pct_map(fiber_var(fib)..., ecall(b_fb, zs...)))
 end
 
 

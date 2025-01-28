@@ -1162,11 +1162,14 @@ function neighbors(d::Delta; settings=default_settings())
         i, j = upper(d), lower(d)
         p, q = upper(get_body(d)), lower(get_body(d))
         # double-delta
-        Set([i, j]) == Set([p, q]) && push!(result, get_body(d); dired=true, name="double_delta")
+        Set([i, j]) == Set([p, q]) &&
+            base(get_type(i)) == N() &&
+            base(get_type(j)) == N() &&
+            push!(result, get_body(d); dired=true, name="double_delta")
         # delta-ex
         # there is currently no need to consider delta exchange
         # because the multi-index sum is implemented as a single node.
-        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
+        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
     end
 
     # TODO: use equivalence instead of equality

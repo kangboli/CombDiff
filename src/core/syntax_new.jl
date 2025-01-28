@@ -4,6 +4,12 @@ macro comb(expr, f=:_, ctx=:(TypeContext()))
     esc(:(@pct $(f) $(ctx) $(expr.args[1])))
 end
 
+function is_nested_arr_type(::Type{T}) where T
+    T <: Number && return true
+    T <: AbstractArray && return is_nested_arr_type(eltype(T))
+    T <: RangedTensor && return true
+end
+
 function nein_base(expr, ctx, interior)
     return :(
         begin
@@ -20,15 +26,13 @@ function nein_base(expr, ctx, interior)
 
             content, ctx = @pit($(expr), ctx)
 
-            global_array_names = filter(n->isa(eval(n), Number) || 
-                                        (isa(eval(n), Array) && eltype(eval(n)) <: Number) ||
-                                        isa(eval(n), RangedTensor), global_var_names)
+            global_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
+                                        isa(eval(n), Function), global_var_names)
             global_array_names = filter(n->content!==nothing && contains_name(content, n), global_array_names)
             global_array_types = map(n->convert_pct_type(eval(n)), global_array_names)
 
-            local_array_names = filter(n->isa(local_vars[n], Number) ||
-                                       (isa(local_vars[n], Array) && eltype(local_vars[n]) <: Number) ||
-                                       isa(local_vars[n], RangedTensor), local_var_names)
+            local_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
+                                       isa(eval(n), Function), local_var_names)
             local_array_names = filter(n->content!==nothing && contains_name(content, n), local_array_names)
             local_array_types = map(n->convert_pct_type(local_vars[n]), local_array_names)
 
@@ -59,6 +63,15 @@ macro nein(expr, f=:_, ctx=:(TypeContext()))
         end
     ))
 end
+
+module JitCache
+
+function_counter::Int = 0
+
+function_dict = Dict{Expr, Symbol}()
+    
+end
+
 
 macro neintype(expr, f=:_, ctx=:(TypeContext()))
     expr = purge_line_numbers(expr.args[1])
@@ -98,15 +111,56 @@ macro neinshow(expr, f=:_, ctx=:(TypeContext()))
     return esc(:(
         begin
             $(nein_base(expr, ctx,
-                        :((inference(pct_map(global_params..., pct_map(local_params..., $(return_node)))),
+                        :((inference(pct_map(global_params..., local_params..., $(return_node)))),
                 eval.(Symbol.(global_array_names)),
                 [local_vars[n] for n in local_array_names]
                          ))
               
-            ))
+            )
         end
     ))
 end
 
 
 
+#= macro nein(expr, f=:_, ctx=:(TypeContext()))
+
+    expr = purge_line_numbers(expr.args[1])
+    JitCache.function_counter::Int = 0
+
+    JitCache.function_dict = Dict{Expr, Symbol}()
+
+    if haskey(JitCache.function_dict, expr)
+        function_name = JitCache.function_dict[expr]
+        func = Expr(Symbol("."), Expr(Symbol("."), :CombDiff, QuoteNode(:JitCache)), QuoteNode(function_name))
+        return :(Base.invokelatest($(func), eval.(Symbol.(global_array_names))..., [local_vars[n] for n in local_array_names]...))
+    else
+        function_name = Symbol("__$(JitCache.function_counter)")
+        JitCache.function_dict[expr] = function_name
+        JitCache.function_counter += 1
+        func = Expr(Symbol("."), Expr(Symbol("."), :CombDiff, QuoteNode(:JitCache)), QuoteNode(function_name))
+    end
+
+    return_node = if f == :_ 
+        :(content)
+    else
+        :(continuition($(f), content))
+    end
+
+    return esc(:(
+        begin
+            $(nein_base(expr, ctx, 
+                        :(
+                        begin
+                        $(func) = eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., eval_all($(return_node)))))))
+                        Base.invokelatest(
+                        $(func)
+                #= eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., eval_all($(return_node))))))) =#
+                    , 
+                eval.(Symbol.(global_array_names))..., [local_vars[n] for n in local_array_names]...)
+                        end
+                        )))
+        end
+    ))
+end
+ =#
