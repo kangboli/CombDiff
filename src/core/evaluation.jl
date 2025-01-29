@@ -12,7 +12,7 @@ end
 Get the set of free and dummy variables that are in a node.
 """
 function free_and_dummy(n::APN)
-    all_free, outer_dummy = Set{Var}(), own_dummy(n)
+    all_free, outer_dummy = own_free(n), own_dummy(n)
     all_dummies = copy(outer_dummy)
     for t in content(n)
         free, dummy = free_and_dummy(t)
@@ -27,9 +27,34 @@ end
 free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
 free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
 
+get_free(d::Domain) = union(get_free(lower(d)), get_free(upper(d)))
+get_free(::AbstractPCTType) = Set{Var}()
+
+function get_free(m::MapType)
+    all_free = Set{Var}()
+    for t in get_bound_type(m)
+        free = get_free(t)
+        union!(all_free, free)
+    end
+    return all_free
+end
+
+own_free(::APN) = Set{Var}()
+
+function own_free(c::T) where {T<:Union{PermInv,Let,Map}}
+    all_free = Set{Var}()
+    for t in get_type.(content(get_bound(c)))
+        t in [C(), N(), I(), R()] && continue
+        free = get_free(t)
+        union!(all_free, free)
+    end
+    return all_free
+end
+
+
 own_dummy(::APN) = Set{Var}()
 
-function own_dummy(c::T) where T <: Union{PermInv, Let, Map}
+function own_dummy(c::T) where {T<:Union{PermInv,Let,Map}}
     strip_copy(v::Var) = v
     strip_copy(v::Copy) = get_body(v)
     return Set{Var}(map(strip_copy, content(get_bound(c))))
@@ -71,9 +96,9 @@ contains_name(v::Var, s::Symbol)::Bool = name(v) == s || contains_name(get_type(
 
 contains_name(c::Constant, ::Symbol)::Bool = false
 
-contains_name(c::MapType, s::Symbol)::Bool = any(t->contains_name(t, s), [get_bound_type(c), get_body_type(c)])
-contains_name(c::VecType, s::Symbol)::Bool = any(t->contains_name(t, s), get_content_type(c))
-contains_name(c::Domain, s::Symbol)::Bool = any(t->contains_name(t, s), [upper(c), lower(c)])
+contains_name(c::MapType, s::Symbol)::Bool = any(t -> contains_name(t, s), [get_bound_type(c), get_body_type(c)])
+contains_name(c::VecType, s::Symbol)::Bool = any(t -> contains_name(t, s), get_content_type(c))
+contains_name(c::Domain, s::Symbol)::Bool = any(t -> contains_name(t, s), [upper(c), lower(c)])
 contains_name(c::AbstractPCTType, s::Symbol)::Bool = false
 
 struct SymbolGenerator
@@ -183,8 +208,9 @@ end
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
     new = R == Call ? eval_all(new) : new
     if !replace_dummy
-        _, dummies = free_and_dummy(n)
+        free, dummies = free_and_dummy(n)
         name(old) in name.(dummies) && return n
+        # name(old) in name.(free) || return n
         n = resolve_conflict(n, old, new, dummies)
     end
 
@@ -293,7 +319,7 @@ function evaluate(l::Let)
         isempty(substs) && return body
         old, substs... = substs
         new, subst_args... = subst_args
-        subst_args = map(t->subst(t, old, new), subst_args) 
+        subst_args = map(t -> subst(t, old, new), subst_args)
         return subst_all(substs, subst_args, subst(body, old, new))
     end
     new_call = evaluate(get_body(l))

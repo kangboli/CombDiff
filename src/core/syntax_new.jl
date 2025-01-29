@@ -1,10 +1,10 @@
-export @nein, @neinshow, @comb, @neintype, @neinspace
+export @nein, @neinshow, @comb, @neintype, @neinspace, @mein, @meinview
 
 macro comb(expr, f=:_, ctx=:(TypeContext()))
     esc(:(@pct $(f) $(ctx) $(expr.args[1])))
 end
 
-function is_nested_arr_type(::Type{T}) where T
+function is_nested_arr_type(::Type{T}) where {T}
     T <: Number && return true
     T <: AbstractArray && return is_nested_arr_type(eltype(T))
     T <: RangedTensor && return true
@@ -17,28 +17,28 @@ function nein_base(expr, ctx, interior)
             local_vars = Base.@locals()
             local_var_names = collect(keys(local_vars))
 
-            global_type_names = filter(n->isa(eval(n), AbstractPCTType), global_var_names)
-            local_type_names = filter(n->isa(local_vars[n], AbstractPCTType), local_var_names)
+            global_type_names = filter(n -> isa(eval(n), AbstractPCTType), global_var_names)
+            local_type_names = filter(n -> isa(local_vars[n], AbstractPCTType), local_var_names)
 
             let ctx = deepcopy($(ctx))
-            map(n->push_type!(ctx, n, eval(n)), global_type_names)
-            map(n->push_type!(ctx, n, local_vars[n]), local_type_names)
+                map(n -> push_type!(ctx, n, eval(n)), global_type_names)
+                map(n -> push_type!(ctx, n, local_vars[n]), local_type_names)
 
-            content, ctx = @pit($(expr), ctx)
+                content, ctx = @pit($(expr), ctx)
 
-            global_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
-                                        isa(eval(n), Function), global_var_names)
-            global_array_names = filter(n->content!==nothing && contains_name(content, n), global_array_names)
-            global_array_types = map(n->convert_pct_type(eval(n)), global_array_names)
+                global_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
+                        isa(eval(n), Function), global_var_names)
+                global_array_names = filter(n -> content !== nothing && contains_name(content, n), global_array_names)
+                global_array_types = map(n -> convert_pct_type(eval(n)), global_array_names)
 
-            local_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
-                                       isa(eval(n), Function), local_var_names)
-            local_array_names = filter(n->content!==nothing && contains_name(content, n), local_array_names)
-            local_array_types = map(n->convert_pct_type(local_vars[n]), local_array_names)
+                local_array_names = filter(n -> CombDiff.is_nested_arr_type(typeof(eval(n))) ||
+                        isa(eval(n), Function), local_var_names)
+                local_array_names = filter(n -> content !== nothing && contains_name(content, n), local_array_names)
+                local_array_types = map(n -> convert_pct_type(local_vars[n]), local_array_names)
 
-            global_params = map(var, global_array_names, global_array_types)
-            local_params = map(var, local_array_names, local_array_types)
-            $(interior)
+                global_params = map(var, global_array_names, global_array_types)
+                local_params = map(var, local_array_names, local_array_types)
+                $(interior)
             end
         end
     )
@@ -47,7 +47,7 @@ end
 macro nein(expr, f=:_, ctx=:(TypeContext()))
 
     expr = purge_line_numbers(expr.args[1])
-    return_node = if f == :_ 
+    return_node = if f == :_
         :(content)
     else
         :(continuition($(f), content))
@@ -57,20 +57,23 @@ macro nein(expr, f=:_, ctx=:(TypeContext()))
         begin
             $(nein_base(expr, ctx, :(Base.invokelatest(
                 Base.invokelatest(
-                    eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., eval_all($(return_node))))))), 
+                    eval(codegen(inference(pct_map(global_params..., pct_map(local_params..., eval_all($(return_node))))))),
                     eval.(Symbol.(global_array_names))...),
                 [local_vars[n] for n in local_array_names]...))))
         end
     ))
 end
 
-module JitCache
 
-function_counter::Int = 0
-
-function_dict = Dict{Expr, Symbol}()
-    
+function_dict = Dict{Pair{Expr,Vector{Type}},Function}()
+free_dict = Dict{Expr,Vector{Symbol}}()
+expr_dict = Dict{Expr,APN}()
+function clear_cache!()
+    CombDiff.function_dict = Dict{Pair{Expr,Vector{Type}},Function}()
+    CombDiff.free_dict = Dict{Expr,Vector{Symbol}}()
+    CombDiff.expr_dict = Dict{Expr,APN}()
 end
+
 
 
 macro neintype(expr, f=:_, ctx=:(TypeContext()))
@@ -87,8 +90,8 @@ end
 
 macro neinspace(expr, f=:_, ctx=:(TypeContext()))
     expr = purge_line_numbers(expr.args[1])
-    expr = :(@space _tmp_space begin 
-        $(expr) 
+    expr = :(@space _tmp_space begin
+        $(expr)
     end)
 
     return esc(:(
@@ -102,7 +105,7 @@ end
 macro neinshow(expr, f=:_, ctx=:(TypeContext()))
 
     expr = purge_line_numbers(expr.args[1])
-    return_node = if f == :_ 
+    return_node = if f == :_
         :(content)
     else
         :(continuition($(f), content))
@@ -111,14 +114,80 @@ macro neinshow(expr, f=:_, ctx=:(TypeContext()))
     return esc(:(
         begin
             $(nein_base(expr, ctx,
-                        :((inference(pct_map(global_params..., local_params..., $(return_node)))),
-                eval.(Symbol.(global_array_names)),
-                [local_vars[n] for n in local_array_names]
-                         ))
-              
+                :((inference(pct_map(global_params..., local_params..., $(return_node)))),
+                    eval.(Symbol.(global_array_names)),
+                    [local_vars[n] for n in local_array_names]
+                ))
             )
         end
     ))
+end
+
+macro meinview(expr, f=:_, ctx=:(TypeContext()))
+    expr = purge_line_numbers(expr.args[1])
+    node = parse_node(expr)
+    if isa(node, MutatingStatement)
+        node = statement_to_mut([node], lhs(node))
+    end
+    return_node = f == :_ ? node : :(continuition($(f), $(node)))
+
+    esc(:(
+        begin
+            _ctx = $(ctx)
+            func = $(return_node)
+            free = CombDiff.get_body.(CombDiff.get_free(func))
+            context_types = typeof.(eval.(free))
+            converted = CombDiff.convert_pct_type.(context_types)
+            func = inference(pct_map(map(var, free, converted)..., func))
+            func, free
+        end))
+end
+
+"""
+The macro is a two-stage evaluation.
+The first stage obtains the free variables.
+This cannot be done in the calling scope.
+
+"""
+macro mein(expr, f=:_, ctx=:(TypeContext()))
+
+    expr = purge_line_numbers(expr.args[1])
+    node = parse_node(expr)
+    if isa(node, MutatingStatement)
+        node = statement_to_mut([node], lhs(node))
+    end
+    return_node = f == :_ ? node : :(continuition($(f), $(node)))
+
+    func, free, ctx = eval(:(
+        begin
+            _ctx = $(ctx)
+            func = get(CombDiff.expr_dict, $(QuoteNode(expr)), nothing)
+            if func === nothing
+                func = $(return_node)
+                CombDiff.expr_dict[$(QuoteNode(expr))] = func
+            end
+            free = get(CombDiff.free_dict, $(QuoteNode(expr)), nothing)
+            if free === nothing
+                free = CombDiff.get_body.(CombDiff.get_free(func))
+                CombDiff.free_dict[$(QuoteNode(expr))] = free
+            end
+            func, free, _ctx
+        end
+    ))
+
+    return esc(:(
+        begin
+            _ctx = $(ctx)
+            context_types = typeof.([$(free...)])
+            compiled = get(CombDiff.function_dict, $(QuoteNode(expr)) => context_types, nothing)
+            if compiled === nothing
+                converted = CombDiff.convert_pct_type.([$(free...)])
+                func = pct_map(map(var, $(free), converted)..., $func)
+                compiled = eval(CombDiff.codegen(inference(func)))
+                CombDiff.function_dict[$(QuoteNode(expr))=>context_types] = compiled
+            end
+            compiled($(free...))
+        end))
 end
 
 

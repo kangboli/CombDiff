@@ -34,12 +34,12 @@ function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
     return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
 end
 
-function e_class_reduction(::Type{Let}, bound::PCTVector, args::PCTVector, body::APN)
+function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where T <: AbstractLet
     if isempty(content(bound))
         return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
     end
 
-    return Let, [bound, args, body], partial_inference(Let, bound, args, body)
+    return T, [bound, args, body], partial_inference(T, bound, args, body)
 end
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}
@@ -170,22 +170,25 @@ function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T<:Co
     T, [bound, summand], partial_inference(Sum, bound, summand)
 end
 
-flatten_mul(a::Mul) = vcat(flatten_mul.(content(get_body(a)))...)
-flatten_mul(a::APN) = [a]
+flatten_mul(a::Mul)::Vector{APN} = vcat(flatten_mul.(content(get_body(a)))...)
+flatten_mul(a::APN)::Vector{APN} = [a]
 
 function e_class_reduction(::Type{Mul}, term::PCTVector)
+    
     args = vcat(flatten_mul.(content(term))...)
 
     is_constant = group(t -> isa(t, Constant), args)
     args_const = get(is_constant, true, [])
-    args = [constant(prod(get_body, args_const, init=1)), get(is_constant, false, [])...]
-    args = filter(t -> !is_one(t), args)
-    any(is_zero, args) && return Constant, [0], I()
+    prefactor = constant(prod(get_body.(args_const), init=1))
+    args = get(is_constant, false, [])
+    is_one(prefactor) || push!(args, prefactor)
+    is_zero(prefactor) && return Constant, [0], I()
+    #= args = [prefactor, ...] =#
+    #= args = filter(t -> !is_one(t), args) =#
+    #= any(is_zero, args) && return Constant, [0], I() =#
     isempty(args) && return Constant, [1], N()
     sort!(args)
-    if length(args) == 1
-        return repack(first(args))
-    end
+    length(args) == 1 && return repack(first(args))
 
     # -1 ⋅ (a + b) -> - a - b. The e class itself needs to be able to do basic cancellations,
     # which is hard in factorized form.

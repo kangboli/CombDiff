@@ -118,7 +118,7 @@ function inference(v::Var, context::TypeContext)
     return set_type(new_v, inference(get_type(new_v), context))
 end
 
-function inference(l::Let, context::TypeContext)
+function inference(l::T, context::TypeContext) where T <: AbstractLet
     typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
@@ -132,7 +132,7 @@ function inference(l::Let, context::TypeContext)
 
     typed_content = inference(get_body(l), context)
     map(f -> pop_var!(context, isa(f, Copy) ? get_body(get_body(f)) : get_body(f)), typed_bound)
-    return pct_let(typed_bound..., typed_args..., typed_content)
+    return make_node(T, pct_vec(typed_bound...), pct_vec(typed_args...), typed_content)
 end
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
@@ -164,7 +164,7 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: Abst
     return get_body_type(get_type(first(terms)))
 end
 
-function partial_inference(::Type{Let}, terms...)::AbstractPCTType
+function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
     return get_type(last(terms))
 end
 
@@ -206,12 +206,10 @@ function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCT
 end
 
 
-function partial_inference(::Type{Constant}, term)::AbstractPCTType
-    isa(term, Int) && term > 0 && return N()
-    isa(term, Int) && return I()
-    isa(term, Real) && return R()
-    isa(term, Complex) && return C()
-end
+partial_inference(::Type{Constant}, ::Unsigned) = N()
+partial_inference(::Type{Constant}, ::Int) = I()
+partial_inference(::Type{Constant}, ::Real) = R()
+partial_inference(::Type{Constant}, ::Complex) = C()
 
 function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
     get_type(last(terms))

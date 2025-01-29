@@ -190,8 +190,9 @@ end
 
 purge_line_numbers(e::Any) = e
 function purge_line_numbers(expr::Expr)
-    expr.args = filter(a -> !isa(a, LineNumberNode), expr.args)
-    expr.args = map(purge_line_numbers, expr.args)
+    #= expr.args = filter(a -> !isa(a, LineNumberNode), expr.args)
+    expr.args = map(purge_line_numbers, expr.args) =#
+    expr.args = [purge_line_numbers(a) for a in expr.args if !isa(a, LineNumberNode)]
     return expr
 end
 purge_empty_exprs(e::Any) = e
@@ -205,12 +206,20 @@ function parse_node(::LineNumberNode)
     return nothing
 end
 
-struct Statement
+abstract type AbstractStatement end
+
+struct Statement <: AbstractStatement
     lhs::Expr
     rhs::Expr
 end
-lhs(s::Statement) = s.lhs
-rhs(s::Statement) = s.rhs
+
+struct MutatingStatement <: AbstractStatement
+    lhs::Expr
+    rhs::Expr
+end
+
+lhs(s::AbstractStatement) = s.lhs
+rhs(s::AbstractStatement) = s.rhs
 
 struct Block
     statements::Vector{Statement}
@@ -256,6 +265,7 @@ function parse_node(n::Expr)
     n.head == Symbol("'") && return parse_conjugate_node(n)
     n.head == :(=) && return parse_statement_node(n)
     n.head == :tuple && return parse_pctvector_node(n)
+    n.head == Symbol("::") && return parse_node(Param, n)
     return :()
 end
 
@@ -615,9 +625,16 @@ function parse_conjugate_node(c::Expr)
 end
 
 function parse_statement_node(n::Expr)
-    lhs = parse_node(n.args[1])
-    rhs = parse_node(n.args[2])
-    return Statement(lhs, rhs)
+    if hasfield(typeof(n.args[1]), :head) && n.args[1].head == :call
+        params = n.args[1].args[2:end]
+        func = n.args[1].args[1]
+        body = n.args[2]
+        return MutatingStatement(parse_node(func), :(pct_map($(parse_node.(params)...), $(parse_node(body)))))
+    else
+        lhs = parse_node(n.args[1])
+        rhs = parse_node(n.args[2])
+        return Statement(lhs, rhs)
+    end
 end
 
 function parse_block_node(n::Expr)
@@ -632,6 +649,13 @@ function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
     bound, args = lhs.(statements), rhs.(statements)
     return :(pct_let($(bound...), $(args...), $(return_value)))
 end
+
+function statement_to_mut(statements::Vector, return_value::Union{Expr,Symbol})
+    isempty(statements) && return return_value
+    bound, args = lhs.(statements), rhs.(statements)
+    return :(CombDiff.mutate($(bound...), $(args...), $(return_value)))
+end
+
 
 function parse_pctvector_node(n::Expr)
     return :(pct_vec($(map(parse_node, n.args)...)))
@@ -651,15 +675,15 @@ function parse_domain_indicator_node(Indicator, n)
     return :(domain_indicator($(i), $(d), $(body)))
 end
 
-function convert_pct_type(::Type{T}) where T <: Number
-    if T <: Integer
+function convert_pct_type(::Type{T})::ElementType where T <: Number
+    if T <: Unsigned
+        return N()
+    elseif T <: Integer
         return I()
     elseif T <: Real
         return R()
-    elseif T <: Number
-        return C()
     else
-        error("type $(T) not supported")
+        return C()
     end
 end
 

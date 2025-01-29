@@ -29,7 +29,7 @@ export
     Composition,
     RevComposition,
     pct_exp,
-    pct_log, 
+    pct_log,
     pct_let,
     Indicator,
     indicator,
@@ -112,14 +112,15 @@ infty() = var(:∞, R())
 # nabla maps one input to one output. 
 # for now we only need to know of the number of input/output, but 
 # we need to figure out the actual (parametric) type at some point.
-nabla() = var(:∇, MapType(VecType([UndeterminedPCTType()]), VecType([UndeterminedPCTType()]), Dict(:linear=>true)))
+nabla() = var(:∇, MapType(VecType([UndeterminedPCTType()]), VecType([UndeterminedPCTType()]), Dict(:linear => true)))
 
-_MINFTY=nothing
-minfty() = if _MINFTY === nothing 
-    global _MINFTY = mul(constant(-1), infty())
-else
-    _MINFTY
-end
+_MINFTY = nothing
+minfty() =
+    if _MINFTY === nothing
+        global _MINFTY = mul(constant(-1), infty())
+    else
+        _MINFTY
+    end
 
 struct Conjugate <: APN
     type::AbstractPCTType
@@ -361,20 +362,22 @@ is_zero(t) = isa(t, Constant) && get_body(t) == 0
 is_one(t) = isa(t, Constant) && get_body(t) == 1
 is_minus_one(t) = isa(t, Constant) && get_body(t) == -1
 
-struct Let <: APN
+abstract type AbstractLet <: APN end
+
+struct Let <: AbstractLet
     type::AbstractPCTType
     bound::PCTVector
     args::PCTVector
     body::APN
 end
 
-args(l::Let) = l.args
+args(l::AbstractLet) = l.args
 function pct_let(terms::Vararg{APN})
     terms = collect(terms)
     make_node(Let, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
 end
 
-content_fields(::Type{Let}) = [:bound, :args, :body]
+content_fields(::Type{<:AbstractLet}) = [:bound, :args, :body]
 
 
 struct Negate <: APN
@@ -397,7 +400,7 @@ end
 The same thing as Composition. The only difference is how it is printed.
 """
 
-struct RevComposition <: AbstractComp 
+struct RevComposition <: AbstractComp
     type::AbstractPCTType
     body::PCTVector
 end
@@ -422,11 +425,11 @@ end
 abstract type FieldOperators <: TerminalNode end
 
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall, FieldOperators}, args::Vararg)
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FieldOperators}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
-struct Copy  <: Univariate
+struct Copy <: Univariate
     type::AbstractPCTType
     body::Var
 end
@@ -448,7 +451,7 @@ struct Indicator <: AbstractDelta
 end
 
 
-function make_delta(::Type{T}, upper_lower::Vararg{APN}) where T <: AbstractDelta
+function make_delta(::Type{T}, upper_lower::Vararg{APN}) where {T<:AbstractDelta}
     upper_lower = collect(upper_lower)
     content = last(upper_lower)
     upper_lower = upper_lower[1:end-1]
@@ -461,7 +464,7 @@ function make_delta(::Type{T}, upper_lower::Vararg{APN}) where T <: AbstractDelt
     end
 end
 
-function indicator(upper_lower::Vararg{APN}) 
+function indicator(upper_lower::Vararg{APN})
     make_delta(Indicator, upper_lower...)
 end
 
@@ -503,3 +506,15 @@ int_div(nom, denom) = make_node(IntDiv, nom, denom)
 get_nom(n::IntDiv) = n.nom
 get_denom(n::IntDiv) = n.denom
 
+struct Mutate <: AbstractLet
+    type::AbstractPCTType
+    bound::PCTVector
+    args::PCTVector
+    body::APN
+end
+
+function mutate(terms::Vararg{APN})
+    terms = collect(terms)
+    node = make_node(Mutate, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
+    return node
+end
