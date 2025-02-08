@@ -9,7 +9,12 @@ end
 
 function find_dimensions(v::Var, c::PrimitiveCall, existing_dims=[])
     i = findfirst(t -> isa(t, Var) && get_body(t) == get_body(v), content(args(c)))
-    i !== nothing && push!(existing_dims, [:(1), :(size($(codegen(mapp(c))), $(i)))])
+    if i !== nothing 
+        isa(mapp(c), AbstractCall) && 
+        @warn "dimension inference failed for $(pretty(args(c)[i])): $(pretty(mapp(c))) may not have fixed dimensions
+        the type of $(pretty(args(c)[i])) may need to be explicitly declared."
+        push!(existing_dims, [:(1), :(size($(codegen(mapp(c))), $(i)))])
+    end
     for t in terms(c)
         append!(existing_dims, find_dimensions(v, t))
     end
@@ -37,21 +42,25 @@ function codegen(n::Sum)
     summand = get_body(n)
     sizes = map(b -> dimensions(b, summand), content(get_bound(n)))
     loop = codegen(summand)
+    sum_var_name = first(new_symbol(n))
 
     for (b, s) in zip(get_bound(n), sizes)
         loop = :(
-            let _sum = 0
+            let $(sum_var_name) = 0
                 @inbounds for $(codegen(b)) in $(first(s)):$(last(s))
-                    _sum += $(loop)
+                    $(sum_var_name) += $(loop)
                 end
-                _sum
+                $(sum_var_name)
             end
         )
     end
     return loop
 end
 
-codegen(v::Var) = get_body(v)
+function codegen(v::Var)
+    (v == infty() || v == minfty()) && @warn("Infinity detected.")
+    return get_body(v)
+end
 
 codegen(c::Constant) = get_body(c)
 
@@ -82,6 +91,16 @@ function codegen(i::IntDiv)
 end
 
 function codegen(m::Map, memory_target=nothing)
+    if length(get_bound(m)) == 1 && isa(get_body(m), Fold) && length(get_bound(get_body(m))) == 1 
+
+        fold = get_body(m)
+        b = first(get_bound(m))
+        b_fold = first(get_bound(fold))
+        if name(upper(get_type(b_fold))) == name(b) && lower(get_type(b_fold)) == lower(get_type(b))
+            return generate_accumulator(m)
+        end
+    end
+
 
     isempty(get_bound(m)) && return :(() -> $(codegen(get_body(m))))
 
@@ -94,7 +113,10 @@ function codegen(m::Map, memory_target=nothing)
         ))
     end
     offset_bounds = map(b -> first(simplify(add(subtract(b, lower(get_type(b))), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), get_bound(m))
-    loop_lhs = any(s -> first(s) != 1, sizes) ? :(get_data(_t)) : :(_t)
+
+    tensor_var_name = first(new_symbol(m))
+
+    loop_lhs = any(s -> first(s) != 1, sizes) ? :(get_data($(tensor_var_name))) : :($(tensor_var_name))
 
     ranges = [Expr(:call, Symbol("=>"), l, r) for (l, r) in sizes]
     body_type = get_type(get_body(m))
@@ -119,9 +141,9 @@ function codegen(m::Map, memory_target=nothing)
     end
 
     return :(
-        let _t = $(memory_target)
+        let $(tensor_var_name) = $(memory_target)
             $(loop)
-            _t
+            $(tensor_var_name)
         end
     )
 end
@@ -239,6 +261,69 @@ function codegen(n::Indicator)
         end
     )
 end
+
+function codegen(n::Fold)
+    b = first(get_bound(n))
+
+    body = get_body(n)
+    inputs = get_bound(body)
+    if length(inputs) > 0
+        assignment = :($(codegen.(inputs)...) = $(codegen(body))($(codegen.(inputs)...)))
+    else
+        assignment = :($(codegen(body))($(codegen.(inputs)...)))
+    end
+
+    return :(
+        ($(codegen.(inputs)...),) -> begin
+            for $(codegen(b)) in $(codegen(lower(get_type(b)))):$(codegen(upper(get_type(b))))
+                $(assignment)
+            end
+            $(codegen.(inputs)...)
+        end
+    )
+end
+
+function generate_accumulator(m::Map)
+    @assert length(get_bound(m)) == 1
+    @assert length(get_bound(get_body(m))) == 1
+    @assert isa(get_body(m), Fold)
+
+    tensor_var_name = first(new_symbol(m))
+    b = first(get_bound(m))
+
+    fold = get_body(m)
+    fold_b = first(get_bound(fold))
+    func = get_body(fold)
+
+    inputs = get_bound(func)
+    length(inputs) != 1 && error("Multiple return in accumulator not yet supported")
+    input = first(inputs)
+
+
+
+    range = (codegen(lower(get_type(b))), codegen(upper(get_type(b))))
+    if lower(get_type(b)) != constant(1)
+        memory_target = :(ranged_tensor($(codegen(get_type(get_body(m)))), $(first(range)):$(last(range))))
+    elseif isa(get_type(input), ElementType)
+        memory_target = :(zeros($(codegen(get_type(input))), $(last(range))))
+    else
+        memory_target = :(Array{$(codegen(get_type(input))),1}(undef, $(last(range))))
+    end
+
+    return :(
+        ($(codegen(input)),) -> begin
+            let $(tensor_var_name) = $(memory_target)
+                for $(codegen(fold_b)) in $(first(range)):$(last(range))
+                    $(codegen(input)) = $(codegen(func))($(codegen(input)))
+                    $(tensor_var_name)[$(codegen(fold_b))] = $(codegen(input))
+                end
+                tensor_var_name
+            end
+        end
+    )
+end
+
+
 #= function Base.getindex(t::RangedTensor, indices::Vararg{Int})
     return t.data[(1 .+ collect(indices) - first.(t.ranges))...]
 end

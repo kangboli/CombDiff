@@ -243,7 +243,7 @@ function verbose(a::Add)
     "\n)::$(pretty(get_type(a)))"
 end
 
-pretty(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))"
+pretty(p::PrimitiveCall) = "($(pretty(mapp(p))))($(pretty(args(p))))"
 
 function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
@@ -448,3 +448,6 @@ pretty(s::Union{Symbol, Number}) = string(s)
 
 pretty(d::IntDiv) = "div($(pretty(get_nom(d))), $(pretty(get_denom(d))))"
 latex(d::IntDiv) = "div($(latex(get_nom(d))),$(latex(get_denom(d))))"
+pretty(f::Fold) = "∧($(pretty(get_bound(f))), $(pretty(get_body(f))))"
+verbose(f::Fold) = "∧($(verbose(get_bound(f))), $(pretty(get_body(f))))"
+

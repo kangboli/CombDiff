@@ -243,6 +243,7 @@ function parse_node(n::Expr)
         (func == :∑ || func == :sum) && return parse_contraction_node(Sum, n)
         (func == :∫ || func == :int) && return parse_contraction_node(Integral, n)
         (func == :∏ || func == :prod) && return parse_prod_node(n)
+        (func == :∧ || func == :fold) && return parse_fold_node(n)
         (func == :delta || func == :δ) && return parse_delta_node(Delta, n)
         func == :delta_not && return parse_delta_node(DeltaNot, n)
         (func == :indicator || func == :𝕀) && return parse_indicator_node(Indicator, n)
@@ -274,11 +275,11 @@ end
 function parse_div_node(n)
     nom = parse_node(n.args[2])
     denominator = parse_node(n.args[3])
-    
+
     if n.args[1] == :/
         return :(CombDiff.mul($(nom), monomial($(denominator), constant(-1))))
     else
-        return :(int_div($(nom), $(denominator)))
+        return :(CombDiff.int_div($(nom), $(denominator)))
     end
 end
 
@@ -286,24 +287,24 @@ function parse_composite_node(n::Expr)
     f1 = parse_node(n.args[2])
     f2 = parse_node(n.args[3])
 
-    return :(composite($(f1), $(f2)))
+    return :(CombDiff.composite($(f1), $(f2)))
 end
 function parse_grad_node(n::Expr)
-    :(call(nabla(), ($(parse_node(n.args[2])))))
+    :(CombDiff.call(nabla(), ($(parse_node(n.args[2])))))
 end
 
 function parse_reverse_composite_node(n::Expr)
     f1 = parse_node(n.args[2])
     f2 = parse_node(n.args[3])
 
-    return :(rev_composite($(f2), $(f1)))
+    return :(CombDiff.rev_composite($(f2), $(f1)))
 end
 
 function parse_univariate_node(n::Expr)
     if n.args[1] == :exp
-        return :(pct_exp($(parse_node(n.args[2]))))
+        return :(CombDiff.pct_exp($(parse_node(n.args[2]))))
     elseif n.args[1] == :log
-        return :(pct_log($(parse_node(n.args[2]))))
+        return :(CombDiff.pct_log($(parse_node(n.args[2]))))
     end
 end
 
@@ -334,7 +335,7 @@ function parse_maptype_node(s::Expr)
     parse_pair(::Val{:off_diag}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
         bound_type(a::Symbol) = a in base_domains ? :($(a)()) : :(_ctx[$(QuoteNode(a))])
-        bound_type(a::Expr) = :(parametrize_type(_ctx[$(QuoteNode(a.args[1]))], $(map(parse_node, a.args[2:end])...)))
+        bound_type(a::Expr) = :(CombDiff.parametrize_type(_ctx[$(QuoteNode(a.args[1]))], $(map(parse_node, a.args[2:end])...)))
         params = :(VecType([$([bound_type(a) for a in t.args[1].args]...)]))
         return_type = :($(bound_type(first(t.args[2].args))))
         return (params, return_type)
@@ -345,11 +346,11 @@ function parse_maptype_node(s::Expr)
     supported_properties = [:symmetries, :linear, :off_diag]
     properties = [:($(QuoteNode(k)) => $(pairs[k])) for k in supported_properties if haskey(pairs, k)]
     dict = :(Dict(:name => $(QuoteNode(name)), $(properties...)))
-    maptype = :(MapType($(pairs[:type]...), $(dict),))
+    maptype = :(CombDiff.MapType($(pairs[:type]...), $(dict),))
 
     if type_params !== nothing
         type_params = map(parse_node, type_params)
-        maptype = :(ParametricMapType([$(type_params...)], $(maptype)))
+        maptype = :(CombDiff.ParametricMapType([$(type_params...)], $(maptype)))
     end
 
     return MapTypeNode(:(push_type!(_ctx, $(QuoteNode(name)),
@@ -385,23 +386,23 @@ function parse_domain_node(n::Expr)
         tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])
         symmetric = haskey(pairs, :symmetric) && (pairs[:symmetric])
         contractable = haskey(pairs, :contractable) ? (pairs[:contractable]) : true
-        domain = :(inference(Domain(
-            $(base)(), $(lower), $(upper),
-            meta=Dict(:name => $(QuoteNode(name)),
-                      :periodic => $(periodic),
-                      :tensorize => $(tensorize),
-                      :symmetric => $(symmetric),
-                      :contractable => $(contractable)
-                      )
-        ), _ctx))
+        domain = :(CombDiff.inference(Domain(
+                $(base)(), $(lower), $(upper),
+                meta=Dict(:name => $(QuoteNode(name)),
+                    :periodic => $(periodic),
+                    :tensorize => $(tensorize),
+                    :symmetric => $(symmetric),
+                    :contractable => $(contractable)
+                )
+            ), _ctx))
     elseif isa(block, Expr) && block.head == :curly
         param_args = parse_node.(block.args[2:end])
         domain_name = block.args[1]
-        domain = :(parametrize_type(_ctx[$(QuoteNode(domain_name))], $(param_args...)))
+        domain = :(CombDiff.parametrize_type(_ctx[$(QuoteNode(domain_name))], $(param_args...)))
     end
     if type_params !== nothing
         type_params = map(parse_node, type_params)
-        domain = :(ParametricDomain([$(type_params...)], $(domain)))
+        domain = :(CombDiff.ParametricDomain([$(type_params...)], $(domain)))
     end
 
     return DomainNode(:(push_type!(_ctx, $(QuoteNode(name)), $(domain)); replace = true))
@@ -419,7 +420,7 @@ function parse_size_node(n::Expr)
     if base in base_domains
         type = :($(base)())
     elseif isa(base, Expr)
-        type = :(parametrize_type(_ctx[$(QuoteNode(base.args[1]))], $(map(parse_node, a.args[2:end])...)))
+        type = :(CombDiff.parametrize_type(_ctx[$(QuoteNode(base.args[1]))], $(map(parse_node, a.args[2:end])...)))
     end
 
     pushes = map(name -> :(
@@ -441,7 +442,9 @@ function parse_map_node(f::Expr)
 
     bound = f.args[1]
     parametric_types = nothing
-    if bound.head == :call
+    if isa(bound, Symbol)
+        params = Vector([bound])
+    elseif bound.head == :call
         parametric_types = bound.args[1].args
         bound = bound.args[2:end]
     elseif bound.head == :tuple
@@ -452,10 +455,10 @@ function parse_map_node(f::Expr)
 
     body = f.args[2]
 
-    result_map = :(pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
+    result_map = :(CombDiff.pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
     parametric_types === nothing && return result_map
 
-    return :(set_type($(result_map),
+    return :(CombDiff.set_type($(result_map),
         ParametricMapType($(map(parse_node, parametric_types)),
             UndeterminedPCTType()
         )))
@@ -465,11 +468,11 @@ end
 function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
 
     if isa(p, Number)
-        return :(constant($(p)))
+        return :(CombDiff.constant($(p)))
     end
 
     if isa(p, Symbol)
-        return :(var($(QuoteNode(p))))
+        return :(CombDiff.var($(QuoteNode(p)), N()))
     end
 
     if p.head == Symbol("::")
@@ -480,8 +483,8 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
             type = type.args[1]
         end
         type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-        type = :(parametrize_type($(type), $(map(parse_node, type_params)...)))
-        isa(name, Symbol) && return :(var($(QuoteNode(name)), $(type)))
+        type = :(CombDiff.parametrize_type($(type), $(map(parse_node, type_params)...)))
+        isa(name, Symbol) && return :(CombDiff.var($(QuoteNode(name)), $(type)))
     end
     if p.head == :call && p.args[1] == :∈
         param = p.args[2]
@@ -490,16 +493,16 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
         if param.head == Symbol("::")
             name, type = param.args
             type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-            return :(var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper), Dict(:name => :_λ)))))
+            return :(CombDiff.var($(QuoteNode(name)), (Domain($(type), $(lower), $(upper), Dict(:name => :_λ)))))
         end
-        return :(var($(parse_node(param)), $(parse_node(domain))))
+        return :(CombDiff.var($(parse_node(param)), $(parse_node(domain))))
     end
 
 end
 
 function parse_node(p::Symbol)
-    (p == :∞ || p == :infty) && return :(infty())
-    :(var($(QuoteNode(p))))
+    (p == :∞ || p == :infty) && return :(CombDiff.infty())
+    :(CombDiff.var($(QuoteNode(p))))
 end
 function parse_node(p::QuoteNode)
     return parse_quantum_field_node(p)
@@ -507,34 +510,34 @@ function parse_node(p::QuoteNode)
     :(var(Symbol($(name)))) =#
 end
 function parse_quantum_field_node(n::QuoteNode)
-    x = :(var(:x, $(C())))
+    x = :(CombDiff.var(:x, $(C())))
     n.value == :II && return :($(pct_map)($x, fermi_scalar($x)))
 
-    return :(annihilate($(QuoteNode(n.value))))
+    return :(CombDiff.annihilate($(QuoteNode(n.value))))
 end
 
 function parse_vac_exp_node(n::Expr)
-    return :(make_node(VacExp, $(parse_node.(n.args[2:end])...)))
+    return :(CombDiff.make_node(VacExp, $(parse_node.(n.args[2:end])...)))
 end
 
-parse_node(i::Number) = :(constant($(i)))
+parse_node(i::Number) = :(CombDiff.constant($(i)))
 
 function parse_node(::Type{AbstractCall}, c::Expr)
     @assert c.head == :call
     func = c.args[1]
 
-    return :(call($(parse_node(func)), $(parse_node.(c.args[2:end])...)))
+    return :(CombDiff.call($(parse_node(func)), $(parse_node.(c.args[2:end])...)))
 end
 
 function parse_add_node(a::Expr)
     @assert a.args[1] == :+
-    return :(add($(parse_node.(a.args[2:end])...)))
+    return :(CombDiff.add($(parse_node.(a.args[2:end])...)))
 end
 
 function parse_negate_node(n::Expr)
     @assert n.args[1] == :-
     length(n.args) == 2 && return :(CombDiff.mul(constant(-1), $(parse_node(n.args[2]))))
-    return :(add($(parse_node(n.args[2])), CombDiff.mul(constant(-1), $(parse_node(n.args[3])))))
+    return :(CombDiff.add($(parse_node(n.args[2])), CombDiff.mul(constant(-1), $(parse_node(n.args[3])))))
 end
 
 function parse_mul_node(m::Expr)
@@ -545,7 +548,7 @@ end
 
 function parse_monomial_node(m::Expr)
     @assert m.args[1] == :^
-    return :(monomial($(parse_node.(m.args[2:end])...)))
+    return :(CombDiff.monomial($(parse_node.(m.args[2:end])...)))
 end
 
 function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
@@ -561,6 +564,17 @@ function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     return :($(constructor)($(param_nodes...), $(parse_node(s.args[end]))))
 end
 
+function parse_fold_node(s::Expr)
+    params = if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
+        s.args[2].args
+    else
+        s.args[2:end-1]
+    end
+
+    param_nodes = (n -> parse_node(Param, n)).(params)
+    return :(CombDiff.pct_fold($(param_nodes...), $(parse_node(s.args[end]))))
+end
+
 function parse_prod_node(s::Expr)
     @assert s.args[1] in [:prod, :∏]
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
@@ -570,7 +584,7 @@ function parse_prod_node(s::Expr)
     end
 
     param_nodes = (n -> parse_node(Param, n)).(params)
-    return :(pct_product($(param_nodes...), $(parse_node(s.args[end]))))
+    return :(CombDiff.pct_product($(param_nodes...), $(parse_node(s.args[end]))))
 end
 
 function parse_let_node(l::Expr)
@@ -587,7 +601,7 @@ function parse_let_node(l::Expr)
             push!(args, :($(parse_node(a.args[2]))))
         else
             a = a.args[1]
-            push!(bounds, :(pct_copy($(parse_node(a.args[1])))))
+            push!(bounds, :(CombDiff.pct_copy($(parse_node(a.args[1])))))
             push!(args, :($(parse_node(a.args[2]))))
         end
     end
@@ -595,7 +609,7 @@ function parse_let_node(l::Expr)
     parse_subst!.(substitutions)
     content = parse_node(l.args[2])
 
-    return :(pct_let(
+    return :(CombDiff.pct_let(
         $(bounds...),
         $(args...),
         $(content),
@@ -606,14 +620,14 @@ function parse_pullback_node(p::Expr)
     @assert p.args[1] == :pullback || p.args[1] == :𝒫
     mapp = parse_node(p.args[2])
     p = isa(p.args[2], Symbol) ? PrimitivePullback : Pullback
-    return :(make_node($(p), $(mapp)))
+    return :(CombDiff.make_node($(p), $(mapp)))
 end
 
 
 function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     @assert d.args[1] in [:delta, :delta_not, :δ]
-    upper_params = isa(d.args[2], Union{Symbol, Number}) ? [d.args[2]] : d.args[2].args
-    lower_params = isa(d.args[3], Union{Symbol, Number}) ? [d.args[3]] : d.args[3].args
+    upper_params = isa(d.args[2], Union{Symbol,Number}) ? [d.args[2]] : d.args[2].args
+    lower_params = isa(d.args[3], Union{Symbol,Number}) ? [d.args[3]] : d.args[3].args
     upper_nodes = map(n -> parse_node(Param, n), upper_params)
     lower_nodes = map(n -> parse_node(Param, n), lower_params)
     constructor = T == Delta ? :delta : :delta_not
@@ -621,7 +635,7 @@ function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
 end
 
 function parse_conjugate_node(c::Expr)
-    return :(conjugate($(parse_node(c.args[1]))))
+    return :(CombDiff.conjugate($(parse_node(c.args[1]))))
 end
 
 function parse_statement_node(n::Expr)
@@ -629,7 +643,7 @@ function parse_statement_node(n::Expr)
         params = n.args[1].args[2:end]
         func = n.args[1].args[1]
         body = n.args[2]
-        return MutatingStatement(parse_node(func), :(pct_map($(parse_node.(params)...), $(parse_node(body)))))
+        return MutatingStatement(parse_node(func), :(CombDiff.pct_map($(parse_node.(params)...), $(parse_node(body)))))
     else
         lhs = parse_node(n.args[1])
         rhs = parse_node(n.args[2])
@@ -647,7 +661,8 @@ end
 function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
-    return :(pct_let($(bound...), $(args...), $(return_value)))
+    bound = [:(CombDiff.pct_copy($(b))) for b in bound]
+    return :(CombDiff.pct_let($(bound...), $(args...), $(return_value)))
 end
 
 function statement_to_mut(statements::Vector, return_value::Union{Expr,Symbol})
@@ -658,13 +673,13 @@ end
 
 
 function parse_pctvector_node(n::Expr)
-    return :(pct_vec($(map(parse_node, n.args)...)))
+    return :(CombDiff.pct_vec($(map(parse_node, n.args)...)))
 end
 
 function parse_indicator_node(::Type{Indicator}, n::Expr)
     args = map(parse_node, n.args[2:end])
 
-    return :(indicator($(args[2]), $(args[1]), $(args[end])))
+    return :(CombDiff.indicator($(args[2]), $(args[1]), $(args[end])))
 end
 
 function parse_domain_indicator_node(Indicator, n)
@@ -672,10 +687,10 @@ function parse_domain_indicator_node(Indicator, n)
     d = :(_ctx[$(QuoteNode(n.args[3]))])
     body = parse_node(n.args[end])
 
-    return :(domain_indicator($(i), $(d), $(body)))
+    return :(CombDiff.domain_indicator($(i), $(d), $(body)))
 end
 
-function convert_pct_type(::Type{T})::ElementType where T <: Number
+function convert_pct_type(::Type{T})::ElementType where {T<:Number}
     if T <: Unsigned
         return N()
     elseif T <: Integer
@@ -687,12 +702,12 @@ function convert_pct_type(::Type{T})::ElementType where T <: Number
     end
 end
 
-function convert_pct_type(tensor::RangedTensor{S, T}) where {S <: Number, T}
-    return  MapType(VecType([Domain(N(), constant(l), constant(u)) for (l, u) in tensor.ranges]), convert_pct_type(S(0)))
+function convert_pct_type(tensor::RangedTensor{S,T}) where {S<:Number,T}
+    return MapType(VecType([Domain(N(), constant(l), constant(u)) for (l, u) in tensor.ranges]), convert_pct_type(S(0)))
 end
 
 #= eltype(::Type{<:AbstractArray{T}}) where {T} = T =#
-function convert_pct_type(::Type{<:AbstractArray{T, D}}) where {T, D} 
+function convert_pct_type(::Type{<:AbstractArray{T,D}}) where {T,D}
     #= println(S)
     println(T) =#
 
@@ -710,11 +725,11 @@ function convert_pct_type(::Type{<:AbstractArray{T, D}}) where {T, D}
     return MapType(VecType(fill(N(), n_dims)), output_type) =#
 end
 
-function convert_pct_type(::T) where T <: Union{Number, AbstractArray}
+function convert_pct_type(::T) where {T<:Union{Number,AbstractArray}}
     return convert_pct_type(T)
 end
 
-function convert_pct_type(f::T) where T <: Function
+function convert_pct_type(f::T) where {T<:Function}
     _, arg_types... = methods(f)[1].sig.parameters
     return_type = Base.return_types(f, arg_types)[1]
 

@@ -66,6 +66,7 @@ Base.getindex(v::PCTVector, indices::Any) = make_node(PCTVector, content(v)[indi
 Base.first(v::PCTVector) = first(content(v))
 Base.last(v::PCTVector) = last(content(v))
 Base.length(v::PCTVector) = length(content(v))
+Base.eachindex(v::PCTVector) = Base.OneTo(length(v))
 
 
 function Base.iterate(v::PCTVector)
@@ -295,6 +296,16 @@ end
 
 function pct_product(terms::Vararg)
     return make_node(Prod, pct_vec(terms[1:end-1]...), last(terms))
+end
+
+struct Fold <: APN
+    type::AbstractPCTType
+    bound::PCTVector
+    body::APN
+end
+
+function pct_fold(terms::Vararg)
+    return make_node(Fold, pct_vec(terms[1:end-1]...), last(terms))
 end
 
 """

@@ -1,4 +1,4 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale, let_copy_to_call
 
 function get_free(n::APN)
     free, _ = free_and_dummy(n)
@@ -53,10 +53,10 @@ end
 
 
 own_dummy(::APN) = Set{Var}()
+strip_copy(v::Var) = v
+strip_copy(v::Copy) = get_body(v)
 
 function own_dummy(c::T) where {T<:Union{PermInv,Let,Map}}
-    strip_copy(v::Var) = v
-    strip_copy(v::Copy) = get_body(v)
     return Set{Var}(map(strip_copy, content(get_bound(c))))
 end
 
@@ -339,6 +339,29 @@ function evaluate(l::Let)
     result = pct_let(copies..., copy_args..., new_call)
     return result
 end
+
+let_copy_to_call(x::APN) = set_content(x, map(let_copy_to_call, content(x))...)
+
+let_copy_to_call(x::Union{TerminalNode,Copy}) = x
+
+function let_copy_to_call(x::Let)
+    bound, args, body = let_copy_to_call.(content(x))
+    for b in bound
+        isa(b, Copy) || error("$(pretty(b)) should be inlined first")
+    end
+
+    #= result = body
+    for (b, a) in zip(bound, args)
+        result = primitive_call(pct_map(strip_copy(b), body), a)
+    end =#
+
+    result = foldr(((b, a), res) -> primitive_call(
+            pct_map(strip_copy(b), res), a), zip(bound, args); init=body)
+
+    return result
+
+end
+
 
 has_call(n::APN) = any(has_call, content(n))
 has_call(::TerminalNode) = false

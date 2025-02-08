@@ -131,15 +131,29 @@ macro meinview(expr, f=:_, ctx=:(TypeContext()))
     end
     return_node = f == :_ ? node : :(continuition($(f), $(node)))
 
-    esc(:(
+    return esc(:(
         begin
             _ctx = $(ctx)
-            func = $(return_node)
-            free = CombDiff.get_body.(CombDiff.get_free(func))
-            context_types = typeof.(eval.(free))
-            converted = CombDiff.convert_pct_type.(context_types)
-            func = inference(pct_map(map(var, free, converted)..., func))
-            func, free
+
+            func = get(CombDiff.expr_dict, $(QuoteNode(expr)), nothing)
+            if func === nothing
+                func = $(return_node)
+                CombDiff.expr_dict[$(QuoteNode(expr))] = func
+            end
+
+            free = get(CombDiff.free_dict, $(QuoteNode(expr)), nothing)
+            if free === nothing
+                free = CombDiff.get_body.(CombDiff.get_free(func))
+                CombDiff.free_dict[$(QuoteNode(expr))] = free
+            end
+
+            #= context_types = typeof.([$(free...)]) =#
+            local_vars = Base.@locals()
+            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in free]
+            context_types = typeof.(free_vals)
+            converted = CombDiff.convert_pct_type.(free_vals)
+            func = pct_map(map(var, free, converted)..., func)
+            inference(func), free_vals
         end))
 end
 
@@ -158,8 +172,9 @@ macro mein(expr, f=:_, ctx=:(TypeContext()))
     end
     return_node = f == :_ ? node : :(continuition($(f), $(node)))
 
-    func, free, ctx = eval(:(
-        begin
+    #= func, free, ctx = eval(esc)(:(
+        [1, 2, 3]
+        #= begin
             _ctx = $(ctx)
             func = get(CombDiff.expr_dict, $(QuoteNode(expr)), nothing)
             if func === nothing
@@ -172,21 +187,36 @@ macro mein(expr, f=:_, ctx=:(TypeContext()))
                 CombDiff.free_dict[$(QuoteNode(expr))] = free
             end
             func, free, _ctx
-        end
-    ))
+        end =#
+    ))) =#
 
     return esc(:(
         begin
             _ctx = $(ctx)
-            context_types = typeof.([$(free...)])
+
+            func = get(CombDiff.expr_dict, $(QuoteNode(expr)), nothing)
+            if func === nothing
+                func = $(return_node)
+                CombDiff.expr_dict[$(QuoteNode(expr))] = func
+            end
+
+            free = get(CombDiff.free_dict, $(QuoteNode(expr)), nothing)
+            if free === nothing
+                free = CombDiff.get_body.(CombDiff.get_free(func))
+                CombDiff.free_dict[$(QuoteNode(expr))] = free
+            end
+
+            local_vars = Base.@locals()
+            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in free]
+            context_types = typeof.(free_vals)
             compiled = get(CombDiff.function_dict, $(QuoteNode(expr)) => context_types, nothing)
             if compiled === nothing
-                converted = CombDiff.convert_pct_type.([$(free...)])
-                func = pct_map(map(var, $(free), converted)..., $func)
+                converted = CombDiff.convert_pct_type.(free_vals)
+                func = pct_map(map(var, free, converted)..., func)
                 compiled = eval(CombDiff.codegen(inference(func)))
                 CombDiff.function_dict[$(QuoteNode(expr))=>context_types] = compiled
             end
-            compiled($(free...))
+            Base.invokelatest(compiled, (free_vals...))
         end))
 end
 

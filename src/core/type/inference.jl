@@ -102,7 +102,12 @@ function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
     has_bound = any(f->hasfield(T, f), bound_fields(T))
     if has_bound
         #= op_context!(get_bound(n), pct_push!, context) =#
-        map(b->push_var!(context, get_body(b), b), content(get_bound(n)))
+        for b in content(get_bound(n))
+            if get_type(b) == UndeterminedPCTType() 
+                b = set_type(b, N())
+            end
+            push_var!(context, get_body(b), b)
+        end
         # the following line may be redundant.
         n = set_bound(n, map(t->inference(t, context), [get_bound(n)])...)
     end
@@ -220,8 +225,10 @@ function partial_inference(::Type{IntDiv}, terms...)::AbstractPCTType
     return I()
 end
 
-function partial_inference(::Type{Monomial}, base::APN, power::APN)::AbstractPCTType
-    escalate(get_type(base), get_type(power))
+function partial_inference(::Type{Monomial}, x::APN, power::APN)::AbstractPCTType
+
+    base(get_type(x)) == C() && return C()
+    return escalate(get_type(x), get_type(power), R())
 end
 
 inference(d::AbstractPCTType, ::TypeContext=TypeContext()) = d
@@ -258,6 +265,11 @@ function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
 end
 
 function partial_inference(::Type{T}, body::APN) where T <: Univariate
+    return get_type(body)
+end
+
+function partial_inference(::Type{Fold}, terms...)
+    _..., body = terms
     return get_type(body)
 end
 

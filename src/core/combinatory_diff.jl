@@ -573,6 +573,7 @@ function as_map(bp::BPullback)
 end
 
 """
+z -> 𝒫 g(x, z)  is a linear map, so its pullback is the adjoint.
 𝒫(z -> 𝒫 g(x, z))(z, k) = = conj(z->𝒫 g(x, z))(k)
 """
 function pp(bp::BPullback)
