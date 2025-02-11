@@ -50,7 +50,7 @@ struct PCTVector <: APN
     type::VecType
     content::Vector
     function PCTVector(type::VecType, content::Vararg)
-        new(type, collect(content))
+        new(type, [content...])
     end
 end
 
@@ -402,6 +402,10 @@ end
 
 abstract type AbstractComp <: APN end
 
+"""
+Function composition. The last function in the vector 
+gets applied first.
+"""
 struct Composition <: AbstractComp
     type::AbstractPCTType
     body::PCTVector
@@ -529,3 +533,11 @@ function mutate(terms::Vararg{APN})
     node = make_node(Mutate, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
     return node
 end
+
+struct Splat <: Univariate
+    type::AbstractPCTType
+    body::APN
+end
+
+splat(t::APN) = make_node(Splat, t)
+

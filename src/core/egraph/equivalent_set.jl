@@ -76,7 +76,7 @@ end
 
 neighbors(::Union{Var,Constant,FieldOperators}; _...) = NeighborList()
 
-function sub_neighbors(c::PrimitiveCall; settings=default_settings())
+function sub_neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
     a = args(c)
 
@@ -104,12 +104,16 @@ function is_pullback_of_univariate(p::AbstractPullback)
     isa(get_body_type(get_type(get_body(p))), ElementType)
 end
 
-function delta_out_pullback_neighbors(c::PrimitiveCall)
+function delta_out_pullback_neighbors(c::AbstractCall)
     result = NeighborList()
     isa(mapp(c), AbstractPullback) || return result
-    isa(get_body_type(get_type(get_body(mapp(c)))), VecType) && return result
+    k_type = get_body_type(get_type(get_body(mapp(c))))
     zs..., k = content(args(c))
     isa(k, Delta) || return result
+    if isa(k_type, VecType)
+        isa(get_type(k), SplatType) || return result
+        get_body_type(get_type(k)) == k_type || return result
+    end
     push!(result, delta(upper(k), lower(k), call(mapp(c), zs..., get_body(k))); dired=true, name="delta_out_pullback")
 end
 
@@ -126,7 +130,7 @@ end)(k -> P(z -> f(z))(t, k))
     p * k
 end)
 """
-function let_out_pullback(p::PrimitiveCall)
+function let_out_pullback(p::AbstractCall)
     result = NeighborList()
     isa(mapp(p), PrimitivePullback) || return result
     inner_map = get_body(mapp(p))
@@ -146,6 +150,40 @@ function let_out_pullback(p::PrimitiveCall)
     return result
 end
 
+"""
+(f(b))(a, let
+    b = c
+    b
+end)
+
+((x, y) -> let b = c
+    (x)(y, b)
+end)(f(b), a)
+
+let e = c
+    (f(b))(a, e)
+end
+
+"""
+function let_out_call(p::AbstractCall)
+    result = NeighborList()
+    i = findfirst(t -> isa(t, Let), content(args(p)))
+    i === nothing && return result
+    lt = args(p)[i]
+
+    new_vars = map(var, new_symbol(p; num=length(args(p))), [get_type(mapp(p)), get_type.(remove_i(args(p), i))...])
+
+    var_args = Vector{APN}(new_vars[2:end])
+    insert!(var_args, i, get_body(lt))
+    new_let = call(pct_map(new_vars..., pct_let(
+            get_bound(lt)..., args(lt)...,
+            call(first(new_vars), var_args...)
+        )), mapp(p), remove_i(args(p), i)...)
+    push!(result, eval_all(new_let); dired=true, name="let_out_call")
+
+    return result
+end
+
 function meta_prop_neighbors(c)
     result = NeighborList()
     get(meta(get_type(mapp(c))), :off_diag, false) || return result
@@ -158,11 +196,52 @@ function meta_prop_neighbors(c)
     return result
 end
 
-function neighbors(c::PrimitiveCall; settings=default_settings())
+
+desplat(s::Splat) = get_body(s)
+desplat(s::APN) = set_terms(s, map(desplat, terms(s))...)
+desplat(s::TerminalNode) = s
+function surface_vec(n::Delta)
+    body = surface_vec(get_body(n))
+    isa(body, PCTVector) || return n
+    return pct_vec([delta(upper(n), lower(n), b) for b in body]...)
+end
+surface_vec(v::PCTVector) = v
+surface_vec(n::APN) = n
+
+function delta_splat_call(p::T) where {T<:AbstractCall}
+    result = NeighborList()
+    T == Call || return result
+    isa(mapp(p), Map) || return result
+
+    any(a -> isa(get_type(a), SplatType), args(p)) || return result
+    new_args = Vector{APN}()
+    splatted = false
+    for a in args(p)
+        if isa(get_type(a), SplatType)
+            v = surface_vec(desplat(a))
+            if isa(v, PCTVector)
+                splatted = true
+                append!(new_args, v)
+            else
+                push!(new_args, a)
+            end
+        else
+            push!(new_args, a)
+        end
+    end
+    splatted || return result
+    new_node = ecall(mapp(p), new_args...)
+    push!(result, new_node; dired=true, name="delta_splat_call")
+    return result
+end
+
+function neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
 
     append!(result, delta_out_pullback_neighbors(c))
     append!(result, let_out_pullback(c))
+    append!(result, let_out_call(c))
+    append!(result, delta_splat_call(c))
     append!(result, meta_prop_neighbors(c))
     append!(result, sub_neighbors(c; settings=settings))
 
@@ -710,7 +789,7 @@ end
 function sum_out_primitive_pullback(s::Sum)
     result = NeighborList()
     summand = get_body(s)
-    isa(summand, PrimitiveCall) && isa(mapp(summand), PrimitivePullback) || return result
+    isa(summand, AbstractCall) && isa(mapp(summand), PrimitivePullback) || return result
     k_type = get_body_type(get_type(get_body(mapp(summand))))
     isa(k_type, VecType) && error("moving contraction into a nontrivial pullback is not yet supported")
     for b in get_bound(s)
@@ -724,9 +803,9 @@ end
 function sum_out_linear_op(s::Sum)
     result = NeighborList()
     summand = get_body(s)
-    (isa(summand, PrimitiveCall) ||
+    (isa(summand, AbstractCall) ||
      (isa(summand, Conjugate) &&
-      isa(get_body(summand), PrimitiveCall))) || return result
+      isa(get_body(summand), AbstractCall))) || return result
     linear(get_type(mapp(summand))) && length(args(summand)) == 1 || return result
     new_sum = call(mapp(summand), pct_sum(get_bound(s)..., first(args(summand))))
 
@@ -1169,7 +1248,7 @@ function neighbors(d::Delta; settings=default_settings())
         # delta-ex
         # there is currently no need to consider delta exchange
         # because the multi-index sum is implemented as a single node.
-        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
+        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
     end
 
     # TODO: use equivalence instead of equality
@@ -1321,10 +1400,37 @@ function neighbors(v::PCTVector; settings=default_settings())
 end
 
 
+function neighbors(v::Splat; settings=default_settings())
+
+    result = NeighborList()
+    if isa(get_body(v), Delta)
+        d = get_body(v)
+        push!(result, delta(upper(d), lower(d), splat(get_body(d))); dired=true, name="delta_out_splat")
+    end
+    append!(result, sub_neighbors(v; settings=settings))
+    return result
+end
+
 function neighbors(v::Univariate; settings=default_settings())
     return sub_neighbors(v; settings=settings)
 end
 
+"""
+x = delta(l, u, p)
+y = x
+x + y
+
+-> 
+
+x = p
+y = delta(l, u, x)
+delta(l, u, x)  + y
+
+-> 
+x = p
+y = x
+delta(l, u, x) + delta(l, u, y)
+"""
 function let_const_bound_delta_prop(lt::Let)
     result = NeighborList()
     bound = [get_bound(lt)...]
@@ -1444,6 +1550,60 @@ function sub_neighbors(lt::Let; settings=settings)
 
 end
 
+function let_remove_alias(lt::Let; settings=default_settings())
+    result = NeighborList()
+
+    any(t -> isa(get_type(t), VecType), get_bound(lt)) || return result
+
+    for i in 1:length(get_bound(lt))
+        b = get_bound(lt)[i]
+        a = args(lt)[i]
+        isa(a, PCTVector) && all(t -> isa(t, Var), a[2:end]) || continue
+        new_args = Vector{APN}(content(args(lt)[1:i-1]))
+        push!(new_args, first(a))
+        for j in i+1:length(get_bound(lt))
+            new_b = subst(args(lt)[j], get_body(b), pct_vec(set_type(get_body(b), get_type(first(a))), a[2:end]...))
+            push!(new_args, new_b)
+        end
+
+        new_body = subst(get_body(lt), get_body(b), pct_vec(set_type(get_body(b), get_type(first(a))), a[2:end]...))
+
+        new_let = pct_let(get_bound(lt)..., new_args..., new_body)
+        push!(result, eval_all(new_let); dired=true, name="remove_alias")
+        break
+    end
+    return result
+end
+
+function let_split_multi_return(lt::Let, settings=default_settings())
+    result = NeighborList()
+
+    any(t -> isa(get_type(t), VecType), get_bound(lt)) || return result
+
+    for i in 1:length(get_bound(lt))
+        b = get_bound(lt)[i]
+        a = args(lt)[i]
+        isa(a, PCTVector) && !any(t -> isa(t, Var), a) || continue
+        new_vars = pct_copy.(map(var, new_symbol(lt; num=length(a), symbol=:_s), get_content_type(get_type(a))))
+        new_bound = Vector{APN}(content(get_bound(lt)[1:i-1]))
+        new_args = Vector{APN}(content(args(lt)[1:i-1]))
+        append!(new_args, content(a))
+        append!(new_bound, new_vars)
+        for j in i+1:length(get_bound(lt))
+            new_b = subst(args(lt)[j], get_body(b), pct_vec(get_body.(new_vars)...))
+            push!(new_bound, get_bound(lt)[j])
+            push!(new_args, new_b)
+        end
+
+        new_body = subst(get_body(lt), get_body(b), pct_vec(get_body.(new_vars)...))
+        new_let = pct_let(new_bound..., new_args..., new_body)
+        push!(result, eval_all(new_let); dired=true, name="remove_multi_return")
+        break
+    end
+    return result
+end
+
+
 function neighbors(lt::Let; settings=default_settings())
 
     result = NeighborList()
@@ -1452,6 +1612,8 @@ function neighbors(lt::Let; settings=default_settings())
         append!(result, let_const_bound_delta_prop(lt))
         append!(result, let_const_body_delta_out(lt))
         append!(result, let_collapse(lt))
+        append!(result, let_remove_alias(lt))
+        append!(result, let_split_multi_return(lt))
         # append!(result,unused_let(lt))
     end
 
@@ -1755,3 +1917,33 @@ function neighbors(n::Union{FermiScalar,IntDiv}; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
 
+#= function let_const_bound_delta_prop(lt::Let)
+    result = NeighborList()
+    bound = [get_bound(lt)...]
+    new_args = [args(lt)...]
+    body = get_body(lt)
+
+    proped = false
+    for i in 1:length(bound)
+        v = new_args[i]
+        isa(v, Delta) || continue
+        u, l, b = upper(v), lower(v), get_body(v)
+        any(t -> if isa(t, Var) || isa(t, Copy)
+                t in get_free(pct_vec(u, l))
+            elseif isa(t, PCTVector)
+                any(s -> s in get_free(pct_vec(u, l)), t)
+            end, bound[1:i]) && continue
+        new_args[i] = b
+        for bd in v_wrap(bound[i])
+            d = delta(u, l, get_body(bd))
+            for j = i+1:length(bound)
+                new_args[j] = subst(new_args[j], get_body(bd), d)
+            end
+            body = subst(body, get_body(bd), d)
+        end
+        proped = true
+    end
+    proped || return result
+    push!(result, pct_let(bound..., new_args..., body); dired=true, name="delta_prop")
+    return result
+end =#

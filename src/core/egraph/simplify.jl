@@ -51,7 +51,8 @@ function eval_pullback(p::Pullback)
     k_types = isa(output_type, VecType) ? get_content_type(output_type) : [output_type]
 
     ks = map(var, new_symbol(m; num=length(v_wrap(get_body(m))), symbol=:_k), k_types)
-    result = pct_vec(map(f -> ecall(vdiff_single(univariate_map(f)), f, ks...), get_bound(m))...)
+    
+    result = v_unwrap(pct_vec(map(f -> ecall(vdiff_single(univariate_map(f)), f, ks...), get_bound(m))...))
     result = result |> simplify |> first
     return pct_map(get_bound(m)..., ks..., v_unwrap(result))
 end

@@ -149,7 +149,7 @@ macro meinview(expr, f=:_, ctx=:(TypeContext()))
 
             #= context_types = typeof.([$(free...)]) =#
             local_vars = Base.@locals()
-            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in free]
+            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in CombDiff.dedot.(free)]
             context_types = typeof.(free_vals)
             converted = CombDiff.convert_pct_type.(free_vals)
             func = pct_map(map(var, free, converted)..., func)
@@ -207,7 +207,7 @@ macro mein(expr, f=:_, ctx=:(TypeContext()))
             end
 
             local_vars = Base.@locals()
-            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in free]
+            free_vals = [haskey(local_vars, f) ?  local_vars[f] : eval(f) for f in CombDiff.dedot.(free)]
             context_types = typeof.(free_vals)
             compiled = get(CombDiff.function_dict, $(QuoteNode(expr)) => context_types, nothing)
             if compiled === nothing

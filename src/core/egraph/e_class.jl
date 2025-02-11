@@ -29,12 +29,26 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
 end
 
 
-function e_class_reduction(::Type{PrimitiveCall}, mapp::Var, args::PCTVector)
-    get_type(mapp) == UndeterminedPCTType() && return PrimitiveCall, [mapp, args], UndeterminedPCTType()
-    return PrimitiveCall, [mapp, args], partial_inference(PrimitiveCall, mapp, args)
+function e_class_reduction(::Type{T}, mapp::APN, args::PCTVector) where {T<:AbstractCall}
+    get_type(mapp) == UndeterminedPCTType() && return T, [mapp, args], UndeterminedPCTType()
+
+    if any(a -> isa(a, Splat) && isa(get_body(a), PCTVector), args)
+        new_args = Vector{APN}()
+        for a in args
+            if isa(a, Splat) && isa(get_body(a), PCTVector)
+                append!(new_args, content(get_body(a)))
+            else
+                push!(new_args, a)
+            end
+        end
+        new_args = pct_vec(new_args...)
+        return T, [mapp, new_args], partial_inference(T, mapp, new_args)
+    end
+    #= println(get_type(mapp)) =#
+    return T, [mapp, args], partial_inference(T, mapp, args)
 end
 
-function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where T <: AbstractLet
+function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where {T<:AbstractLet}
     if isempty(content(bound))
         return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
     end
@@ -174,7 +188,7 @@ flatten_mul(a::Mul)::Vector{APN} = vcat(flatten_mul.(content(get_body(a)))...)
 flatten_mul(a::APN)::Vector{APN} = [a]
 
 function e_class_reduction(::Type{Mul}, term::PCTVector)
-    
+
     args = vcat(flatten_mul.(content(term))...)
 
     is_constant = group(t -> isa(t, Constant), args)
@@ -281,7 +295,12 @@ function e_class_reduction(::Type{DeltaNot}, lower::APN, upper::APN, body::APN)
     end
 end
 
-function e_class_reduction(::Type{Delta}, lower::APN, upper::APN, body::APN)
+function e_class_reduction(::Type{Delta}, lower::S, upper::T, body::APN) where {S<:APN,T<:APN}
+
+    if S == PCTVector && T == PCTVector
+        return repack(foldr(((u, l), b) -> delta(u, l, b), zip(lower, upper); init=body))
+    end
+
     if lower == upper && base(get_type(lower)) == N()
         return repack(body)
     else
@@ -338,8 +357,6 @@ function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::
     end
 
     #= body = remove_dup_indicator(t_upper, t_lower, body) =#
-    #= println(verbose(t_lower))
-    println(verbose(t_upper)) =#
     #= t_lower == constant(1) && base(get_type(t_upper)) == N() && return T, terms(body), partial_inference(T, terms(body)...) =#
 
     #= diff = add(upper, mul(constant(-1), lower))
@@ -361,4 +378,12 @@ function e_class_reduction(::Type{VacExp}, body::T) where {T<:APN}
 
     new_term = mul(map(get_body, scalars)..., vac_exp(composite(remains...)))
     return typeof(new_term), terms(new_term), get_type(new_term)
+end
+
+function e_class_reduction(::Type{Splat}, body::T) where {T<:APN}
+    if T == Let
+        return repack(pct_let(get_bound(body)..., args(body)..., splat(get_body(body))))
+    end
+    isa(get_type(body), VecType) || return repack(body)
+    return Splat, [body], partial_inference(Splat, body)
 end

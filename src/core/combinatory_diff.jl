@@ -161,7 +161,8 @@ When decomposing addition or multiplication, one needs to do this to avoid a sta
 For example: x -> v + x = x -> (x -> x + v)(x) = x -> (x -> (x -> x + v)(x))(x) = ...
 """
 function avoid_overflow(zs::APN, ov::APN)::Tuple{APN,PCTVector}
-    contains_zs(t) = any(z -> contains_name(t, name(z)), v_wrap(zs))
+    #= contains_zs(t) = any(z -> contains_name(t, name(z)), v_wrap(zs)) =#
+    contains_zs(t) = any(z -> z in get_free(t), v_wrap(zs))
     i = findfirst(contains_zs, content(get_body(ov)))
     i === nothing && (i = 1)
     target, rest = get_body(ov)[i], get_body(ov)[1:end.!=i]
@@ -220,7 +221,7 @@ end
 
 function as_map(d::BDelta, zs=z_vars(d))::Map
     if d.delta_type == DeltaNot
-    return pct_map(zs..., make_node(d.delta_type, param(d)..., v_unwrap(zs)))
+        return pct_map(zs..., make_node(d.delta_type, param(d)..., v_unwrap(zs)))
     end
 end
 
@@ -403,16 +404,18 @@ function pp(c::PComp)::Map
     p_expr = pp(x_expr)
     p_call = call(p_expr, zs..., chain...)
     chain = v_wrap(eval_all(p_call)) =#
+
     chain = v_wrap(ecall(p_expr, ys..., v_wrap(ecall(p_f, expr..., ks...))...))
     f_map = as_map(f)
-    if any(s -> contains_name(f_map, s), name.(zs))
+    if any(s -> s in get_free(f_map), zs)
+        #= if any(s -> contains_name(f_map, s), name.(zs)) =#
         is = map(var, new_symbol(expr, ys..., ks...; num=length(expr), symbol=:_d), v_wrap(get_type(expr)))
         #= deltas = ks
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)
         end =#
         deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
-        partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(deltas))))
+        partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(pct_vec(deltas...)))))
         chain = pct_vec(map(add, chain, partial)...)
     end
     result = pct_map(ys..., ks..., v_unwrap(chain))
@@ -458,7 +461,7 @@ end
 function pp(fib::Fibration)::Map
     bs = fiber_var(fib)
     zs, ks = zk_vars(fib)
-    return pct_map(zs..., ks..., pct_sum(bs..., call(pp(fibers(fib)), zs..., call(ks..., bs...))))
+    return pct_map(zs..., ks..., pct_sum(bs..., call(pp(fibers(fib)), zs..., splat(call(ks..., bs...)))))
 end
 
 apns(fib::Fibration)::Vector{APN} = [fiber_var(fib)..., apns(fibers(fib))...]
@@ -491,7 +494,8 @@ end
 """
 function pp(fib::FiniteFibration)::Map
     zs, ks = zk_vars(fib)
-    return pct_map(zs..., ks..., add(map((f, k) -> ecall(pp(f), zs..., k), fibers(fib), ks)...))
+    result = pct_map(zs..., ks..., add(map((f, k) -> ecall(pp(f), zs..., k), fibers(fib), ks)...))
+    return result
 end
 
 apns(fib::FiniteFibration)::Vector{APN} = vcat(apns.(fibers(fib))...)
@@ -557,6 +561,7 @@ function decompose(z::APN, ov::AbstractCall)::PComp
     if isa(mapp(ov), PrimitivePullback) && !isa(get_body_type(get_type(mapp(ov))), VecType)
         zs..., k = content(args(ov))
         if any(t -> contains_name(z, get_body(t)), get_free(k)) # && isa(get_type(k), ElementType)
+            @warn "potential bug. Be aware"
             maptype = MapType(VecType([get_type(k)]), get_type(ov))
             bp = BPullback(pct_vec(mapp(ov), zs...), maptype)
             return push(decompose(z, k), bp)
@@ -594,7 +599,13 @@ struct CopyComp <: ABF
     maptype::MapType
 end
 
-function decompose(z::APN, ov::AbstractComp)
+
+function decompose(z::APN, l::Let)
+    result = decompose(let_copy_to_comp(z, l)...)
+    return result
+end
+
+function decompose(z::APN, ov::RevComposition)
     body = pct_vec(reverse(content(get_body(ov)))...)
     maptype = MapType(get_type(body), get_type(ov))
     return push(decompose(z, body), CopyComp(maptype))
@@ -610,6 +621,21 @@ param(::CopyComp)::Nothing = nothing
 
 function pretty(c::CopyComp)
     "Ω̄"
+end
+
+
+function copy_comp_bounds(prefix, types)
+    bounds = []
+    for i = 1:length(types)
+        bound_name = "$(prefix)_$(i)"
+        if isa(types[i], VecType)
+            push!(bounds, map(var, [Symbol("$(bound_name)_$(j)") for j in 1:length(types[i])],
+                get_content_type(types[i])))
+        else
+            push!(bounds, var(Symbol(bound_name), types[i]))
+        end
+    end
+    return bounds
 end
 
 """
@@ -640,22 +666,22 @@ function pp(cc::CopyComp)
     ys_values = Vector{APN}(undef, N)
     for i in 0:N-1
         y_prev = i == 0 ? x_0 : get_body(ys[i])
-        ys_values[i+1] = call(fs[i+1], y_prev)
+        ys_values[i+1] = call(fs[i+1], splat(y_prev))
     end
 
     ls_values = Vector{APN}(undef, N)
     for i in 0:N-1
         y_feed = i == N - 1 ? x_0 : get_body(ys[N-i-1])
         l_prev = i == 0 ? l_0 : get_body(ls[i])
-        ls_values[i+1] = call(primitive_pullback(fs[N-i]), y_feed, l_prev)
+        ls_values[i+1] = call(primitive_pullback(fs[N-i]), splat(y_feed), splat(l_prev))
     end
 
     function body_elem(m::Int)
         y_prev = m == 1 ? x_0 : get_body(ys[m-1])
         l_next = m == N ? l_0 : get_body(ls[N-m])
-        λ = var(:_λ, get_type(y_prev))
-        b = delta(y_prev, λ, l_next)
-        return pct_map(λ, pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
+        λ = map(var, new_symbol(;num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+        b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
+        return pct_map(λ..., pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
             ys_values..., ls_values[1:end-1]..., b)))
     end
     body = map(body_elem, 1:N)
@@ -692,3 +718,73 @@ function pp(lc::BLetConst)
     result = pct_map(zs..., ks..., call(as_map(lc), ks...))
     return result
 end
+
+#= function pp(cc::CopyComp)
+    its = get_content_type(input_type(cc))
+    func_input_types = map(get_bound_type, its)
+    func_output_types = map(get_body_type, its)
+    ots = v_wrap(output_type(cc))
+    y_0_type = first(func_input_types) |> get_content_type
+    #= x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...)
+    k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...) =#
+
+    x_0 = pct_vec(copy_comp_bounds(:_x, y_0_type)...)
+    k_0 = pct_vec(copy_comp_bounds(:_k, ots)...)
+    l_0 = pct_vec(map((k, x) -> call(k, x), content(k_0), content(x_0))...)
+    x_0 = v_unwrap(x_0)
+    k_0 = v_unwrap(k_0)
+    l_0 = v_unwrap(l_0)
+
+    fs = map(var, new_symbol(; num=length(its), symbol=:_f), its)
+
+    #= ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
+    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types)))) =#
+
+    #= ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
+    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types)))) =#
+
+
+    ys_no_copy = copy_comp_bounds(:_y, func_output_types)
+    ls_no_copy = copy_comp_bounds(:_l, v_unwrap.(reverse(func_input_types)))
+    ys, ls = [], []
+    for i in 1:length(ys_no_copy)
+        if isa(ys_no_copy[i], Var)
+            push!(ys, pct_copy(ys_no_copy[i]))
+        else
+            push!(ys, pct_vec(map(pct_copy, ys_no_copy[i])...))
+        end
+        if isa(ls_no_copy[i], Var)
+            push!(ls, pct_copy(ls_no_copy[i]))
+        else
+            push!(ls, pct_vec(map(pct_copy, ls_no_copy[i])...))
+        end
+    end
+
+    N = length(fs)
+    ys_values = Vector{APN}(undef, N)
+    for i in 0:N-1
+        y_prev = i == 0 ? v_wrap(x_0) : get_body.(v_wrap(ys[i]))
+        ys_values[i+1] = call(fs[i+1], y_prev...)
+    end
+
+    ls_values = Vector{APN}(undef, N)
+    for i in 0:N-1
+        y_feed = i == N - 1 ? v_wrap(x_0) : get_body.(v_wrap(ys[N-i-1]))
+        l_prev = i == 0 ? v_wrap(l_0) : get_body.(v_wrap(ls[i]))
+        ls_values[i+1] = call(primitive_pullback(fs[N-i]), y_feed..., l_prev...)
+    end
+
+    function body_elem(m::Int)
+        y_prev = m == 1 ? v_wrap(x_0) : get_body.(v_wrap(ys[m-1]))
+        l_next = m == N ? v_wrap(l_0) : get_body.(v_wrap(ls[N-m]))
+        #= λ = var(:_λ, get_type(y_prev)) =#
+        λ = copy_comp_bounds(:_λ, get_type.(y_prev))
+        b = delta(y_prev..., λ..., v_unwrap(pct_vec(l_next...)))
+        return pct_map(λ..., pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
+            ys_values..., ls_values[1:end-1]..., b)))
+    end
+    body = map(body_elem, 1:N)
+
+    result = pct_map(fs..., k_0, pct_vec(body...))
+    return result
+end =#

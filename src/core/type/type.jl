@@ -90,6 +90,10 @@ Base.length(v::VecType) = length(get_content_type(v))
 Base.getindex(v::VecType, i::Int) = get_content_type(v)[i]
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_content_type(v)), t))
 
+struct SplatType <: AbstractPCTType
+    body::VecType
+end
+
 abstract type AbstractMapType <: AbstractPCTType end
 
 struct MapType <: AbstractMapType
@@ -99,7 +103,7 @@ struct MapType <: AbstractMapType
 end
 
 get_bound_type(m::MapType) = m.bound
-get_body_type(m::MapType) = m.body
+get_body_type(m::AbstractPCTType) = m.body
 
 MapType(bound::VecType, content::AbstractPCTType) = MapType(bound, content, Dict())
 MapType(bound::APN, content::AbstractPCTType) = MapType(VecType([bound]), content, Dict())
@@ -110,6 +114,7 @@ type_based(a::ElementType, b::ElementType) = a == b
 # Refuse the type inference for complicated types for now.
 type_based(a::MapType, ::ElementType) = false
 type_based(a::VecType, ::ElementType) = false
+type_based(a::SplatType, e::ElementType) = type_based(get_body_type(a), e)
 
 symmetries(c::MapType) = get(c.meta, :symmetries, [])
 

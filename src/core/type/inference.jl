@@ -253,7 +253,7 @@ function inference(d::Domain, context::TypeContext=TypeContext())
     return new_domain
 end
 
-function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
+function partial_inference(::Type{Composition}, term::PCTVector) 
     length(term) == 0 && return UndeterminedPCTType()
     if any(t->isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))  
         types = join(get_type.(term), "\n")
@@ -261,6 +261,13 @@ function partial_inference(::Type{T}, term::PCTVector) where T <: AbstractComp
     end
     bound_type = get_bound_type(get_type(first(content(term))))
     body_type = get_body_type(get_type(last(content(term))))
+    return MapType(bound_type, body_type)
+end
+
+function partial_inference(::Type{RevComposition}, term::PCTVector) 
+    length(term) == 0 && return UndeterminedPCTType()
+    bound_type = get_bound_type(get_type(last(content(term))))
+    body_type = get_body_type(get_type(first(content(term))))
     return MapType(bound_type, body_type)
 end
 
@@ -273,3 +280,6 @@ function partial_inference(::Type{Fold}, terms...)
     return get_type(body)
 end
 
+function partial_inference(::Type{Splat}, t::APN)
+    return SplatType(get_type(t))
+end

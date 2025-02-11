@@ -309,8 +309,9 @@ function parse_univariate_node(n::Expr)
 end
 
 function parse_escape_node(n::Expr)
-    n.args[1] == :jl || error("Escape node must start with jl.")
-    return n.args[2].value
+    n.args[1] == :jl && return n.args[2].value
+    name = Symbol("$(n.args[1])__dot__$(n.args[2].value)")
+    return :(var($(QuoteNode(name))))
 end
 
 struct MapTypeNode
@@ -446,7 +447,7 @@ function parse_map_node(f::Expr)
         params = Vector([bound])
     elseif bound.head == :call
         parametric_types = bound.args[1].args
-        bound = bound.args[2:end]
+        params = bound.args[2:end]
     elseif bound.head == :tuple
         params = bound.args
     else
@@ -707,34 +708,54 @@ function convert_pct_type(tensor::RangedTensor{S,T}) where {S<:Number,T}
 end
 
 #= eltype(::Type{<:AbstractArray{T}}) where {T} = T =#
-function convert_pct_type(::Type{<:AbstractArray{T,D}}) where {T,D}
-    #= println(S)
-    println(T) =#
-
+function convert_pct_type(t::DataType) 
+    t.name.name == :Array || error("type $(t.name.name) is not supported.")
+    T, D = t.parameters
     output_type = convert_pct_type(T)
     return MapType(VecType(fill(N(), D)), output_type)
-
-    #= elem_type, n_dims = if T.name.name == :Array
-         T.parameters
-    elseif T.name.name == :Vector
-        first(T.parameters), 1
-    else
-        error("type $(T) not supported")
-    end
-    output_type = convert_pct_type(elem_type(0))
-    return MapType(VecType(fill(N(), n_dims)), output_type) =#
 end
 
 function convert_pct_type(::T) where {T<:Union{Number,AbstractArray}}
     return convert_pct_type(T)
 end
 
+
+function convert_parametric_type(f)
+    sig = methods(f)[1].sig
+    _, arg_types... = sig.body.parameters
+
+    complexified_types = []
+    for t in arg_types
+        t.name.name == :Array || error("type $(t.name.name) is not supported.")
+        _, D = t.parameters
+        push!(complexified_types, Array{ComplexF64, D})
+    end
+    println(complexified_types)
+    
+    arg_pct_types = map(convert_pct_type, complexified_types)
+    return_type = Base.return_types(f, tuple(complexified_types...))[1]
+    return_pct_type = convert_pct_type(return_type)
+
+    return MapType(VecType(arg_pct_types), return_pct_type)
+
+end
+
 function convert_pct_type(f::T) where {T<:Function}
+    typeof(methods(f)[1].sig) == UnionAll &&
+        return convert_parametric_type(f)
     _, arg_types... = methods(f)[1].sig.parameters
     return_type = Base.return_types(f, arg_types)[1]
 
     return_pct_type = convert_pct_type(return_type)
-    return_arg_type = [convert_pct_type(a) for a in arg_types]
-    return MapType(VecType(return_arg_type), return_pct_type)
+    arg_pct_types = [convert_pct_type(a) for a in arg_types]
+    return MapType(VecType(arg_pct_types), return_pct_type)
+end
+
+
+
+function dedot(s::Symbol)
+    contains(string(s), "__dot__") || return s
+    mod, var = split(string(s), "__dot__")
+    return Expr(Symbol("."), Symbol(mod), QuoteNode(Symbol(var)))
 end
 

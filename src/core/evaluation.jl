@@ -1,4 +1,4 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale, let_copy_to_call
+export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale, let_copy_to_call, let_copy_to_comp
 
 function get_free(n::APN)
     free, _ = free_and_dummy(n)
@@ -54,10 +54,34 @@ end
 
 own_dummy(::APN) = Set{Var}()
 strip_copy(v::Var) = v
+#= strip_copy(v::PCTVector) = pct_vec(strip_copy.(content(v))...) =#
 strip_copy(v::Copy) = get_body(v)
+strip_copy(v::TerminalNode) = v
+strip_copy(v::APN) = set_terms(v, strip_copy.(terms(v))...)
+function strip_copy(v::Call)  
+    set_terms(v, strip_copy.(terms(v))...)
+end
+function strip_copy(v::RevComposition)
+    input_types = get_bound_type(get_type(v))
+    inputs = map(var, new_symbol(v; num=length(input_types), symbol=:_z), input_types)
+    outputs = pct_vec(inputs...)
+    for f in reverse(content(get_body(v)))
+        outputs = v_wrap(ecall(f, outputs...))
+    end
+
+    return pct_map(inputs..., v_unwrap(outputs))
+end
 
 function own_dummy(c::T) where {T<:Union{PermInv,Let,Map}}
-    return Set{Var}(map(strip_copy, content(get_bound(c))))
+    vars = Vector{Var}()
+    for b in get_bound(c)
+        if isa(b, PCTVector)
+            append!(vars, strip_copy.(b))
+        else
+            push!(vars, strip_copy(b))
+        end
+    end
+    return Set{Var}(vars)
 end
 
 variables(v::Var)::Vector{Var} = [v]
@@ -188,6 +212,10 @@ function subst_type(n::MapType, old::S, new::R, replace_dummy=false) where {S<:A
     )
 end
 
+function subst_type(n::SplatType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return SplatType(subst_type(get_body_type(n), old, new, replace_dummy))
+
+end
 
 function all_subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
     result = subst(n, old, new, replace_dummy)
@@ -278,7 +306,9 @@ end
 
 evaluate(n::APN) = set_content(n, map(evaluate, content(n))...)
 
-evaluate(c::AbstractCall) = set_content(c, evaluate(mapp(c)), map(evaluate, args(c)))
+function evaluate(c::AbstractCall)
+    set_content(c, evaluate(mapp(c)), map(evaluate, args(c)))
+end
 
 evaluate(c::TerminalNode) = c
 
@@ -286,14 +316,17 @@ function evaluate(c::Call)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
 
+    new_args = map(eval_all, args(c))
+    if any(t -> isa(get_type(t), SplatType), new_args)
+        return call(mapp(c), new_args...)
+    end
     new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    @assert length(new_bound) == length(args(c)) == length(get_bound(mapp(c)))
+    @assert length(new_bound) == length(new_args) == length(get_bound(mapp(c)))
 
     n = evaluate(get_body(mapp(c)))
     for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
         n = all_subst(n, old, new)
     end
-    new_args = map(eval_all, args(c))
 
     for (old, new) in zip(new_bound, new_args)
         n = all_subst(n, old, new)
@@ -306,7 +339,7 @@ end
 function evaluate(l::Let)
     copies, substs, subst_args, copy_args = [], [], [], []
     for (b, a) in zip(get_bound(l), args(l))
-        if isa(b, Copy)
+        if isa(b, Copy) || (isa(b, PCTVector) && all(t -> isa(t, Copy), content(b)))
             push!(copies, b)
             push!(copy_args, eval_all(a))
         else
@@ -359,7 +392,33 @@ function let_copy_to_call(x::Let)
             pct_map(strip_copy(b), res), a), zip(bound, args); init=body)
 
     return result
+end
 
+let_copy_to_comp(m::Map) = pct_map(let_copy_to_comp(get_bound(m), get_body(m))...)
+let_copy_to_comp(m::Pullback) = set_content(m, let_copy_to_comp(get_body(m)))
+
+function let_copy_to_comp(zs::APN, l::Let)
+    bound, args, body = content(l)
+
+    function filter_states(states, i)
+        remains = Vector{APN}()
+        for s in states
+            s in get_free(body) || any(j -> s in get_free(args[j]), i+1:length(args)) || continue
+            push!(remains, s)
+        end
+        return pct_vec(remains...)
+    end
+
+    state_vars::PCTVector = v_wrap(zs)
+    funcs = []
+    for i in 1:length(bound)
+        filtered = filter_states(state_vars, i)
+        push!(funcs, pct_map(state_vars..., pct_vec(args[i], filtered...)))
+        state_vars = filtered
+        pushfirst!(content(state_vars), strip_copy(bound[i]))
+    end
+    push!(funcs, pct_map(state_vars..., body))
+    return zs, call(rev_composite(reverse(funcs)...), v_wrap(zs)...)
 end
 
 
@@ -368,15 +427,18 @@ has_call(::TerminalNode) = false
 has_call(::Copy) = false
 
 function has_call(c::Call)
-    has_call(mapp(c)) ||
-        any(has_call, content(args(c))) ||
-        (isa(mapp(c), PCTVector) && length(args(c)) == 1 && isa(first(args(c)), Constant)) ||
-        isa(mapp(c), Map)
+    has_call(mapp(c)) && return true
+    any(has_call, content(args(c))) && return true
+    (isa(mapp(c), PCTVector) && length(args(c)) == 1 && isa(first(args(c)), Constant)) && return true
+    isa(mapp(c), Map) && !any(t -> isa(get_type(t), SplatType), args(c)) && return true
+    return false
 end
+
 function has_call(lt::Let)
     has_call(get_body(lt)) && return true
     any(has_call, args(lt)) && return true
-    return any(t -> !isa(t, Copy), get_bound(lt))
+    any(t -> isa(t, Var), get_bound(lt)) && return true
+    return false
 end
 
 
@@ -399,4 +461,6 @@ deprimitize(t::TerminalNode) = t
 
 scale(n::APN, c::Int) = mul(constant(c), n)
 scale(n::Map, c::Int) = pct_map(get_bound(n)..., scale(get_body(n), c))
+
+
 
