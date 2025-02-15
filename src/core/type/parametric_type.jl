@@ -34,7 +34,19 @@ parametrize_type(::N, arg) = Domain(N(), constant(1), arg, Dict(:name=>:N))
 
 parametrize_type(::T, lower, upper) where T <: ElementType = Domain(T(), lower, upper, Dict(:name=>Symbol(string(T))))
     
+function parametrize_type(mt::MapType, type_args...)
+    new_bounds = []
+    for i in length(get_bound_type(mt))
+        if i <= length(type_args)
+            push!(new_bounds, parametrize_type(get_bound_type(mt)[i], type_args[i]))
+        else
+            push!(new_bounds, get_bound_type(mt)[i])
+        end
+    end
+    #= parametrized = map(parametrize_type, get_content_type(get_bound_type(mt)), collect(type_args)) =#
 
+    return MapType(VecType(new_bounds), get_body_type(mt))
+end
 
 
 #= function parametrize_type(::N, args...) 

@@ -65,8 +65,11 @@ output_type(b::ABF)::AbstractPCTType = get_body_type(maptype(b))
 Make the variablse that represents zs when
 converting a function f to (zs) -> f(zs) in `as_map`.
 """
-z_vars(b::ABF)::Vector{T} where {T<:Var} = map(var,
-    new_symbol(apns(b)...; num=length(input_type(b)), symbol=:_z), get_content_type(input_type(b)))
+function z_vars(b::ABF)::Vector{<:Var}
+    result = map(var, new_symbol(apns(b)...; num=length(input_type(b)), symbol=:_z), get_content_type(input_type(b)))
+    isempty(result) && return Vector{Var}()
+    return result
+end
 
 """
     zk_vars(b::ABF)
@@ -116,9 +119,24 @@ as_map(b::Pconst)::Map = pct_map(z_vars(b)..., param(b))
 
 decompose(z::APN, c::Constant)::PComp = comp(z, Pconst(c, MapType(v_wrap(get_type(z)), get_type(c))))
 
+function zero_map(::ElementType)
+    return constant(0)
+end
+
+function zero_map(v::VecType)
+    return pct_vec(map(zero_map, content(v))...)
+end
+
+function zero_map(t::MapType)
+    bound_types = get_bound_type(t)
+    new_vars = map(var, new_symbol(; num=length(bound_types)), bound_types)
+    return pct_map(new_vars..., zero_map(get_body_type(t)))
+end
+
 function pp(b::Pconst)::Map
     zs, ks = zk_vars(b)
-    pct_map(zs..., ks..., constant(0))
+    #= @assert all(z -> isa(get_type(z), ElementType), zs) =#
+    pct_map(zs..., ks..., v_unwrap(zero_map(get_type(v_unwrap(pct_vec(zs...))))))
 end
 
 pretty(b::Pconst) = "->$(pretty(param(b)))"
@@ -437,7 +455,7 @@ struct Fibration <: AbstractFibration
     maptype::MapType
 end
 
-fiber_var(f::Fibration)::PCTVector = f.fiber_var
+fiber_var(f::AbstractFibration)::PCTVector = f.fiber_var
 fibers(f::AbstractFibration) = f.fibers
 #= param(f::Fibration) = (f.fiber_var, f.fibers) =#
 
@@ -467,6 +485,35 @@ end
 apns(fib::Fibration)::Vector{APN} = [fiber_var(fib)..., apns(fibers(fib))...]
 
 pretty(fib::Fibration) = "{$(pretty(fiber_var(fib))) ⇥ $(pretty(fibers(fib)))}"
+
+struct ParametricFibration <: AbstractFibration
+    type_var::PCTVector
+    fiber_var::PCTVector
+    fibers::PComp
+    maptype::MapType
+end
+
+type_var(pf::ParametricFibration) = pf.type_var
+
+function decompose(z::APN, ov::ParametricMap)::PComp
+    type_var, m = get_bound(ov), get_body(ov)
+    bs, fb = get_bound(m), get_body(m)
+    comp(z, ParametricFibration(type_var, bs,
+        decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(m))))
+end
+
+function as_map(pf::ParametricFibration, zs=z_vars(pf))::Map
+    b_fb = as_map(fibers(pf))
+    pct_map(zs..., parametric_map(type_var(pf)..., pct_map(fiber_var(pf)..., ecall(b_fb, zs...))))
+end
+
+function pp(pf::ParametricFibration)::ParametricMap
+    bs = fiber_var(pf)
+    zs, ks = zk_vars(pf)
+    return parametric_map(type_var(pf)..., pct_map(zs..., ks..., pct_sum(bs..., call(pp(fibers(pf)), zs..., splat(call(ks..., bs...))))))
+end
+
+apns(fib::ParametricFibration)::Vector{APN} = [type_var(fib)..., fiber_var(fib)..., apns(fibers(fib))...]
 
 """
 Finite fibration
@@ -510,9 +557,10 @@ struct BMap <: ABF
     param::APN
 end
 param(b::BMap)::APN = b.param
-function maptype(b::BMap)::MapType
+function maptype(b::BMap)::AbstractMapType
     result = get_type(param(b))
     isa(result, VecType) && return MapType(VecType([I()]), first(content(result)))
+    isa(result, ParametricMapType) && return get_param_body(result)
     return result
 end
 
@@ -533,16 +581,31 @@ function pp(b::BMap)::AbstractMap
     process_param(p::APN) = primitive_pullback(p)
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
     function process_param(p::Union{Var,PrimitivePullback})
-        bound_types = get_content_type(get_bound_type(get_type(m)))
-        n_args = length(bound_types)
-        zs, ks = zk_vars(b)
-        if n_args == 1
-            linear(get_type(m)) || return pullback(p)
-            return pct_map(zs..., ks..., call(conjugate(m), ks...))
+        if isa(get_type(p), MapType)
+            bound_types = get_content_type(get_bound_type(get_type(m)))
+            n_args = length(bound_types)
+            zs, ks = zk_vars(b)
+            if n_args == 1
+                linear(get_type(m)) || return pullback(p)
+                return pct_map(zs..., ks..., call(conjugate(m), ks...))
+            end
+            #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
+            pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
+            return pct_map(zs..., ks..., pct_vec(pullbacks...))
+        else
+            type_vars = get_params(get_type(p))
+            body_type = get_param_body(get_type(p))
+            bound_types = get_content_type(get_bound_type(body_type))
+            n_args = length(bound_types)
+            zs, ks = zk_vars(b)
+            if n_args == 1
+                linear(get_type(m)) || return pullback(p)
+                return pct_map(zs..., ks..., call(conjugate(m), ks...))
+            end
+            #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
+            pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
+            return parametric_map(type_vars..., pct_map(zs..., ks..., pct_vec(pullbacks...)))
         end
-        #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
-        pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
-        pct_map(zs..., ks..., pct_vec(pullbacks...))
     end
     return process_param(m)
 end
@@ -601,7 +664,9 @@ end
 
 
 function decompose(z::APN, l::Let)
-    result = decompose(let_copy_to_comp(z, l)...)
+    free = get_free(l)
+    captures = pct_vec(filter!(t -> !(t in v_wrap(z)), free)...)
+    result = decompose(z, let_copy_to_comp(captures, l))
     return result
 end
 
@@ -654,6 +719,9 @@ function pp(cc::CopyComp)
     x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...)
     k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...)
     l_0 = pct_vec(map((k, x) -> call(k, x), content(k_0), content(x_0))...)
+    if length(y_0_type) == 0
+        l_0 = pct_vec(map(k -> call(k), content(k_0))...)
+    end
     x_0 = v_unwrap(x_0)
     k_0 = v_unwrap(k_0)
     l_0 = v_unwrap(l_0)
@@ -679,9 +747,9 @@ function pp(cc::CopyComp)
     function body_elem(m::Int)
         y_prev = m == 1 ? x_0 : get_body(ys[m-1])
         l_next = m == N ? l_0 : get_body(ls[N-m])
-        λ = map(var, new_symbol(;num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+        λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
         b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
-        return pct_map(λ..., pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
+        return pct_map(λ..., pct_sum(v_wrap(x_0)..., pct_let(ys..., ls[1:end-1]...,
             ys_values..., ls_values[1:end-1]..., b)))
     end
     body = map(body_elem, 1:N)

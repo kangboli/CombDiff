@@ -29,12 +29,12 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
 end
 
 
-function e_class_reduction(::Type{T}, mapp::APN, args::PCTVector) where {T<:AbstractCall}
-    get_type(mapp) == UndeterminedPCTType() && return T, [mapp, args], UndeterminedPCTType()
+function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<:AbstractCall}
+    get_type(mapp) == UndeterminedPCTType() && return T, [mapp, arguments], UndeterminedPCTType()
 
-    if any(a -> isa(a, Splat) && isa(get_body(a), PCTVector), args)
+    if any(a -> isa(a, Splat) && isa(get_body(a), PCTVector), arguments)
         new_args = Vector{APN}()
-        for a in args
+        for a in arguments
             if isa(a, Splat) && isa(get_body(a), PCTVector)
                 append!(new_args, content(get_body(a)))
             else
@@ -44,8 +44,15 @@ function e_class_reduction(::Type{T}, mapp::APN, args::PCTVector) where {T<:Abst
         new_args = pct_vec(new_args...)
         return T, [mapp, new_args], partial_inference(T, mapp, new_args)
     end
+
+    if isa(mapp, Let)
+        new_bounds = map(var, new_symbol(mapp; num=length(arguments)), get_type.(arguments))
+        new_call = call(pct_map(new_bounds..., call(get_body(mapp), new_bounds...)), arguments...)
+        return repack(pct_let(get_bound(mapp)..., args(mapp)...,  new_call))
+    end
+
     #= println(get_type(mapp)) =#
-    return T, [mapp, args], partial_inference(T, mapp, args)
+    return T, [mapp, arguments], partial_inference(T, mapp, arguments)
 end
 
 function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where {T<:AbstractLet}
@@ -146,6 +153,7 @@ function e_class_reduction(::Type{Add}, term::PCTVector)
         new_map = combine_maps(new_terms)
         return repack(new_map)
     end
+    #= all(t->t==pct_vec(), new_terms) && return repack(pct_vec()) =#
 
     #= sort!(new_terms) =#
     length(new_terms) == 0 && return Constant, [0], I()
@@ -157,6 +165,7 @@ end
 
 function e_class_reduction(::Type{T}, bound::PCTVector, summand::S) where {T<:Contraction,S<:APN}
 
+    length(bound) == 0 && return bound
     is_zero(summand) && return Constant, [0], partial_inference(Constant, 0)
     # is_one(summand) && T == Prod && return Constant, [1], partial_inference(Constant, 1)
     isempty(content(bound)) && return S, terms(summand), get_type(summand)

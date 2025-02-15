@@ -25,9 +25,10 @@ function verbose(d::Domain)
     "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
 
-function pretty(m::Map)
+function pretty(m::Map, typed=false)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
-    params = map(v -> "$(pretty(v))", content(get_bound(m)))
+    params = typed ? map(v -> "$(pretty(v))::$(pretty(get_type(v)))", content(get_bound(m))) :
+             map(v -> "$(pretty(v))", content(get_bound(m)))
     "($(join(params, ", "))) -> $(pretty(get_body(m)))"
 end
 
@@ -45,13 +46,13 @@ end
 function verbose(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
     params = map(v -> "$(verbose(v)))", content(get_bound(m)))
-    "($(join(params, ", "))->\n" *
-    "$(indent(verbose(get_body(m)))))\n" *
+    "($(join(params, ", ")))->\n" *
+    "$(indent(verbose(get_body(m))))\n" *
     "::$(verbose(get_type(m)))"
 end
 
 function pretty(v::Var)
-    "$(name(v))"
+    replace("$(name(v))", "__dot__" => ".")
 end
 
 function latex(v::Var)
@@ -75,9 +76,9 @@ function latex(v::Var)
     end
 end
 
-verbose(v::Var) = "$(name(v))::$(verbose(get_type(v)))"
+verbose(v::Var) = "$(pretty(v))::$(verbose(get_type(v)))"
 
-pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c))))"
+pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c), false)))"
 
 latex(c::Call) = "($(latex(mapp(c))))($(latex(args(c))))"
 
@@ -102,7 +103,7 @@ end
 
 function latex(c::Conjugate)
     get_body(c) == nabla() &&
-    return "∇⋅"
+        return "∇⋅"
 
     function conj_symbol(t::MapType)
         t == FOT() && return "\\dagger"
@@ -120,11 +121,11 @@ end
 
 verbose(c::Conjugate) = "$(pretty(get_body(c)))'::$(pretty(get_type(c)))"
 
-pretty(p::T) where T <: AbstractPullback = "𝒫($(pretty(get_body(p))))"
+pretty(p::T) where {T<:AbstractPullback} = "𝒫($(pretty(get_body(p))))"
 
 latex(p::AbstractPullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
-verbose(p::T) where T <: AbstractPullback = "$(T)($(pretty(get_body(p))))::$(pretty(get_type(p)))"
+verbose(p::T) where {T<:AbstractPullback} = "$(T)($(pretty(get_body(p))))::$(pretty(get_type(p)))"
 
 
 function pretty(s::Sum)
@@ -243,7 +244,7 @@ function verbose(a::Add)
     "\n)::$(pretty(get_type(a)))"
 end
 
-pretty(p::PrimitiveCall) = "($(pretty(mapp(p))))($(pretty(args(p))))"
+pretty(p::PrimitiveCall) = "($(pretty(mapp(p))))($(pretty(args(p), false)))"
 
 function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
@@ -276,7 +277,7 @@ latex(c::Constant) = pretty(c)
 
 verbose(c::Constant) = "$(get_body(c))::$(pretty(get_type(c)))"
 
-function pretty(v::PCTVector, paren=false)
+function pretty(v::PCTVector, paren=true)
     terms = (t -> isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
     result = join(terms, ", ")
     return paren ? "𝕧($(result))" : "$(result)"
@@ -326,7 +327,7 @@ function verbose(l::Let)
     "let $(join(map((f, a) -> indent("$(verbose(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
 end
 function latex(l::Let, paren=true)
-    inner_str = if isa(get_body(l), Let) 
+    inner_str = if isa(get_body(l), Let)
         latex(get_body(l), false)
     else
         latex_indent(latex(get_body(l)))
@@ -444,10 +445,21 @@ function latex(i::Indicator)
     "\\mathbb{I}_{$(latex(lower(i))) \\leq $(latex(upper(i)))} $(latex(get_body(i)))"
 end
 
-pretty(s::Union{Symbol, Number}) = string(s)
+pretty(s::Union{Symbol,Number}) = string(s)
 
 pretty(d::IntDiv) = "div($(pretty(get_nom(d))), $(pretty(get_denom(d))))"
 latex(d::IntDiv) = "div($(latex(get_nom(d))),$(latex(get_denom(d))))"
 pretty(f::Fold) = "∧($(pretty(get_bound(f))), $(pretty(get_body(f))))"
 verbose(f::Fold) = "∧($(verbose(get_bound(f))), $(pretty(get_body(f))))"
 
+
+pretty(f::Splat) = "$(pretty(get_body(f)))..."
+
+
+function pretty(p::ParametricMap)
+    "{$(join(pretty.(get_bound(p)), ", "))}$(pretty(get_body(p), true))"
+end
+
+function verbose(p::ParametricMapType)
+    "{$(join(pretty.(get_params(p))))}$(pretty(get_param_body(p)))"
+end

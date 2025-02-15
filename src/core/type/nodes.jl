@@ -39,7 +39,8 @@ export
     pct_copy,
     domain_indicator,
     int_div,
-    mul
+    mul,
+    parametric_map
 
 abstract type TerminalNode <: APN end
 
@@ -149,6 +150,19 @@ function is_univariate(m::AbstractMap)
         isa(get_type(first(content(params))), ElementType)
 end
 
+struct ParametricMap <: AbstractMap
+    type::AbstractPCTType
+    bound::PCTVector
+    body::AbstractMap
+end
+
+function parametric_map(terms::Vararg{APN})
+    terms = collect(terms)
+    @assert all(t->isa(t, Var), terms[1:end-1])
+    result = make_node(ParametricMap, pct_vec(terms[1:end-1]...), last(terms))
+    return result
+end
+
 abstract type AbstractPullback <: AbstractMap end
 
 struct Pullback <: AbstractPullback
@@ -242,6 +256,7 @@ abstract type PermInv <: APN end
 abstract type Contraction <: PermInv end
 
 function pct_sum(terms::Vararg)
+    length(terms) == 1 && return last(terms)
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
 end
 

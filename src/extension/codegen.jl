@@ -9,10 +9,10 @@ end
 
 function find_dimensions(v::Var, c::PrimitiveCall, existing_dims=[])
     i = findfirst(t -> isa(t, Var) && get_body(t) == get_body(v), content(args(c)))
-    if i !== nothing 
-        isa(mapp(c), AbstractCall) && 
-        @warn "dimension inference failed for $(pretty(args(c)[i])): $(pretty(mapp(c))) may not have fixed dimensions
-        the type of $(pretty(args(c)[i])) may need to be explicitly declared."
+    if i !== nothing
+        isa(mapp(c), AbstractCall) &&
+            @warn "dimension inference failed for $(pretty(args(c)[i])): $(pretty(mapp(c))) may not have fixed dimensions
+            the type of $(pretty(args(c)[i])) may need to be explicitly declared."
         push!(existing_dims, [:(1), :(size($(codegen(mapp(c))), $(i)))])
     end
     for t in terms(c)
@@ -91,7 +91,7 @@ function codegen(i::IntDiv)
 end
 
 function codegen(m::Map, memory_target=nothing)
-    if length(get_bound(m)) == 1 && isa(get_body(m), Fold) && length(get_bound(get_body(m))) == 1 
+    if length(get_bound(m)) == 1 && isa(get_body(m), Fold) && length(get_bound(get_body(m))) == 1
 
         fold = get_body(m)
         b = first(get_bound(m))
@@ -146,6 +146,45 @@ function codegen(m::Map, memory_target=nothing)
             $(tensor_var_name)
         end
     )
+end
+
+function equate_param_with_size(p, f_types::Vector{<:AbstractPCTType})
+    for (i, t) in enumerate(f_types)
+        for (j, s) in enumerate(get_bound_type(t))
+            isa(t, MapType) || continue
+            lower(s) == constant(1) || continue
+            upper(s) == p || continue
+            return (i, j)
+        end
+    end
+    return (nothing, nothing)
+end
+
+function codegen(pm::ParametricMap)
+    p_bound = get_bound(pm)
+    m = get_body(pm)
+
+    sizes = []
+
+    for p in (p_bound)
+        i, j = equate_param_with_size(p, get_type.(get_bound(m)))
+        i === nothing && error("$(p) cannot be resolved.")
+        push!(sizes, (i, j))
+    end
+
+    body = codegen(get_body(m))
+    for (p, (i, j)) in zip(p_bound, sizes)
+        body = :(
+            let $(codegen(p)) = size($(codegen(get_bound(m)[i])), $(j))
+                $(body)
+            end
+        )
+    end
+
+    return :(($(codegen.(get_bound(m))...)) ->
+        $(body)
+    )
+
 end
 
 codegen(d::Domain) = codegen(base(d))

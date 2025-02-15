@@ -1,4 +1,5 @@
-export evaluate, subst, variables, contains_name, eval_all, new_symbol, SymbolGenerator, free_and_dummy, get_free, deprimitize, scale, let_copy_to_call, let_copy_to_comp
+export evaluate, subst, variables, contains_name, eval_all, new_symbol,
+    SymbolGenerator, free_and_dummy, get_free, deprimitize, scale, let_copy_to_comp
 
 function get_free(n::APN)
     free, _ = free_and_dummy(n)
@@ -41,7 +42,7 @@ end
 
 own_free(::APN) = Set{Var}()
 
-function own_free(c::T) where {T<:Union{PermInv,Let,Map}}
+function own_free(c::T) where {T<:Union{PermInv,Let,Map,ParametricMap}}
     all_free = Set{Var}()
     for t in get_type.(content(get_bound(c)))
         t in [C(), N(), I(), R()] && continue
@@ -58,7 +59,7 @@ strip_copy(v::Var) = v
 strip_copy(v::Copy) = get_body(v)
 strip_copy(v::TerminalNode) = v
 strip_copy(v::APN) = set_terms(v, strip_copy.(terms(v))...)
-function strip_copy(v::Call)  
+function strip_copy(v::Call)
     set_terms(v, strip_copy.(terms(v))...)
 end
 function strip_copy(v::RevComposition)
@@ -72,7 +73,7 @@ function strip_copy(v::RevComposition)
     return pct_map(inputs..., v_unwrap(outputs))
 end
 
-function own_dummy(c::T) where {T<:Union{PermInv,Let,Map}}
+function own_dummy(c::T) where {T<:Union{PermInv,Let,Map,ParametricMap}}
     vars = Vector{Var}()
     for b in get_bound(c)
         if isa(b, PCTVector)
@@ -212,6 +213,11 @@ function subst_type(n::MapType, old::S, new::R, replace_dummy=false) where {S<:A
     )
 end
 
+function subst_type(n::ParametricMapType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    name(old) in name.(get_params(n)) && return n
+
+    return ParametricMapType(get_params(n), subst_type(get_param_body(n), old, new, replace_dummy))
+end
 function subst_type(n::SplatType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
     return SplatType(subst_type(get_body_type(n), old, new, replace_dummy))
 
@@ -312,7 +318,18 @@ end
 
 evaluate(c::TerminalNode) = c
 
+function parametric_evaluation(c::Call)
+    pm = mapp(c)
+    @assert isa(pm, AbstractMap)
+    m = get_body(pm)
+    type_vars = get_bound(pm)
+    values = Dict()
+    type_match!([type_vars...], values, get_bound_type(get_type(m)), get_type(args(c)))
+    eval_all(call(pct_map(type_vars..., call(m, args(c)...)), [values[t] for t in type_vars]...))
+end
+
 function evaluate(c::Call)
+    isa(get_type(mapp(c)), ParametricMapType) && return parametric_evaluation(c)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
 
@@ -321,7 +338,14 @@ function evaluate(c::Call)
         return call(mapp(c), new_args...)
     end
     new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
-    @assert length(new_bound) == length(new_args) == length(get_bound(mapp(c)))
+    new_args = filter(a -> !(isa(get_type(a), VecType) && (length(get_type(a)) == 0)), content(new_args))
+    if length(new_bound) == 0 
+        n =  evaluate(get_body(mapp(c)))
+        return n
+    end
+    @assert isa(mapp(c), AbstractMap)
+    @assert length(new_bound) == length(new_args)
+    @assert length(new_bound) == length(get_bound(mapp(c)))
 
     n = evaluate(get_body(mapp(c)))
     for (old, new) in zip(content(get_bound(mapp(c))), new_bound)
@@ -373,30 +397,6 @@ function evaluate(l::Let)
     return result
 end
 
-let_copy_to_call(x::APN) = set_content(x, map(let_copy_to_call, content(x))...)
-
-let_copy_to_call(x::Union{TerminalNode,Copy}) = x
-
-function let_copy_to_call(x::Let)
-    bound, args, body = let_copy_to_call.(content(x))
-    for b in bound
-        isa(b, Copy) || error("$(pretty(b)) should be inlined first")
-    end
-
-    #= result = body
-    for (b, a) in zip(bound, args)
-        result = primitive_call(pct_map(strip_copy(b), body), a)
-    end =#
-
-    result = foldr(((b, a), res) -> primitive_call(
-            pct_map(strip_copy(b), res), a), zip(bound, args); init=body)
-
-    return result
-end
-
-let_copy_to_comp(m::Map) = pct_map(let_copy_to_comp(get_bound(m), get_body(m))...)
-let_copy_to_comp(m::Pullback) = set_content(m, let_copy_to_comp(get_body(m)))
-
 function let_copy_to_comp(zs::APN, l::Let)
     bound, args, body = content(l)
 
@@ -418,7 +418,7 @@ function let_copy_to_comp(zs::APN, l::Let)
         pushfirst!(content(state_vars), strip_copy(bound[i]))
     end
     push!(funcs, pct_map(state_vars..., body))
-    return zs, call(rev_composite(reverse(funcs)...), v_wrap(zs)...)
+    return call(rev_composite(reverse(funcs)...), v_wrap(zs)...)
 end
 
 

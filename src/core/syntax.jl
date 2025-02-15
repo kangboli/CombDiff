@@ -459,10 +459,7 @@ function parse_map_node(f::Expr)
     result_map = :(CombDiff.pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
     parametric_types === nothing && return result_map
 
-    return :(CombDiff.set_type($(result_map),
-        ParametricMapType($(map(parse_node, parametric_types)),
-            UndeterminedPCTType()
-        )))
+    return :(CombDiff.parametric_map($(map(parse_node, parametric_types)...), $(result_map)))
 end
 
 
@@ -730,7 +727,6 @@ function convert_parametric_type(f)
         _, D = t.parameters
         push!(complexified_types, Array{ComplexF64, D})
     end
-    println(complexified_types)
     
     arg_pct_types = map(convert_pct_type, complexified_types)
     return_type = Base.return_types(f, tuple(complexified_types...))[1]

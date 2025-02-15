@@ -119,6 +119,7 @@ type_based(a::SplatType, e::ElementType) = type_based(get_body_type(a), e)
 symmetries(c::MapType) = get(c.meta, :symmetries, [])
 
 linear(c::MapType) = get(c.meta, :linear, false)
+linear(c::ParametricMapType) = false
 
 function escalate(element_types::Vararg)
     UndeterminedPCTType() in element_types && return UndeterminedPCTType()

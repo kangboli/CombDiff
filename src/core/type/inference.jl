@@ -166,6 +166,18 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: Abst
         length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
         return get_type(last(terms))
     end
+
+    if isa(get_type(mapp), ParametricMapType)
+        param_type = get_type(mapp)
+        values = Dict()
+        concrete_type = get_type(last(terms))
+        parametric_type = get_bound_type(get_param_body(param_type))
+        type_match!(
+            get_params(param_type), values,
+            parametric_type, concrete_type)
+
+        return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type
+    end
     return get_body_type(get_type(first(terms)))
 end
 
@@ -194,16 +206,35 @@ function partial_inference(::Type{Conjugate}, term)::AbstractPCTType
 end
 
 function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
-    bound_type = get_bound_type(get_type(mapp))
-    body_type = get_body_type(get_type(mapp))
-    MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
+    if isa(get_type(mapp), MapType)
+        bound_type = get_bound_type(get_type(mapp))
+        body_type = get_body_type(get_type(mapp))
+        return MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
+    elseif isa(get_type(mapp), ParametricMapType)
+        bound_type = get_bound_type(get_param_body(get_type(mapp)))
+        body_type = get_body_type(get_param_body(get_type(mapp)))
+        return ParametricMapType(
+            get_params(get_type(mapp)),
+            MapType(add_content(bound_type, body_type), first(get_content_type(bound_type))))
+    else
+        error("$(pretty(get_type(mapp))) is not supported")
+    end
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     get_type(v) == UndeterminedPCTType() && return UndeterminedPCTType()
-    bound_type = get_bound_type(get_type(v))
-    body_type = get_body_type(get_type(v))
-    MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
+    if isa(get_type(v), MapType)
+        bound_type = get_bound_type(get_type(v))
+        body_type = get_body_type(get_type(v))
+        return MapType(add_content(bound_type, body_type), bound_type)
+    else
+        type_vars = get_params(get_type(v))
+        m_type = get_param_body(get_type(v))
+        bound_type = get_bound_type(m_type)
+        body_type = get_body_type(m_type)
+        return ParametricMapType(type_vars, MapType(add_content(bound_type, body_type), bound_type))
+
+    end
 end
 
 function partial_inference(::Type{PrimitivePullback}, v::PCTVector)::AbstractPCTType
@@ -238,6 +269,20 @@ inference(d::AbstractPCTType, ::TypeContext=TypeContext()) = d
     new_bounds = VecType(map(t->inference(t, context), get_content_type(get_bound_type(d))))
     return MapType(new_bounds, inference(get_body_type(d), context))
 end =#
+
+
+function inference(v::VecType, context::TypeContext=TypeContext())
+    new_vectype = VecType(map(t->inference(t, context), get_content_type(v)))
+    return new_vectype
+end
+
+function inference(m::MapType, context::TypeContext=TypeContext())
+    new_maptype = MapType(inference(get_bound_type(m), context), 
+                          inference(get_body_type(m), context),
+                          meta(m))
+
+    return new_maptype
+end
 
 function inference(d::Domain, context::TypeContext=TypeContext())
     #= vars = vcat(variables(lower(d)), variables(upper(d))) =#
@@ -282,4 +327,8 @@ end
 
 function partial_inference(::Type{Splat}, t::APN)
     return SplatType(get_type(t))
+end
+
+function partial_inference(::Type{ParametricMap}, terms...)
+    return ParametricMapType([first(terms)...], get_type(last(terms)))
 end
