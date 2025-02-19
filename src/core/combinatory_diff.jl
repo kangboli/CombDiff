@@ -115,6 +115,9 @@ struct Pconst <: ABF
     maptype::MapType
 end
 
+"""
+Pconst(v) = z -> v
+"""
 as_map(b::Pconst)::Map = pct_map(z_vars(b)..., param(b))
 
 decompose(z::APN, c::Constant)::PComp = comp(z, Pconst(c, MapType(v_wrap(get_type(z)), get_type(c))))
@@ -127,12 +130,21 @@ function zero_map(v::VecType)
     return pct_vec(map(zero_map, content(v))...)
 end
 
+"""
+Create a map from some type to zero.
+For example, a vector of zeros
+(i::N) -> 0
+"""
 function zero_map(t::MapType)
     bound_types = get_bound_type(t)
     new_vars = map(var, new_symbol(; num=length(bound_types)), bound_types)
     return pct_map(new_vars..., zero_map(get_body_type(t)))
 end
 
+"""
+𝒫 (z -> v) = (z, k) -> 0
+The 0 is the zero vector in the vector space of z.
+"""
 function pp(b::Pconst)::Map
     zs, ks = zk_vars(b)
     #= @assert all(z -> isa(get_type(z), ElementType), zs) =#
@@ -151,8 +163,16 @@ maptype(::BConj)::MapType = MapType(VecType([C()]), C())
 
 decompose(z::APN, c::Conjugate)::PComp = push(decompose(z, get_body(c)), BConj())
 
+"""
+BConj = (z) -> z^*
+"""
 as_map(b::BConj, zs=z_vars(b))::Map = pct_map(zs..., conjugate(zs...))
 
+"""
+𝒫 (z -> z*) = (z, k) -> k^*
+This is currently written for numbers, but 
+applies to matrices (conjugate transpose) as well.
+"""
 function pp(b::BConj, (zs, ks)=zk_vars(b))::Map
     pct_map(zs..., ks..., conjugate(ks...))
 end
@@ -187,6 +207,9 @@ function avoid_overflow(zs::APN, ov::APN)::Tuple{APN,PCTVector}
     return target, rest
 end
 
+"""
+BAdd(v) = z -> z + v
+"""
 as_map(b::BAdd, zs=z_vars(b))::Map = pct_map(zs..., add(zs..., param(b)))
 
 function pp(b::BAdd)::Map
@@ -212,6 +235,9 @@ function decompose(zs::APN, ov::Mul)::PComp
     push(decompose(zs, target), BMul(mul(content(rest)...), ptype))
 end
 
+"""
+BMul(v) = z -> z * v
+"""
 function as_map(b::BMul, zs=z_vars(b))::Map
     pct_map(zs..., mul(zs..., param(b)))
 end
@@ -237,6 +263,9 @@ function decompose(z::APN, ov::T) where {T<:AbstractDelta}
         MapType(v_wrap(body_type), body_type), T))
 end
 
+"""
+BDelta(i, j) = z -> delta(i, j, z)
+"""
 function as_map(d::BDelta, zs=z_vars(d))::Map
     if d.delta_type == DeltaNot
         return pct_map(zs..., make_node(d.delta_type, param(d)..., v_unwrap(zs)))
@@ -262,6 +291,9 @@ function decompose(z::APN, ov::Monomial)::PComp
     push(decompose(z, base(ov)), BMon(power(ov), MapType(v_wrap(get_type(base(ov))), get_type(ov))))
 end
 
+"""
+BMon(v) = z -> z^v
+"""
 function as_map(b::BMon, zs=z_vars(b))::Map
     pct_map(zs..., monomial(zs..., param(b)))
 end
@@ -290,6 +322,9 @@ function decompose(z::APN, ov::Sum)::PComp
     push(decompose(z, inner_map), BSum(get_bound(ov), MapType(v_wrap(get_type(inner_map)), get_type(ov))))
 end
 
+"""
+Bsum(i, j) = z -> sum((i, j), z).
+"""
 function as_map(b::BSum, zs=z_vars(b))::Map
     pct_map(zs..., pct_sum(param(b)..., call(zs..., param(b)...)))
 end
@@ -313,6 +348,9 @@ decompose(z::APN, ov::Exp)::PComp = push(decompose(z, get_body(ov)), BExp(
     MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
 ))
 
+"""
+Bexp() = z -> exp(z)
+"""
 as_map(b::BExp, zs=z_vars(b)) = pct_map(zs..., pct_exp(zs...))
 
 function pp(b::BExp)
@@ -335,6 +373,9 @@ decompose(z::APN, ov::Log)::PComp = push(decompose(z, get_body(ov)), BLog(
     MapType(VecType([get_type(get_body(ov))]), get_type(get_body(ov)))
 ))
 
+"""
+Blog() = z -> log(z)
+"""
 as_map(b::BLog, zs=z_vars(b)) = pct_map(zs..., pct_log(zs...))
 
 function pp(b::BLog)
@@ -383,6 +424,9 @@ Base.show(io::IO, c::PComp) = println(io, pretty(c))
 
 apns(c::PComp)::Vector{APN} = vcat(content(input(c)), apns.(pfuncs(c))...)
 
+"""
+PComp(f_1, f_2, ...) = z -> f_2(f_1(z)).
+"""
 function as_map(c::PComp)::Map
     result = input(c)
     for f in pfuncs(c)
@@ -502,6 +546,9 @@ function decompose(z::APN, ov::ParametricMap)::PComp
         decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(m))))
 end
 
+"""
+PF(f) = z -> b -> f(b)
+"""
 function as_map(pf::ParametricFibration, zs=z_vars(pf))::Map
     b_fb = as_map(fibers(pf))
     pct_map(zs..., parametric_map(type_var(pf)..., pct_map(fiber_var(pf)..., ecall(b_fb, zs...))))
@@ -525,6 +572,9 @@ struct FiniteFibration <: AbstractFibration
     maptype::MapType
 end
 
+"""
+FF(f_1, f_2) = z -> (f_1(z), f_2(z))
+"""
 function as_map(fib::FiniteFibration, zs=z_vars(fib))::Map
     b_fb = as_map.(fibers(fib))
     fzs = [v_unwrap(ecall(f, zs...)) for f in b_fb]
@@ -564,6 +614,9 @@ function maptype(b::BMap)::AbstractMapType
     return result
 end
 
+"""
+BMap(f) = z -> f(z)
+"""
 as_map(m::BMap)::APN = param(m)
 
 function decompose(zs::PCTVector, ov::Var)::PComp
@@ -637,6 +690,7 @@ end
 function as_map(bp::BPullback)
     m, args... = content(param(bp))
     zs = z_vars(bp)
+    @warn "Potential bug. Be aware."
     return pct_map(zs..., call(m, args..., zs...))
 end
 
@@ -676,6 +730,9 @@ function decompose(z::APN, ov::RevComposition)
     return push(decompose(z, body), CopyComp(maptype))
 end
 
+"""
+CopyComp = (f_1, f_2, ..., f_n) -> f_1 ∘ f_2 ∘ ... ∘ f_n
+"""
 function as_map(cc::CopyComp)
     zs = z_vars(cc)
     return pct_map(zs..., composite(zs...))
@@ -763,13 +820,13 @@ struct BLetConst <: ABF
     maptype::MapType
 end
 
-function decompose(z::APN, ov::Let)::PComp
+#= function decompose(z::APN, ov::Let)::PComp
     params = pct_vec(get_bound(ov), args(ov))
     contains_name(params, get_body(z)) && error("The input variables currently cannot appear in a const expression.")
     maptype = MapType(v_wrap(get_type(ov)), get_type(ov))
     lc = BLetConst(params, maptype)
     return push(decompose(z, get_body(ov)), lc)
-end
+end =#
 
 function as_map(lc::BLetConst)
     bounds, args = param(lc)

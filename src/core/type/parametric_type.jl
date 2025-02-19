@@ -17,6 +17,7 @@ end
 get_params(pm::ParametricMapType) = pm.paramters
 get_param_body(pm::ParametricMapType) = pm.body
 name(pm::ParametricMapType) = name(get_param_body(pm))
+linear(c::ParametricMapType) = false
 
 function parametrize_type(t::T, args...) where {T <: Union{ParametricDomain, ParametricMapType}}
     args = [args...]

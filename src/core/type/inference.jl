@@ -28,8 +28,6 @@ default_context() = TypeContext(
         :RM => [MapType(VecType([N(), N()]), R())],
         :CO => [MapType(VecType([C(), C()]), C())],
         :RO => [MapType(VecType([R(), R()]), R())],
-        :CT => [MapType(VecType([N(), N(), N()]), C())],
-        :RT => [MapType(VecType([N(), N(), N()]), R())],
         :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
         :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
         :SSym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :neg),),))],
