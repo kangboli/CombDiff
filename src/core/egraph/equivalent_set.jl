@@ -235,6 +235,16 @@ function delta_splat_call(p::T) where {T<:AbstractCall}
     return result
 end
 
+function bypass_eval(c::AbstractCall)
+    result = NeighborList()
+    m = mapp(c)
+    isa(m, Map) || return result
+    free = get_free(get_body(m))
+    any(b->b in free, get_bound(m)) && return result
+    push!(result, get_body(m); dired=true, name="bypass_eval")
+    return result
+end
+
 function neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
 
@@ -243,6 +253,7 @@ function neighbors(c::AbstractCall; settings=default_settings())
     append!(result, let_out_call(c))
     append!(result, delta_splat_call(c))
     append!(result, meta_prop_neighbors(c))
+    append!(result, bypass_eval(c))
     append!(result, sub_neighbors(c; settings=settings))
 
     function apply_symmetry(indices, op)
@@ -1913,7 +1924,7 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::Union{FermiScalar,IntDiv}; settings=default_settings())
+function neighbors(n::Union{FermiScalar,IntDiv, AbstractPullback}; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
 

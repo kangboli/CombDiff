@@ -319,12 +319,14 @@ function latex(m::Monomial)
     "\\left($(latex(base(m)))\\right)^{$(latex(power(m)))}"
 end
 
-pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
+function pretty(l::Let) 
+    "let \n$(join(map((f, a) -> indent("$(pretty(f)) $(isa(f, Copy) ? "=" : ":=") $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
+end
 pretty(l::Mutate) = "mut \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
 #= pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend" =#
 
 function verbose(l::Let)
-    "let $(join(map((f, a) -> indent("$(verbose(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
+    "let $(join(map((f, a) -> indent("$(verbose(f)) $(isa(f, Copy) ? "=" : ":=") $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
 end
 function latex(l::Let, paren=true)
     inner_str = if isa(get_body(l), Let)
@@ -333,7 +335,7 @@ function latex(l::Let, paren=true)
         latex_indent(latex(get_body(l)))
     end
 
-    bound_str = join(map((f, a) -> latex_indent("$(latex(f)) = $(latex(a))"), get_bound(l), args(l)), "\\\\")
+    bound_str = join(map((f, a) -> latex_indent("$(latex(f)) $(isa(f, Copy) ? "=" : ":=") $(latex(a))"), get_bound(l), args(l)), "\\\\")
 
     if paren
         "\\mathrm{let}\\\\$(bound_str)\\\\$(inner_str)\\\\\\mathrm{end}"
@@ -361,11 +363,11 @@ function latex(c::RevComposition)
 end
 
 function pretty(c::Copy)
-    "%$(pretty(get_body(c)))"
+    "$(pretty(get_body(c)))"
 end
 
 function latex(c::Copy)
-    "\\%$(latex(get_body(c)))"
+    "\\$(latex(get_body(c)))"
 end
 
 

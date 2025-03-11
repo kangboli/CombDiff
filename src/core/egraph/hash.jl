@@ -267,3 +267,15 @@ function Base.isless(v_1::Var{R}, v_2::Var{S}) where {R<:AbstractPCTType,S<:Abst
     return hash(name(v_1)) < hash(name(v_2))
 end
 
+function Base.hash(n::Map, h::UInt)
+    new_vars = map(var, new_symbol(get_body(n); num=length(args(n))), get_type.(args(n)))
+    return hash(ecall(n, new_vars), h)
+end
+
+function Base.:(==)(a::Map, b::Map)
+    length(get_bound(a)) == length(get_bound(b)) || return false
+    new_vars = map(var, new_symbol(a, b; num=length(get_bound(a))), get_type.(get_bound(a)))
+    new_a = ecall(a, new_vars...)
+    new_b = ecall(b, new_vars...)
+    return new_a == new_b
+end

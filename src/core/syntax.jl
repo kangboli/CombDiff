@@ -27,7 +27,7 @@ macro pit(expr, ctx=interactive_context, use_global_state=false, capture_local_s
         top_level_nodes = map(parse_node, expr.args)
     end
 
-    statements = filter(n -> isa(n, Statement), top_level_nodes)
+    statements = filter(n -> isa(n, AbstractStatement), top_level_nodes)
     domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
     sizes = map(get_expr, filter(n -> isa(n, SizeNode), top_level_nodes))
     maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
@@ -208,6 +208,11 @@ end
 
 abstract type AbstractStatement end
 
+struct InLineStatement <: AbstractStatement
+    lhs::Expr
+    rhs::Expr
+end
+
 struct Statement <: AbstractStatement
     lhs::Expr
     rhs::Expr
@@ -219,6 +224,7 @@ struct MutatingStatement <: AbstractStatement
 end
 
 lhs(s::AbstractStatement) = s.lhs
+lhs(s::Statement) = :(CombDiff.pct_copy($(s.lhs)))
 rhs(s::AbstractStatement) = s.rhs
 
 struct Block
@@ -264,7 +270,7 @@ function parse_node(n::Expr)
     n.head == :block && return parse_block_node(n)
     n.head == :let && return parse_let_node(n)
     n.head == Symbol("'") && return parse_conjugate_node(n)
-    n.head == :(=) && return parse_statement_node(n)
+    (n.head == :(=) || n.head == :(:=)) && return parse_statement_node(n)
     n.head == :tuple && return parse_pctvector_node(n)
     n.head == Symbol("::") && return parse_node(Param, n)
     return :()
@@ -645,7 +651,7 @@ function parse_statement_node(n::Expr)
     else
         lhs = parse_node(n.args[1])
         rhs = parse_node(n.args[2])
-        return Statement(lhs, rhs)
+        return n.head == :(=) ? Statement(lhs, rhs) : InLineStatement(lhs, rhs)
     end
 end
 
@@ -659,7 +665,7 @@ end
 function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
     isempty(statements) && return return_value
     bound, args = lhs.(statements), rhs.(statements)
-    bound = [:(CombDiff.pct_copy($(b))) for b in bound]
+    #= bound = [:(CombDiff.pct_copy($(b))) for b in bound] =#
     return :(CombDiff.pct_let($(bound...), $(args...), $(return_value)))
 end
 
