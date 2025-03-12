@@ -1,6 +1,7 @@
 export AbstractPCTType,
     get_body_type,
     MapType,
+    MultiType,
     VecType,
     N,
     I,
@@ -138,4 +139,9 @@ function escalate(map_types::Vararg{MapType})
 end
 
 
+struct MultiType <: AbstractPCTType
+    maptypes::Vector{<:AbstractMapType}
+end
+
+get_maptypes(m::MultiType) = m.maptypes
 

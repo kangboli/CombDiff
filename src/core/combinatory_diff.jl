@@ -683,8 +683,9 @@ function decompose(z::APN, ov::AbstractCall)::PComp
             return push(decompose(z, k), bp)
         end
     end
-    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), BMap(mapp(ov)))
-    push(decompose(z, args(ov)), BMap(mapp(ov)))
+    b_map = BMap(set_type(mapp(ov), MapType(get_type(args(ov)), get_type(ov))))
+    length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), b_map)
+    push(decompose(z, args(ov)), b_map)
 end
 
 function as_map(bp::BPullback)

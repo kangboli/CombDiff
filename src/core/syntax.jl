@@ -743,14 +743,22 @@ function convert_parametric_type(f)
 end
 
 function convert_pct_type(f::T) where {T<:Function}
-    typeof(methods(f)[1].sig) == UnionAll &&
-        return convert_parametric_type(f)
-    _, arg_types... = methods(f)[1].sig.parameters
-    return_type = Base.return_types(f, arg_types)[1]
+    types = Vector{AbstractMapType}()
+    for i in length(methods(f))
+        try
+            if typeof(methods(f)[i].sig) == UnionAll 
+                push!(types, convert_parametric_type(f))
+            end
+            _, arg_types... = methods(f)[i].sig.parameters
+            return_type = Base.return_types(f, arg_types)[1]
 
-    return_pct_type = convert_pct_type(return_type)
-    arg_pct_types = [convert_pct_type(a) for a in arg_types]
-    return MapType(VecType(arg_pct_types), return_pct_type)
+            return_pct_type = convert_pct_type(return_type)
+            arg_pct_types = [convert_pct_type(a) for a in arg_types]
+            push!(types, MapType(VecType(arg_pct_types), return_pct_type))
+        catch # Best effort & silent the errors.
+        end
+    end
+    return MultiType(types)
 end
 
 

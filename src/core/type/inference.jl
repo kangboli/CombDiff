@@ -176,7 +176,18 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: Abst
 
         return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type
     end
-    return get_body_type(get_type(first(terms)))
+
+    args = terms[2]
+    if isa(get_type(mapp), MultiType)
+        for t in get_maptypes(get_type(mapp))
+            bound_types = get_bound_type(t)
+            arg_types = get_type.(args)
+            all(i->bound_types[i] == arg_types[i], 1:length(args)) || continue
+            return get_body_type(t)
+        end
+    end
+
+    return get_body_type(get_type(mapp))
 end
 
 function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
