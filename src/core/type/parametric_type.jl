@@ -37,7 +37,7 @@ parametrize_type(::T, lower, upper) where T <: ElementType = Domain(T(), lower, 
     
 function parametrize_type(mt::MapType, type_args...)
     new_bounds = []
-    for i in length(get_bound_type(mt))
+    for i in 1:length(get_bound_type(mt))
         if i <= length(type_args)
             push!(new_bounds, parametrize_type(get_bound_type(mt)[i], type_args[i]))
         else
