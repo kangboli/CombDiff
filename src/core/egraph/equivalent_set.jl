@@ -240,10 +240,46 @@ function bypass_eval(c::AbstractCall)
     m = mapp(c)
     isa(m, Map) || return result
     free = get_free(get_body(m))
-    any(b->b in free, get_bound(m)) && return result
+    any(b -> b in free, get_bound(m)) && return result
     push!(result, get_body(m); dired=true, name="bypass_eval")
     return result
 end
+
+#= function apply_symmetry(indices, op)
+    # Apply the permutation.
+    new_term = set_content(c, mapp(c), args(c)[collect(indices)])
+    # Apply the symmetry operation.
+    op == :conj && return conjugate(new_term)
+    op == :id && return new_term
+    op == :neg && return mul(constant(-1), new_term)
+    if op in [:ineg, :inegc]
+        new_args = []
+        for (i, a) in enumerate(content(args(c)))
+            if i in indices
+                push!(new_args, mul(constant(-1), a))
+            else
+                push!(new_args, a)
+            end
+        end
+        negated = set_content(c, mapp(c), pct_vec(new_args...))
+        if op == :ineg
+            return negated
+        else
+            return conjugate(negated)
+        end
+    end
+    #= op == :inegc && error("Not yet properly implemented") =#
+    #= return conjugate(set_content(c, mapp(c),
+        [mul(constant(-1), t) for t in args(c)[collect(indices)]])) =#
+    return new_term
+end
+
+for (indices, op) in symmetries(get_type(mapp(c)))
+    op == :neg || continue
+    args(c) == args(c)[collect(indices)] || continue
+    push!(result, constant(0); dired=true, name="forbidden_symmetry")
+    return result
+end =#
 
 function neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
@@ -256,53 +292,17 @@ function neighbors(c::AbstractCall; settings=default_settings())
     append!(result, bypass_eval(c))
     append!(result, sub_neighbors(c; settings=settings))
 
-    function apply_symmetry(indices, op)
-        # Apply the permutation.
-        new_term = set_content(c, mapp(c), args(c)[collect(indices)])
-        # Apply the symmetry operation.
-        op == :conj && return conjugate(new_term)
-        op == :id && return new_term
-        op == :neg && return mul(constant(-1), new_term)
-        if op in [:ineg, :inegc]
-            new_args = []
-            for (i, a) in enumerate(content(args(c)))
-                if i in indices
-                    push!(new_args, mul(constant(-1), a))
-                else
-                    push!(new_args, a)
-                end
-            end
-            negated = set_content(c, mapp(c), pct_vec(new_args...))
-            if op == :ineg
-                return negated
-            else
-                return conjugate(negated)
-            end
-        end
-        #= op == :inegc && error("Not yet properly implemented") =#
-        #= return conjugate(set_content(c, mapp(c),
-            [mul(constant(-1), t) for t in args(c)[collect(indices)]])) =#
-        return new_term
-    end
-
-    for (indices, op) in symmetries(get_type(mapp(c)))
-        op == :neg || continue
-        args(c) == args(c)[collect(indices)] || continue
-        push!(result, constant(0); dired=true, name="forbidden_symmetry")
-        return result
-
-        #= new_term = apply_symmetry(indices, op)
-        if new_term == mul(constant(-1), c)
-            push!(result, constant(0); dired=true, name="forbidden_symmetry")
-            return result
-        end =#
-    end
 
     settings[:symmetry] || return result
 
-    for (indices, op) in symmetries(get_type(mapp(c)))
-        new_term = apply_symmetry(indices, op)
-        push!(result, new_term; name="symmetry")
+    for sym in symmetries(get_type(mapp(c)))
+        #= new_term = apply_symmetry(indices, op) =#
+        new_term = ecall(ecall(sym, mapp(c)), args(c)...)
+        if new_term == mul(constant(-1), c)
+            push!(result, constant(0); name="forbidden_symmetry")
+        else
+            push!(result, new_term; name="symmetry")
+        end
     end
 
     return result
@@ -1586,6 +1586,18 @@ function let_remove_alias(lt::Let; settings=default_settings())
     return result
 end
 
+"""
+Split assignment of a vector to a variable into 
+a multi-assignment.
+
+let b = (a_1, a_2)
+ ...
+end
+->
+let s_1, s_2 = (a_1, a_2)
+ ...
+end
+"""
 function let_split_multi_return(lt::Let, settings=default_settings())
     result = NeighborList()
 
@@ -1924,7 +1936,7 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::Union{FermiScalar,IntDiv, AbstractPullback}; settings=default_settings())
+function neighbors(n::Union{FermiScalar,IntDiv,AbstractPullback}; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
 

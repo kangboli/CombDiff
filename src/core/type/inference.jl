@@ -286,10 +286,23 @@ function inference(v::VecType, context::TypeContext=TypeContext())
 end
 
 function inference(m::MapType, context::TypeContext=TypeContext())
-    new_maptype = MapType(inference(get_bound_type(m), context), 
-                          inference(get_body_type(m), context),
-                          meta(m))
+    inf_m = MapType(inference(get_bound_type(m), context), inference(get_body_type(m), context))
+    if haskey(meta(m), :symmetries)
+        new_symmetries = []
+        for s in meta(m)[:symmetries]
+            f = first(get_bound(s))
+            indices = get_bound(get_body(s))
+            body = get_body(get_body(s))
 
+            f = set_type(f, inf_m)
+            indices = map(set_type, indices, get_bound_type(inf_m))
+
+            push!(new_symmetries, inference(pct_map(f, pct_map(indices..., body))))
+        end
+        meta(m)[:symmetries] = new_symmetries
+    end
+
+    new_maptype = MapType(get_bound_type(inf_m), get_body_type(inf_m), meta(m))
     return new_maptype
 end
 

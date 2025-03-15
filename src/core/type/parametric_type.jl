@@ -46,7 +46,7 @@ function parametrize_type(mt::MapType, type_args...)
     end
     #= parametrized = map(parametrize_type, get_content_type(get_bound_type(mt)), collect(type_args)) =#
 
-    return MapType(VecType(new_bounds), get_body_type(mt))
+    return MapType(VecType(new_bounds), get_body_type(mt), meta(mt))
 end
 
 

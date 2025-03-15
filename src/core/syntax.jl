@@ -72,7 +72,7 @@ be the context containing the types that have been declared.
 macro pct(expr, ctx=:(TypeContext()))
     esc(:(
         let (f, ctx) = @pit($(expr), $(ctx))
-            inference(f), ctx
+            CombDiff.inference(f), ctx
         end
     ))
 end
@@ -92,7 +92,7 @@ macro pct(f, ctx, expr)
     f == :_ && return esc(:(@pct($(expr), $(ctx))))
     return esc(:(
         let (content, ctx) = @pit($(expr), $(ctx))
-            inference(continuition($(f), content)), ctx
+            CombDiff.inference(continuition($(f), content)), ctx
         end))
 end
 
@@ -337,7 +337,7 @@ function parse_maptype_node(s::Expr)
     end
     block = s.args[3]
 
-    parse_pair(::Val{:symmetries}, t::Expr) = t
+    parse_pair(::Val{:symmetries}, t::Expr) = parse_node(t)
     parse_pair(::Val{:linear}, t::Bool) = t
     parse_pair(::Val{:off_diag}, t::Bool) = t
     function parse_pair(::Val{:type}, t::Expr)
@@ -361,7 +361,7 @@ function parse_maptype_node(s::Expr)
     end
 
     return MapTypeNode(:(push_type!(_ctx, $(QuoteNode(name)),
-        $(maptype); replace=true)))
+        CombDiff.inference($(maptype), _ctx); replace=true)))
 end
 
 struct DomainNode
@@ -476,7 +476,7 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
     end
 
     if isa(p, Symbol)
-        return :(CombDiff.var($(QuoteNode(p)), N()))
+        return :(CombDiff.var($(QuoteNode(p)), UndeterminedPCTType()))
     end
 
     if p.head == Symbol("::")
