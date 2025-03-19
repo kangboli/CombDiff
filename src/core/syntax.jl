@@ -18,48 +18,27 @@ interactive_let = nothing
 interactive_result = nothing
 interactive_placeholder = nothing
 
-macro pit(expr, ctx=interactive_context, use_global_state=false, capture_local_scope=false)
-    !use_global_state && ctx == interactive_context && error("must give a context if not using the global context")
-    expr = purge_line_numbers(expr)
-    if isa(expr, Symbol) || isa(expr, Number) || isa(expr, QuoteNode) || expr.head != :block
-        top_level_nodes = [parse_node(expr)]
-    else
-        top_level_nodes = map(parse_node, expr.args)
-    end
+macro pit(expr, ctx=interactive_context)
+    top_level_nodes = hasfield(typeof(expr), :head) && expr.head == :block ?
+                      map(parse_node, expr.args) : [parse_node(expr)]
 
     statements = filter(n -> isa(n, AbstractStatement), top_level_nodes)
     domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
-    sizes = map(get_expr, filter(n -> isa(n, SizeNode), top_level_nodes))
     maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
     return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
-    if !isempty(return_node_list)
-        return_node = statement_to_let(statements, first(return_node_list))
-        lhs = :(CombDiff.interactive_result, CombDiff.interactive_context)
-    elseif !isempty(statements)
-        return_node = statement_to_let(statements, :(var($(QuoteNode(:_)))))
-        lhs = :(CombDiff.interactive_let, CombDiff.interactive_context)
-    else
-        return_node = nothing
-        lhs = :(interactive_placeholder, CombDiff.interactive_context)
-    end
+    return_node = isempty(return_node_list) ? :(var($(QuoteNode(:_)))) : first(return_node_list) 
+    return_node = statement_to_let(statements, return_node)
 
     rhs = :(
         begin
             _ctx = $(ctx)
-            $(sizes...)
             $(domains...)
             $(maps_types...)
             ($(return_node), _ctx)
         end
     )
-    !use_global_state && return esc(rhs)
-    return esc(:(
-        begin
-            $(lhs) = $(rhs)
-            first($(lhs))
-        end))
-
+    return esc(rhs)
 end
 
 """
@@ -72,7 +51,7 @@ be the context containing the types that have been declared.
 macro pct(expr, ctx=:(TypeContext()))
     esc(:(
         let (f, ctx) = @pit($(expr), $(ctx))
-            CombDiff.inference(f), ctx
+            f, ctx
         end
     ))
 end
@@ -92,17 +71,15 @@ macro pct(f, ctx, expr)
     f == :_ && return esc(:(@pct($(expr), $(ctx))))
     return esc(:(
         let (content, ctx) = @pit($(expr), $(ctx))
-            CombDiff.inference(continuition($(f), content)), ctx
+            continuition($(f), content), ctx
         end))
 end
 
 function continuition(f::APN, new_body)
+    isa(f, Var) && name(f) == :_ && return new_body
     new_terms..., body = terms(f)
-    if isa(body, Var) && name(body) == :_
-        return set_terms(f, new_terms..., new_body)
-    else
-        return set_terms(f, new_terms..., continuition(body, new_body))
-    end
+    isa(body, Var) && name(body) == :_ && return set_terms(f, new_terms..., new_body)
+    return set_terms(f, new_terms..., continuition(body, new_body))
 end
 
 function pct_ast_transform(expr::Expr, repl=:cmd)
@@ -412,7 +389,7 @@ function parse_domain_node(n::Expr)
         domain = :(CombDiff.ParametricDomain([$(type_params...)], $(domain)))
     end
 
-    return DomainNode(:(push_type!(_ctx, $(QuoteNode(name)), $(domain)); replace = true))
+    return DomainNode(:(push_type!(_ctx, $(QuoteNode(name)), $(domain); replace=true)))
 end
 
 struct SizeNode
@@ -711,7 +688,7 @@ function convert_pct_type(tensor::RangedTensor{S,T}) where {S<:Number,T}
 end
 
 #= eltype(::Type{<:AbstractArray{T}}) where {T} = T =#
-function convert_pct_type(t::DataType) 
+function convert_pct_type(t::DataType)
     t.name.name == :Array || error("type $(t.name.name) is not supported.")
     T, D = t.parameters
     output_type = convert_pct_type(T)
@@ -731,9 +708,9 @@ function convert_parametric_type(f)
     for t in arg_types
         t.name.name == :Array || error("type $(t.name.name) is not supported.")
         _, D = t.parameters
-        push!(complexified_types, Array{ComplexF64, D})
+        push!(complexified_types, Array{ComplexF64,D})
     end
-    
+
     arg_pct_types = map(convert_pct_type, complexified_types)
     return_type = Base.return_types(f, tuple(complexified_types...))[1]
     return_pct_type = convert_pct_type(return_type)
@@ -746,7 +723,7 @@ function convert_pct_type(f::T) where {T<:Function}
     types = Vector{AbstractMapType}()
     for i in length(methods(f))
         try
-            if typeof(methods(f)[i].sig) == UnionAll 
+            if typeof(methods(f)[i].sig) == UnionAll
                 push!(types, convert_parametric_type(f))
             end
             _, arg_types... = methods(f)[i].sig.parameters

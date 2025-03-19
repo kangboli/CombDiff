@@ -7,9 +7,9 @@ end
 
 get_name_to_type(context::TypeContext) = context.name_to_type
 get_name_to_variable(context::TypeContext) = context.name_to_variable
-function find_var_by_name(context::TypeContext, n::Symbol) 
+function find_var_by_name(context::TypeContext, n::Symbol)
     d = get_name_to_variable(context)
-    n_vars =  get(d, n, [])
+    n_vars = get(d, n, [])
     !isempty(n_vars) && return last(n_vars)
     error("variable \"$(n)\" not found")
 end
@@ -28,18 +28,24 @@ default_context() = TypeContext(
         :RM => [MapType(VecType([N(), N()]), R())],
         :CO => [MapType(VecType([C(), C()]), C())],
         :RO => [MapType(VecType([R(), R()]), R())],
-        :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => (((2, 1), :conj),),))],
-        :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :id),),))],
-        :SSym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => (((2, 1), :neg),),))],
+        :Her => [MapType(VecType([N(), N()]), C(), Dict(:symmetries => [
+            pct_map(var(:A), pct_map(var(:i), var(:j), conjugate(call(var(:A), var(:j), var(:i))))),
+        ]))],
+        :Sym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => [
+            pct_map(var(:A), pct_map(var(:i), var(:j), call(var(:A), var(:j), var(:i)))),
+        ]))],
+        :SSym => [MapType(VecType([N(), N()]), R(), Dict(:symmetries => [
+            pct_map(var(:A), pct_map(var(:i), var(:j), mul(constant(-1), call(var(:A), var(:j), var(:i))))),
+        ]))],
         :R4 => [MapType(VecType([N(), N(), N(), N()]), R())],
         :R3 => [MapType(VecType([N(), N(), N()]), R())],
         :C4 => [MapType(VecType([N(), N(), N(), N()]), C())],
         :C3 => [MapType(VecType([N(), N(), N()]), C())],
     ),
     Dict{Symbol,Vector{<:Var}}(
-    :Infty => [infty()],
-    :∞ => [infty()],
-    :∇ => [nabla()],
+        :Infty => [infty()],
+        :∞ => [infty()],
+        :∇ => [nabla()],
     )
 )
 
@@ -96,21 +102,21 @@ end =#
 
 inference(n::Any) = n
 
-function inference(n::T, context::TypeContext=TypeContext()) where T <: APN
-    has_bound = any(f->hasfield(T, f), bound_fields(T))
+function inference(n::T, context::TypeContext=TypeContext()) where {T<:APN}
+    has_bound = any(f -> hasfield(T, f), bound_fields(T))
     if has_bound
         #= op_context!(get_bound(n), pct_push!, context) =#
         for b in content(get_bound(n))
-            if get_type(b) == UndeterminedPCTType() 
+            if get_type(b) == UndeterminedPCTType()
                 b = set_type(b, N())
             end
             push_var!(context, get_body(b), b)
         end
         # the following line may be redundant.
-        n = set_bound(n, map(t->inference(t, context), [get_bound(n)])...)
+        n = set_bound(n, map(t -> inference(t, context), [get_bound(n)])...)
     end
-    n = set_content(n, map(t->inference(t, context), content(n))...)
-    has_bound && map(b->pop_var!(context, get_body(b)), content(get_bound(n)))
+    n = set_content(n, map(t -> inference(t, context), content(n))...)
+    has_bound && map(b -> pop_var!(context, get_body(b)), content(get_bound(n)))
     # Setting the type may also be redundant.
     return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
@@ -121,7 +127,7 @@ function inference(v::Var, context::TypeContext)
     return set_type(new_v, inference(get_type(new_v), context))
 end
 
-function inference(l::T, context::TypeContext) where T <: AbstractLet
+function inference(l::T, context::TypeContext) where {T<:AbstractLet}
     typed_bound, typed_args = [], []
     for (f, a) in zip(get_bound(l), args(l))
         a = inference(a, context)
@@ -140,7 +146,7 @@ end
 
 inference(c::Constant, ::TypeContext) = set_type(c, partial_inference(Constant, terms(c)...))
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: PCTVector
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:PCTVector}
     return VecType(get_type.(collect(terms)))
 end
 
@@ -149,11 +155,11 @@ function partial_inference(::Type{Map}, terms...)::AbstractPCTType
     return MapType(get_type(bound), get_type(content))
 end
 
-function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where T <: Var 
+function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where {T<:Var}
     UndeterminedPCTType()
 end
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractCall
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:AbstractCall}
     mapp = first(terms)
     if mapp == nabla()
         t = first(terms[2])
@@ -182,9 +188,10 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: Abst
         for t in get_maptypes(get_type(mapp))
             bound_types = get_bound_type(t)
             arg_types = get_type.(args)
-            all(i->bound_types[i] == arg_types[i], 1:length(args)) || continue
+            all(i -> bound_types[i] == arg_types[i], 1:length(args)) || continue
             return get_body_type(t)
         end
+        error("no matching dispatch $(pretty(mapp)): $(pretty.(get_type.(args)))")
     end
 
     return get_body_type(get_type(mapp))
@@ -195,21 +202,21 @@ function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
 end
 
 
-function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where T <: Union{Add, Mul}
+function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where {T<:Union{Add,Mul}}
     @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
 end
 
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType  where T <: Contraction
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Contraction}
     return get_type(last(terms))
 end
 
-function partial_inference(::Type{Prod}, terms...)::AbstractPCTType  
+function partial_inference(::Type{Prod}, terms...)::AbstractPCTType
     return get_type(last(terms))
 end
 
-function partial_inference(::Type{Conjugate}, term)::AbstractPCTType 
+function partial_inference(::Type{Conjugate}, term)::AbstractPCTType
     isa(get_type(term), ElementType) && return get_type(term)
     return MapType(VecType(reverse(get_content_type(get_bound_type(get_type(term))))), get_body_type(get_type(term)), meta(get_type(term)))
 end
@@ -256,12 +263,12 @@ partial_inference(::Type{Constant}, ::Int) = I()
 partial_inference(::Type{Constant}, ::Real) = R()
 partial_inference(::Type{Constant}, ::Complex) = C()
 
-function partial_inference(::Type{T}, terms...)::AbstractPCTType where T <: AbstractDelta
+function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:AbstractDelta}
     get_type(last(terms))
 end
 
 
-function partial_inference(::Type{IntDiv}, terms...)::AbstractPCTType 
+function partial_inference(::Type{IntDiv}, terms...)::AbstractPCTType
     return I()
 end
 
@@ -281,7 +288,7 @@ end =#
 
 
 function inference(v::VecType, context::TypeContext=TypeContext())
-    new_vectype = VecType(map(t->inference(t, context), get_content_type(v)))
+    new_vectype = VecType(map(t -> inference(t, context), get_content_type(v)))
     return new_vectype
 end
 
@@ -297,7 +304,7 @@ function inference(m::MapType, context::TypeContext=TypeContext())
             f = set_type(f, inf_m)
             indices = map(set_type, indices, get_bound_type(inf_m))
 
-            push!(new_symmetries, inference(pct_map(f, pct_map(indices..., body))))
+            push!(new_symmetries, inference(pct_map(f, pct_map(indices..., body)), context))
         end
         meta(m)[:symmetries] = new_symmetries
     end
@@ -313,16 +320,16 @@ function inference(d::Domain, context::TypeContext=TypeContext())
         push_var!(context, get_body(v), set_type(v, base(d)))
     end =#
 
-    new_domain = Domain(base(d), 
-           inference(lower(d), context),
-           inference(upper(d), context), 
-           meta(d))
+    new_domain = Domain(base(d),
+        inference(lower(d), context),
+        inference(upper(d), context),
+        meta(d))
     return new_domain
 end
 
-function partial_inference(::Type{Composition}, term::PCTVector) 
+function partial_inference(::Type{Composition}, term::PCTVector)
     length(term) == 0 && return UndeterminedPCTType()
-    if any(t->isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))  
+    if any(t -> isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))
         types = join(get_type.(term), "\n")
         error("Cannot add/subtract numbers with operators/matrices: $(pretty(term))\n $(types)")
     end
@@ -331,14 +338,14 @@ function partial_inference(::Type{Composition}, term::PCTVector)
     return MapType(bound_type, body_type)
 end
 
-function partial_inference(::Type{RevComposition}, term::PCTVector) 
+function partial_inference(::Type{RevComposition}, term::PCTVector)
     length(term) == 0 && return UndeterminedPCTType()
     bound_type = get_bound_type(get_type(last(content(term))))
     body_type = get_body_type(get_type(first(content(term))))
     return MapType(bound_type, body_type)
 end
 
-function partial_inference(::Type{T}, body::APN) where T <: Univariate
+function partial_inference(::Type{T}, body::APN) where {T<:Univariate}
     return get_type(body)
 end
 

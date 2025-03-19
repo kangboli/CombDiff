@@ -78,7 +78,7 @@ end
 
 verbose(v::Var) = "$(pretty(v))::$(verbose(get_type(v)))"
 
-pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c), false)))"
+#= pretty(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c), false)))" =#
 
 latex(c::Call) = "($(latex(mapp(c))))($(latex(args(c))))"
 
@@ -129,7 +129,7 @@ verbose(p::T) where {T<:AbstractPullback} = "$(T)($(pretty(get_body(p))))::$(pre
 
 
 function pretty(s::Sum)
-    bound_string = join(map(verbose, content(get_bound(s))), ",")
+    bound_string = join(map(pretty, content(get_bound(s))), ",")
     "∑(($(bound_string)), $(pretty(get_body(s))))"
 end
 
@@ -244,7 +244,10 @@ function verbose(a::Add)
     "\n)::$(pretty(get_type(a)))"
 end
 
-pretty(p::PrimitiveCall) = "($(pretty(mapp(p))))($(pretty(args(p), false)))"
+function pretty(p::AbstractCall) 
+    mapp_str = isa(mapp(p), Var) ? pretty(mapp(p)) : "($(pretty(mapp(p))))"
+    "$(mapp_str)($(pretty(args(p), false)))"
+end
 
 function latex(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
@@ -326,7 +329,7 @@ pretty(l::Mutate) = "mut \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(
 #= pretty(l::Let) = "let \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend" =#
 
 function verbose(l::Let)
-    "let $(join(map((f, a) -> indent("$(verbose(f)) $(isa(f, Copy) ? "=" : ":=") $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
+    "let \n$(join(map((f, a) -> indent("$(verbose(f)) $(isa(f, Copy) ? "=" : ":=") $(verbose(a))"), get_bound(l), args(l)), "\n"))\n$(indent(verbose(get_body(l))))\nend"
 end
 function latex(l::Let, paren=true)
     inner_str = if isa(get_body(l), Let)
@@ -459,7 +462,11 @@ pretty(f::Splat) = "$(pretty(get_body(f)))..."
 
 
 function pretty(p::ParametricMap)
-    "{$(join(pretty.(get_bound(p)), ", "))}$(pretty(get_body(p), true))"
+    "{$(join(pretty.(get_bound(p)), ", "))}$(pretty(get_body(p)))"
+end
+
+function verbose(p::ParametricMap)
+    "{$(join(verbose.(get_bound(p)), ", "))}$(verbose(get_body(p)))"
 end
 
 function verbose(p::ParametricMapType)
