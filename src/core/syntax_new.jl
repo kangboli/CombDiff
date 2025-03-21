@@ -1,7 +1,8 @@
 export @nein, @neinshow, @comb, @neintype, @neinspace, @mein, @main
 
 macro comb(expr, f=:_, ctx=:(TypeContext()))
-    esc(:(@pct $(f) $(ctx) $(expr.args[1])))
+    expr = hasfield(typeof(expr), :head) && expr.head == :quote ? expr.args[1] : expr
+    esc(:(@pct $(f) $(ctx) $(expr)))
 end
 
 function is_nested_arr_type(::Type{T}) where {T}
@@ -124,7 +125,8 @@ macro neinshow(expr, f=:_, ctx=:(TypeContext()))
 end
 
 macro main(expr, f=:_, ctx=:(TypeContext()))
-    expr = purge_line_numbers(expr.args[1])
+    expr = hasfield(typeof(expr), :head) && expr.head == :quote ? expr.args[1] : expr
+    expr = purge_line_numbers(expr)
     node = parse_node(expr)
     if isa(node, MutatingStatement)
         node = statement_to_mut([node], lhs(node))
@@ -151,8 +153,8 @@ end
 """
 """
 macro mein(expr, f=:_, ctx=:(TypeContext()))
-
-    expr = purge_line_numbers(expr.args[1])
+    expr = hasfield(typeof(expr), :head) && expr.head == :quote ? expr.args[1] : expr
+    expr = purge_line_numbers(expr)
     node = parse_node(expr)
     if isa(node, MutatingStatement)
         node = statement_to_mut([node], lhs(node))

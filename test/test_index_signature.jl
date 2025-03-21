@@ -1,13 +1,11 @@
 using CombDiff
 
 function graphical_test()
-    g_1 = @pct f ctx i * (A(i, j) + A(j, i))
-    i_tree = SignatureTree(Var(I(), :i), get_body(g_1), [Var(I(), :j)])
+    g_1 = get_body(first(@main (A::M, i::N, j::N) -> i * A(i, j) _ ctx))
+    i_tree = SignatureTree(var(:i, N()), get_body(g_1), [var(:j, N())])
     nodes, edges = tree_dfs_vis(i_tree)
     g = SimpleDiGraph(Edge.(edges))
     gplothtml(g, nodelabel=["$(node_label(n, e)): $(i)" for ((n, e), i) in nodes])
-
-
     node_label(::Type{PCTVector}, ::Nothing) = "[]"
     node_label(::Type{PrimitiveCall}, ::Nothing) = "Call"
     node_label(::Type{T}, ::Nothing) where {T<:Var} = "Var"
@@ -17,25 +15,22 @@ function graphical_test()
     nodes, edges = tree_dfs_vis(i_tree)
     g = SimpleDiGraph(Edge.(edges))
     gplothtml(g, nodelabel=["$(node_label(n, e)): $(i)" for ((n, e), i) in nodes])
-
 end
 
 @testset "index_sig: equivalence" begin
-    f, ctx = @pct begin
+    _, ctx = @comb begin
         @space M begin
-            type = (I, I) -> C
-            symmetries=(((2, 1), :id), )
+            type = (N, N) -> C
+            symmetries = (A -> (i, j) -> A(j, i),)
         end
-
-        (A, i::I, j::I) -> _
     end
 
-    g_1, _ = @pct f ctx i * A(i, j)
-    g_2, _ = @pct f ctx j * A(j, i)
+    g_1 = get_body(first(@main (A::M, i::N, j::N) -> i * A(i, j) _ ctx))
+    g_2 = get_body(first(@main (A::M, i::N, j::N) -> j * A(j, i) _ ctx))
 
-    i_tree = SignatureTree(var(:i, I()), get_body(g_1), [var(:j, I())])
-    j_tree = SignatureTree(var(:j, I()), get_body(g_2), [var(:i, I())])
-    other_tree = SignatureTree(var(:i, I()), get_body(g_2), [var(:j, I())])
+    i_tree = SignatureTree(var(:i, N()), get_body(g_1), [var(:j, N())])
+    j_tree = SignatureTree(var(:j, N()), get_body(g_2), [var(:i, N())])
+    other_tree = SignatureTree(var(:i, N()), get_body(g_2), [var(:j, N())])
 
     @test hash(i_tree) == hash(j_tree)
 
@@ -44,8 +39,8 @@ end
     @test i_tree != other_tree
     @test j_tree != other_tree
 
-    x, _ = @pct f ctx sum((i, j), A(i, j))
-    y, _ = @pct f ctx sum((j, i), A(j, i))
+    x = get_body(first(@main (A::M) -> sum((i, j), A(i, j)) _ ctx))
+    y = get_body(first(@main (A::M) -> sum((j, i), A(j, i)) _ ctx))
     @test x == x
     @test x == y
 end

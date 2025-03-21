@@ -164,7 +164,7 @@ end
     @test get_body(a) == pct_vec(sort([var(:x), var(:y)])...)
 
     a2 = set_content(a, pct_vec(var(:p), var(:q)))
-    @test get_body(a2) == pct_vec(sort([var(:p), var(:q)])...)
+    @test a2 == add(sort([var(:p), var(:q)])...)
 
     @test flatten_add(a) == content(get_body(a))
 

@@ -60,7 +60,8 @@ function SignatureTree(index::S, call::T, other_indices::Vector{R}) where {S<:Va
 end
 
 function SignatureTree(index::S, v::T, ::Vector{R}) where {S<:Var,T<:Var,R<:Var}
-    return SignatureTree(T, index == v ? nothing : v, Vector{SignatureTree}())
+    #= name(index) == name(v) && @assert get_type(index) == get_type(v) =#
+    return SignatureTree(T, name(index) == name(v) ? nothing : v, Vector{SignatureTree}())
 end
 
 function SignatureTree(::S, c::Constant, ::Vector{R}) where {S<:Var,R<:Var}
@@ -68,7 +69,7 @@ function SignatureTree(::S, c::Constant, ::Vector{R}) where {S<:Var,R<:Var}
 end
 
 
-function SignatureTree(::S, c::T, ::Vector{R}) where {S<:Var,R<:Var, T<: FieldOperators}
+function SignatureTree(::S, c::T, ::Vector{R}) where {S<:Var,R<:Var,T<:FieldOperators}
     return SignatureTree(T, c, Vector{SignatureTree}())
 end
 
@@ -82,9 +83,9 @@ function Base.:(==)(sig_1::SignatureTree, sig_2::SignatureTree)
     trees_to_compare_2 = subtrees(sig_2)
     length(trees_to_compare_1) == length(trees_to_compare_2) || return false
     isempty(trees_to_compare_1) && isempty(trees_to_compare_2) && return true
-    if !(node_type(sig_1) <: Commtative )
+    if !(node_type(sig_1) <: Commtative)
         for (t_1, t_2) in zip(trees_to_compare_1, trees_to_compare_2)
-            t_1 == t_2 || return false 
+            t_1 == t_2 || return false
         end
     end
 

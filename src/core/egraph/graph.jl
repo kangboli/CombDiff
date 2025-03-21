@@ -69,7 +69,7 @@ function custom_settings(custom...; preset=default_settings())::Settings
     new_settings[:gcd] && new_settings[:expand_mul] && error(":expand_mul and :gcd cannot be both set.")
     return new_settings
 end
-const symmetry_settings() = custom_settings(:symmetry => true; preset=default_settings())
+const symmetry_settings() = custom_settings(:symmetry => true, :even_sym => true; preset=default_settings())
 const blaserize_settings() = custom_settings(:blaserize => true; preset=default_settings())
 
 struct Logger

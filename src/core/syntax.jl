@@ -453,7 +453,7 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
     end
 
     if isa(p, Symbol)
-        return :(CombDiff.var($(QuoteNode(p)), N()))
+        return :(CombDiff.var($(QuoteNode(p)), UndeterminedPCTType()))
     end
 
     if p.head == Symbol("::")

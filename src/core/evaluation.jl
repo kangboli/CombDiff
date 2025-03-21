@@ -88,7 +88,12 @@ function own_dummy(c::T) where {T<:Union{PermInv,Let,Map,ParametricMap}}
     return Set{Var}(vars)
 end
 
-variables(v::Var)::Vector{Var} = [v]
+variables(::AbstractPCTType)::Vector{Var} = []
+variables(d::Domain)::Vector{Var} = [variables(upper(d))..., variables(lower(d))...]
+variables(d::ParametricDomain)::Vector{Var} = [get_params(d)..., variables(get_param_body(d))...]
+variables(m::MapType)::Vector{Var} = vcat(variables.(get_content_type(get_bound_type(m)))..., variables(get_body_type(m)))
+variables(m::ParametricMapType)::Vector{Var} = [get_params(m)..., variables(get_param_body(m))...]
+variables(v::Var)::Vector{Var} = [v, variables(get_type(v))...]
 variables(::Constant)::Vector{Var} = []
 variables(n::APN)::Vector{Var} = vcat(variables.(terms(n))...)
 
