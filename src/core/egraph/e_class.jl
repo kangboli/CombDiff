@@ -32,6 +32,13 @@ end
 function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<:AbstractCall}
     get_type(mapp) == UndeterminedPCTType() && return T, [mapp, arguments], UndeterminedPCTType()
 
+    if mapp == nabla() && !isa(first(arguments), Var)
+        maptype = get_type(first(arguments))
+        z_types = get_content_type(get_bound_type(maptype))
+        pb = pullback(first(arguments))
+        zs = map(var, new_symbol(mapp, arguments; num=length(z_types), symbol=:_z), z_types)
+        return repack(pct_map(zs..., call(pb, zs..., constant(1))))
+    end
     if any(a -> isa(a, Splat) && isa(get_body(a), PCTVector), arguments)
         new_args = Vector{APN}()
         for a in arguments
@@ -48,7 +55,7 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
     if isa(mapp, Let)
         new_bounds = map(var, new_symbol(mapp; num=length(arguments)), get_type.(arguments))
         new_call = call(pct_map(new_bounds..., call(get_body(mapp), new_bounds...)), arguments...)
-        return repack(pct_let(get_bound(mapp)..., args(mapp)...,  new_call))
+        return repack(pct_let(get_bound(mapp)..., args(mapp)..., new_call))
     end
 
     #= println(get_type(mapp)) =#
@@ -379,14 +386,18 @@ end
 
 function e_class_reduction(::Type{VacExp}, body::T) where {T<:APN}
     T == FermiScalar && return repack(get_body(body))
-    T <: AbstractComp || return VacExp, [body], partial_inference(VacExp, body)
+    if T <: AbstractComp
+        sub_terms = content(get_body(body))
+        scalars, remains = tee(t -> isa(t, FermiScalar), sub_terms)
+        isempty(scalars) && return VacExp, [body], partial_inference(VacExp, body)
 
-    sub_terms = content(get_body(body))
-    scalars, remains = tee(t -> isa(t, FermiScalar), sub_terms)
-    isempty(scalars) && return VacExp, [body], partial_inference(VacExp, body)
+        new_term = mul(map(get_body, scalars)..., vac_exp(composite(remains...)))
+        return typeof(new_term), terms(new_term), get_type(new_term)
+    end
 
-    new_term = mul(map(get_body, scalars)..., vac_exp(composite(remains...)))
-    return typeof(new_term), terms(new_term), get_type(new_term)
+    T == Add && return repack(add([vac_exp(t) for t in get_body(body)]...))
+
+    return VacExp, [body], partial_inference(VacExp, body)
 end
 
 function e_class_reduction(::Type{Splat}, body::T) where {T<:APN}

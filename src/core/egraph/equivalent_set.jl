@@ -439,7 +439,11 @@ function combine_factors(a)
     for t in terms
         group_term!(t, term_dict)
     end
-    new_terms = [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+    new_terms = if isa(get_type(a), ElementType)
+        [v == 1 ? k : mul(constant(v), k) for (k, v) in term_dict if v != 0]
+    else
+        [v == 1 ? k : composite(fermi_scalar(constant(v)), k) for (k, v) in term_dict if v != 0]
+    end
 
     new_add = add(new_terms...)
     new_add == a && return result
@@ -1024,6 +1028,8 @@ function sub_neighbors(n::APN; settings=default_settings())
             push!(result, set_terms(n, new_sub_terms...); dired=d, name=s)
             d && return result
         end
+
+        any(directed(neighbor_list)) || tag_deadend!(t, settings)
     end
     return result
 end
@@ -1108,12 +1114,20 @@ function sum_absorb_indicator(s::Sum)
     return result
 end
 
+function basis_simplify(n::APN)
+    simplified = combine_factors(n) |> nodes
+    n = isempty(simplified) ? n : first(simplified)
+end
+
+
 function sum_eliminate_dead_bound(s::Sum)
     result = NeighborList()
     for b in get_bound(s)
         isa(get_type(b), ElementType) || continue
         u, l = upper(get_type(b)), lower(get_type(b))
-        diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false)) |> first
+        #= diff = simplify(subtract(u, l); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false)) |> first =#
+        diff = basis_simplify(subtract(u, l))
+
         compare = zero_compare(diff)
         compare == IsNeg() || continue
         inner_type = get_type(get_body(s))
@@ -1259,7 +1273,7 @@ function neighbors(d::Delta; settings=default_settings())
         # delta-ex
         # there is currently no need to consider delta exchange
         # because the multi-index sum is implemented as a single node.
-        push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
+        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
     end
 
     # TODO: use equivalence instead of equality
@@ -1626,6 +1640,65 @@ function let_split_multi_return(lt::Let, settings=default_settings())
     return result
 end
 
+need_pullback(v, node::APN) = any(t -> need_pullback(v, t), terms(node))
+need_pullback(v, node::TerminalNode) = false
+function need_pullback(v, node::PrimitivePullback)
+    name(get_body(node)) == name(v) && return true
+    invoke(need_pullback, Tuple{Any,APN}, v, node)
+end
+
+replace_pullback(n::APN, b, pb) = set_terms(n, map(t -> replace_pullback(t, b, pb), terms(n))...)
+replace_pullback(n::TerminalNode, ::Any, ::Any) = n
+function replace_pullback(n::PrimitivePullback, b, pb)
+    name(get_body(n)) == name(b) && return pb
+    invoke(replace_pullback, Tuple{APN,Any,Any}, n, b, pb)
+end
+
+
+"""
+mvp = ...
+g = 𝒫(mvp)(...)
+
+->
+
+mvp = ...
+pullback_mvp = ...
+
+g = pullback_mvp(...)
+"""
+
+function link_pullback(l::Let)
+    result = NeighborList()
+    new_bound = []
+    new_args = []
+    new_body = get_body(l)
+    for i in length(get_bound(l))
+        b = get_bound(l)[i]
+        a = args(l)[i]
+        push!(new_args, a)
+        push!(new_bound, b)
+        any(t -> need_pullback(b, t), [args(l)[i+1:end]..., get_body(l)]) || continue
+
+        pullback_name = first(new_symbol(get_bound(l)[i+1:end]..., args(l)[i+1:end]..., get_body(l); symbol=Symbol("pullback_$(name(b))")))
+        pullback_a = pullback(a)
+        pullback_b = var(pullback_name, get_type(pullback_a))
+        push!(new_args, pullback_a)
+        push!(new_bound, pct_copy(pullback_b))
+        for j in i+1:length(get_bound(l))
+            d = get_bound(l)[j]
+            c = args(l)[j]
+            new_c = replace_pullback(c, b, pullback_b)
+            push!(new_args, new_c)
+            push!(new_bound, d)
+        end
+        new_body = replace_pullback(new_body, b, pullback_b)
+        new_let = pct_let(new_bound..., new_args..., new_body)
+        push!(result, new_let; dired=true, name="link_pullback")
+        return result
+    end
+    return result
+end
+
 
 function neighbors(lt::Let; settings=default_settings())
 
@@ -1638,6 +1711,7 @@ function neighbors(lt::Let; settings=default_settings())
         append!(result, let_remove_alias(lt))
         append!(result, let_split_multi_return(lt))
         # append!(result,unused_let(lt))
+        settings[:link_pullback] && append!(result, link_pullback(lt))
     end
 
     settings[:full_log] && println("exploring let $(time)")
@@ -1771,7 +1845,7 @@ function extract_scalar(v)
     return result
 end
 
-function reduce_vac_early(v)
+function reduce_vac_early(v; settings=default_settings())
     result = NeighborList()
     c = get_body(v)
     isa(c, Composition) || return result
@@ -1779,7 +1853,11 @@ function reduce_vac_early(v)
     terms = content(get_body(c))
     all(t -> is_creation(t) || is_annihilation(t), terms) || return result
 
-    push!(result, reduce_vac(v); dired=true, name="reduce_vac_early")
+    if settings[:wick]
+        push!(result, wick_rewrite(get_body(v)); dired=true, name="wick_rewrite")
+    else
+        push!(result, reduce_vac(v); dired=true, name="reduce_vac_early")
+    end
 
     return result
 end
@@ -1787,7 +1865,7 @@ end
 function neighbors(v::VacExp; settings=default_settings())
     result = NeighborList()
 
-    settings[:reduce_vac_early] && append!(result, reduce_vac_early(v))
+    settings[:reduce_vac_early] && append!(result, reduce_vac_early(v; settings))
     #= append!(result, extract_scalar(v)) =#
     append!(result, swallow_vac(v))
     append!(result, distribute_vac(v))
@@ -1881,10 +1959,10 @@ end
 
 function neighbors(c::Composition; settings=default_settings())
     result = NeighborList()
-    settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
     settings[:clench_delta] || append!(result, swallow_neighbors(c))
     #= append!(result, sum_out_comp(c)) =#
     append!(result, relax_sum_comp(c))
+    settings[:expand_comp] && append!(result, comp_expand_neighbors(c))
     append!(result, sub_neighbors(c; settings=settings))
     return result
 end
@@ -1936,7 +2014,7 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::Union{FermiScalar,IntDiv,AbstractPullback}; settings=default_settings())
+function neighbors(n::Union{FermiScalar,IntDiv,AbstractPullback,ParametricMap}; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
 

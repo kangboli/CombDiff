@@ -178,7 +178,7 @@ function sub_blaserize_neighbors(n::APN)
     sub_terms = content(n)
     for (i, t) in enumerate(sub_terms)
         neighbor_list = blaserize_neighbors(t)
-        for (h, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
+        for (h, d, s) in zip(node(neighbor_list), directed(neighbor_list), names(neighbor_list))
             push!(result, set_content(n, set_at(sub_terms, i, h)...); dired=d, name=s)
         end
     end

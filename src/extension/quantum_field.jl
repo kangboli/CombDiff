@@ -1,3 +1,4 @@
+using Combinatorics
 export annihilate, reduce_vac, vac_exp_rewrite, anti_commute, FOT, FField, FermionicFieldAnnihilation, FermiScalar, fermi_scalar
 
 """
@@ -20,7 +21,7 @@ is_creation(v::Conjugate) = is_annihilation(get_body(v))
 is_field_op(n::APN) = is_annihilation(n) || is_creation(n)
 
 get_op_name(f::PrimitiveCall) = get_body(mapp(f))
-function get_op_name(f::Conjugate) 
+function get_op_name(f::Conjugate)
     is_creation(f) || error("$(f) is no a field operator")
     get_op_name(get_body(f))
 end
@@ -52,12 +53,12 @@ inference(s::FermiScalar, _::TypeContext=TypeContext()) = set_type(s, FOT())
 
 # the inference for the creation is taken care of implicitly
 
-function subst_type(n::FermionicState, ::S, ::R, replace_dummy=false) where {S <: APN, R <: APN}
+function subst_type(n::FermionicState, ::S, ::R, replace_dummy=false) where {S<:APN,R<:APN}
     return n
 end
 
 
-function subst(n::FermionicFieldAnnihilation, ::S, ::R, replace_dummy=false) where  {S <: APN, R <: APN}
+function subst(n::FermionicFieldAnnihilation, ::S, ::R, replace_dummy=false) where {S<:APN,R<:APN}
     return n
 end
 
@@ -66,7 +67,7 @@ Vacuum expectation
 """
 
 
-function reduce_vac(n::APN) 
+function reduce_vac(n::APN)
     set_terms(n, map(reduce_vac, terms(n))...)
 end
 reduce_vac(n::TerminalNode) = n
@@ -97,16 +98,86 @@ function vac_exp_rewrite(c::Composition)
 end
 
 vac_exp_rewrite(n::APN) = is_field_op(n) ? constant(0) : error("vac_exp of non-operators is not supported.")
+get_indices(t::PrimitiveCall) = content(args(t))
+get_indices(t::Conjugate) = get_indices(get_body(t))
 
 function anti_commute(a::APN, b::APN)
     #= @assert is_field_op(a) && is_field_op(b) =#
     get_op_name(a) == get_op_name(b) &&
         is_annihilation(a) == is_creation(b) || return constant(0)
-    indices(t::PrimitiveCall) = content(args(t))
-    indices(t::Conjugate) = indices(get_body(t))
-    return delta(indices(a)..., indices(b)..., constant(1))
+    return delta(get_indices(a)..., get_indices(b)..., constant(1))
 end
 
+const Pairing = Vector{Pair{Int,Int}}
+
+"""
+    enumerate_pairings(as, adags)
+
+Recursively enumerate all Wick contraction pairings.
+
+- Return an empty vector iff there is no nonzero pairing.
+- Base case is one creation and one annihilations.
+
+`annihilations` and `creations` are get_indices. 
+Both of them are in ascending order.
+"""
+function enumerate_pairings(as::Vector{Int}, adags::Vector{Int})
+    length(as) == length(adags) || return Vector{Pairing}()
+    @assert !isempty(as)
+    (first(adags) < first(as) || last(adags) < last(as)) &&
+        return Vector{Pairing}()
+
+    length(as) == 1 && return [Pairing([first(as) => first(adags)])]
+    a, rest_as... = as
+
+    function sub_pairings(i)
+        c, rest_adags = adags[i], adags[1:end.!=i]
+        rest_pairings = enumerate_pairings(rest_as, rest_adags)
+        isempty(rest_pairings) && return Vector{Pairing}()
+        return map(p -> Pairing([a => c, p...]), rest_pairings)
+    end
+
+    return vcat(map(sub_pairings, 1:length(adags))...)
+end
+
+"""
+    wick_sign(pairing)
+
+Determine the sign of a Wick pairing.
+(-1)^(#crossing)
+"""
+wick_sign(pairing::Vector{Pair{Int,Int}}) =
+    prod([(a < c < b < d || c < a < d < b) ? -1 : 1
+          for ((a, b), (c, d)) in combinations(pairing, 2)])
+
+function merge_pairing(pairing_set_1, pairing_set_2)
+    [Pairing(vcat(p, q)) for p in pairing_set_1 for q in pairing_set_2]
+end
+
+function wick_rewrite(c::Composition)
+    terms = content(get_body(c))
+    d = Dict()
+    for (i, t) in enumerate(terms)
+        n = get_op_name(t)
+        haskey(d, n) || (d[n] = Vector{Int}() => Vector{Int}())
+        is_annihilation(t) && push!(first(d[n]), i)
+        is_creation(t) && push!(last(d[n]), i)
+    end
+
+    pairing_sets = Vector{Vector{Pairing}}()
+    for k in keys(d)
+        push!(pairing_sets, enumerate_pairings(first(d[k]), last(d[k])))
+    end
+
+    pairings = foldr(merge_pairing, pairing_sets)
+    #= pairings = isempty(pairing_sets) ? Vector{Pairing}() : foldr(merge_pairing, pairing_sets) =#
+    labels = get_indices.(terms)
+    contract(p) = foldr(
+        ((a, adag), inner) -> delta(labels[a]..., labels[adag]..., inner),
+        p; init=constant(wick_sign(p)))
+
+    return add(map(contract, pairings)...)
+end
 
 #= comp_expansion(t::TerminalNode) = t
 function comp_expansion(t::APN) 

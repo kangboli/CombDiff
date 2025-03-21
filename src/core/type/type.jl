@@ -144,4 +144,5 @@ struct MultiType <: AbstractPCTType
 end
 
 get_maptypes(m::MultiType) = m.maptypes
+meta(::MultiType) = Dict()
 

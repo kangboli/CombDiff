@@ -26,7 +26,7 @@ function free_and_dummy(n::APN)
 end
 
 free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
-free_and_dummy(v::T) where {T<:Var} = Set{Var}([v]), Set{Var}()
+free_and_dummy(v::T) where {T<:Var} = union!(Set{Var}([v]), get_free(get_type(v))), Set{Var}()
 
 get_free(d::Domain) = union(get_free(lower(d)), get_free(upper(d)))
 get_free(::AbstractPCTType) = Set{Var}()
@@ -42,6 +42,9 @@ end
 
 own_free(::APN) = Set{Var}()
 
+"""
+There can be free variables in the types of bound variables due to dependent types.
+"""
 function own_free(c::T) where {T<:Union{PermInv,Let,Map,ParametricMap}}
     all_free = Set{Var}()
     for t in get_type.(content(get_bound(c)))

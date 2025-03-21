@@ -122,6 +122,7 @@ end
 verbose(c::Conjugate) = "$(pretty(get_body(c)))'::$(pretty(get_type(c)))"
 
 pretty(p::T) where {T<:AbstractPullback} = "𝒫($(pretty(get_body(p))))"
+pretty(p::PrimitivePullback) = "𝔓($(pretty(get_body(p))))"
 
 latex(p::AbstractPullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
@@ -245,7 +246,7 @@ function verbose(a::Add)
 end
 
 function pretty(p::AbstractCall) 
-    mapp_str = isa(mapp(p), Var) ? pretty(mapp(p)) : "($(pretty(mapp(p))))"
+    mapp_str = (isa(mapp(p), Var) || isa(mapp(p), AbstractPullback)) ? pretty(mapp(p)) : "($(pretty(mapp(p))))"
     "$(mapp_str)($(pretty(args(p), false)))"
 end
 
@@ -471,4 +472,12 @@ end
 
 function verbose(p::ParametricMapType)
     "{$(join(pretty.(get_params(p))))}$(pretty(get_param_body(p)))"
+end
+
+function verbose(t::MultiType)
+    join(verbose.(get_maptypes(t)), ",")
+end
+
+function pretty(s::FermionicState)
+    "ℋ"
 end

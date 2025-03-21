@@ -58,6 +58,7 @@ default_settings() = Settings(
     :reduce_vac_early => true,
     :extract_intermediate => false,
     :skip_self_as_intermediate => false,
+    :link_pullback => false,
     :deadend => Set{UInt64}()
    )
 function custom_settings(custom...; preset=default_settings())::Settings

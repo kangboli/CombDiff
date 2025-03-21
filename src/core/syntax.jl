@@ -27,7 +27,7 @@ macro pit(expr, ctx=interactive_context)
     maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
     return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
-    return_node = isempty(return_node_list) ? :(var($(QuoteNode(:_)))) : first(return_node_list) 
+    return_node = isempty(return_node_list) ? :(var($(QuoteNode(:_)))) : first(return_node_list)
     return_node = statement_to_let(statements, return_node)
 
     rhs = :(
@@ -238,7 +238,7 @@ function parse_node(n::Expr)
         func == :^ && return parse_monomial_node(n)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
-        func == :∇ && return parse_grad_node(n)
+        (func == :∇ || func == :grad) && return parse_grad_node(n)
         func == :vac_exp && return parse_vac_exp_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
@@ -338,7 +338,7 @@ function parse_maptype_node(s::Expr)
     end
 
     return MapTypeNode(:(push_type!(_ctx, $(QuoteNode(name)),
-        CombDiff.inference($(maptype), _ctx); replace=true)))
+        $(maptype); replace=true)))
 end
 
 struct DomainNode
@@ -370,15 +370,15 @@ function parse_domain_node(n::Expr)
         tensorize = haskey(pairs, :tensorize) && (pairs[:tensorize])
         symmetric = haskey(pairs, :symmetric) && (pairs[:symmetric])
         contractable = haskey(pairs, :contractable) ? (pairs[:contractable]) : true
-        domain = :(CombDiff.inference(Domain(
-                $(base)(), $(lower), $(upper),
-                meta=Dict(:name => $(QuoteNode(name)),
-                    :periodic => $(periodic),
-                    :tensorize => $(tensorize),
-                    :symmetric => $(symmetric),
-                    :contractable => $(contractable)
-                )
-            ), _ctx))
+        domain = :(Domain(
+            $(base)(), $(lower), $(upper),
+            meta=Dict(:name => $(QuoteNode(name)),
+                :periodic => $(periodic),
+                :tensorize => $(tensorize),
+                :symmetric => $(symmetric),
+                :contractable => $(contractable)
+            )
+        ))
     elseif isa(block, Expr) && block.head == :curly
         param_args = parse_node.(block.args[2:end])
         domain_name = block.args[1]
@@ -453,7 +453,7 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
     end
 
     if isa(p, Symbol)
-        return :(CombDiff.var($(QuoteNode(p)), UndeterminedPCTType()))
+        return :(CombDiff.var($(QuoteNode(p)), N()))
     end
 
     if p.head == Symbol("::")
@@ -634,9 +634,11 @@ end
 
 function parse_block_node(n::Expr)
     parsed_body = parse_node.(n.args)
-    statements = parsed_body[1:end-1]
+    i = findfirst(t -> isa(t, DomainNode) || isa(t, MapTypeNode), parsed_body)
+    i === nothing || error("$(n.args[i]): types have to be global.")
+    nodes = parsed_body[1:end-1]
     return_value = parsed_body[end]
-    return statement_to_let(statements, return_value)
+    return statement_to_let(nodes, return_value)
 end
 
 function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})

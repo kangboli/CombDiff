@@ -362,13 +362,9 @@ function generate_accumulator(m::Map)
     )
 end
 
-
-#= function Base.getindex(t::RangedTensor, indices::Vararg{Int})
-    return t.data[(1 .+ collect(indices) - first.(t.ranges))...]
+function codegen(n::PrimitivePullback)
+    return :(CombDiff.find_pullback(Val($(codegen(get_body(n))))))
 end
 
+find_pullback(n) = error("pullback $(n) not found")
 
-function Base.setindex!(t::RangedTensor, new_data::Number, indices::Vararg{Int})
-    return t.data[(1 .+ collect(indices) - first.(t.ranges))...] = new_data
-end
- =#

@@ -329,9 +329,10 @@ end
 
 function partial_inference(::Type{Composition}, term::PCTVector)
     length(term) == 0 && return UndeterminedPCTType()
-    if any(t -> isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))
-        types = join(get_type.(term), "\n")
-        error("Cannot add/subtract numbers with operators/matrices: $(pretty(term))\n $(types)")
+    i = findfirst(t -> isa(get_type(t), ElementType) && get_type(t) != UndeterminedPCTType(), content(term))
+    if i !== nothing
+        error("Cannot add/subtract numbers with operators/matrices:
+              $(pretty(term[i]))\n $(get_type(term[i]))")
     end
     bound_type = get_bound_type(get_type(first(content(term))))
     body_type = get_body_type(get_type(last(content(term))))
