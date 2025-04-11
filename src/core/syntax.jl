@@ -534,6 +534,7 @@ end
 
 function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     @assert s.args[1] in [:sum, :int, :∑, :∫]
+    length(s.args) == 3 || error("summation: multiple indices must be in a tuple, and there can be only one summand.")
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
     else
@@ -721,25 +722,19 @@ function convert_parametric_type(f)
 
 end
 
-function convert_pct_type(f::T) where {T<:Function}
-    types = Vector{AbstractMapType}()
-    for i in length(methods(f))
-        try
-            if typeof(methods(f)[i].sig) == UnionAll
-                push!(types, convert_parametric_type(f))
-            end
-            _, arg_types... = methods(f)[i].sig.parameters
-            return_type = Base.return_types(f, arg_types)[1]
+convert_pct_type(f::T) where {T<:Function} = MultiType(f)
 
-            return_pct_type = convert_pct_type(return_type)
-            arg_pct_types = [convert_pct_type(a) for a in arg_types]
-            push!(types, MapType(VecType(arg_pct_types), return_pct_type))
-        catch # Best effort & silent the errors.
-        end
-    end
-    return MultiType(types)
+to_julia_type(::N) = UInt
+to_julia_type(::I) = Int
+to_julia_type(::R) = Float64
+to_julia_type(::C) = ComplexF64
+
+to_julia_type(d::AbstractDomain) = to_julia_type(base(d))
+
+function to_julia_type(m::MapType)
+    all(t->base(t) == N(), get_content_type(get_bound_type(m))) || error("cannot convert $(m)")
+    return Array{to_julia_type(get_body_type(m)), length(get_bound_type(m))}
 end
-
 
 
 function dedot(s::Symbol)

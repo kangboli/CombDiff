@@ -475,7 +475,7 @@ function verbose(p::ParametricMapType)
 end
 
 function verbose(t::MultiType)
-    join(verbose.(get_maptypes(t)), ",")
+    "multi"
 end
 
 function pretty(s::FermionicState)

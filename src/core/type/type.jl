@@ -140,9 +140,10 @@ end
 
 
 struct MultiType <: AbstractPCTType
-    maptypes::Vector{<:AbstractMapType}
+    func_obj
 end
 
-get_maptypes(m::MultiType) = m.maptypes
+get_func_obj(m::MultiType) = m.func_obj
+#= get_maptypes(m::MultiType) = m.maptypes =#
 meta(::MultiType) = Dict()
 

@@ -102,6 +102,17 @@ end =#
 
 inference(n::Any) = n
 
+function check_parametric_type_capture!(bounds, body, context)
+    free = get_free(body)
+
+    for t in free
+        t_type = get_type(get_var(context, name(t)))
+        t_free = [get_free(t_type)...]
+        i = findfirst(x->name(x) in name.(bounds), t_free) 
+        i === nothing || error("shadowing type parameter $(pretty(t_free[i])) is not allowed.")
+    end
+end
+
 function inference(n::T, context::TypeContext=TypeContext()) where {T<:APN}
     has_bound = any(f -> hasfield(T, f), bound_fields(T))
     if has_bound
@@ -114,6 +125,8 @@ function inference(n::T, context::TypeContext=TypeContext()) where {T<:APN}
         end
         # the following line may be redundant.
         n = set_bound(n, map(t -> inference(t, context), [get_bound(n)])...)
+
+        check_parametric_type_capture!(get_bound(n), get_body(n), context)
     end
     n = set_content(n, map(t -> inference(t, context), content(n))...)
     has_bound && map(b -> pop_var!(context, get_body(b)), content(get_bound(n)))
@@ -185,13 +198,9 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
 
     args = terms[2]
     if isa(get_type(mapp), MultiType)
-        for t in get_maptypes(get_type(mapp))
-            bound_types = get_bound_type(t)
-            arg_types = get_type.(args)
-            all(i -> bound_types[i] == arg_types[i], 1:length(args)) || continue
-            return get_body_type(t)
-        end
-        error("no matching dispatch $(pretty(mapp)): $(pretty.(get_type.(args)))")
+        return convert_pct_type(Base.return_types(
+            get_func_obj(get_type(mapp)),
+            tuple(to_julia_type.(get_type.(args))...))[1])
     end
 
     return get_body_type(get_type(mapp))
