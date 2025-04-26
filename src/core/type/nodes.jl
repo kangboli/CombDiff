@@ -494,6 +494,12 @@ function make_delta(::Type{T}, upper_lower::Vararg{APN}) where {T<:AbstractDelta
     end
 end
 
+"""
+indicator(i, j, k) 
+
+k if i <= j.
+0 otherwise
+"""
 function indicator(upper_lower::Vararg{APN})
     make_delta(Indicator, upper_lower...)
 end

@@ -608,11 +608,12 @@ end
 
 function parse_delta_node(::Type{T}, d::Expr) where {T<:AbstractDelta}
     @assert d.args[1] in [:delta, :delta_not, :δ]
-    upper_params = isa(d.args[2], Union{Symbol,Number}) ? [d.args[2]] : d.args[2].args
-    lower_params = isa(d.args[3], Union{Symbol,Number}) ? [d.args[3]] : d.args[3].args
-    upper_nodes = map(n -> parse_node(Param, n), upper_params)
-    lower_nodes = map(n -> parse_node(Param, n), lower_params)
-    constructor = T == Delta ? :delta : :delta_not
+    is_tuple(expr) = isa(expr, Expr) && expr.head == :tuple
+    upper_params = is_tuple(d.args[2]) ? d.args[2].args : [d.args[2]]
+    lower_params = is_tuple(d.args[3]) ? d.args[3].args : [d.args[3]]
+    upper_nodes = map(parse_node, upper_params)
+    lower_nodes = map(parse_node, lower_params)
+    constructor = T == Delta ? :(CombDiff.delta) : :(CombDiff.delta_not)
     return :($(constructor)($(upper_nodes...), $(lower_nodes...), $(parse_node(d.args[4]))))
 end
 
@@ -722,18 +723,20 @@ function convert_parametric_type(f)
 
 end
 
-convert_pct_type(f::T) where {T<:Function} = MultiType(f)
+#= convert_pct_type(f::T) where {T<:Function} = MultiType(f) =#
+convert_pct_type(f::Any) = MultiType(f)
 
 to_julia_type(::N) = UInt
 to_julia_type(::I) = Int
 to_julia_type(::R) = Float64
 to_julia_type(::C) = ComplexF64
+to_julia_type(m::MultiType) = typeof(get_func_obj(m))
 
 to_julia_type(d::AbstractDomain) = to_julia_type(base(d))
 
 function to_julia_type(m::MapType)
-    all(t->base(t) == N(), get_content_type(get_bound_type(m))) || error("cannot convert $(m)")
-    return Array{to_julia_type(get_body_type(m)), length(get_bound_type(m))}
+    all(t -> base(t) == N(), get_content_type(get_bound_type(m))) || error("cannot convert $(m)")
+    return Array{to_julia_type(get_body_type(m)),length(get_bound_type(m))}
 end
 
 

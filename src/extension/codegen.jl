@@ -205,6 +205,8 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
+    isa(get_type(mapp(c)), MultiType) || length(get_bound_type(get_type(mapp(c)))) == length(args(c)) ||
+        error("$(pretty(mapp(c))) takes $(length(get_bound_type(get_type(mapp(c))))) inputs, but $(length(args(c))) are given.")
     if all(t -> isa(get_type(t), ElementType) && (base(get_type(t)) == N() || base(get_type(t)) == I()), args(c))
         offsets = lower.(get_content_type(get_bound_type(get_type(mapp(c)))))
         new_args = map((t, o) -> first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), content(args(c)), offsets)
@@ -224,6 +226,16 @@ end
 
 function codegen(m::Monomial)
     return :($(codegen(base(m)))^($(codegen(power(m)))))
+end
+
+function codegen(d::DeltaNot)
+    return :(
+        if $(codegen(upper(d))) == $(codegen(lower(d)))
+            0
+        else
+            $(codegen(get_body(d)))
+        end
+    )
 end
 
 function codegen(d::Delta)

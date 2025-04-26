@@ -267,7 +267,7 @@ end
 BDelta(i, j) = z -> delta(i, j, z)
 """
 function as_map(d::BDelta, zs=z_vars(d))::Map
-    if d.delta_type == DeltaNot
+    if d.delta_type == DeltaNot || d.delta_type == Delta
         return pct_map(zs..., make_node(d.delta_type, param(d)..., v_unwrap(zs)))
     end
 end
