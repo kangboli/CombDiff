@@ -59,7 +59,8 @@ default_settings() = Settings(
     :extract_intermediate => false,
     :skip_self_as_intermediate => false,
     :link_pullback => false,
-    :deadend => Set{UInt64}()
+    :deadend => Set{UInt64}(),
+    :delta_ex => true,
    )
 function custom_settings(custom...; preset=default_settings())::Settings
     new_settings = deepcopy(preset)

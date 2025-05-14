@@ -409,6 +409,9 @@ end
 
     return result
 end =#
+is_zero_map(::APN) = false
+is_zero_map(m::Map) = is_zero(get_body(m)) || is_zero_map(get_body(m))
+    
 
 function combine_maps(terms::Vector)
     map_dict, remaining_terms = Dict{Int,Vector{APN}}(), Vector{APN}()
@@ -428,6 +431,9 @@ function combine_maps(terms::Vector)
     end
 
     new_maps = [process_kv(v) for (_, v) in map_dict]
+    filter!(m->!is_zero_map(m), new_maps)
+    subterms = [remaining_terms..., new_maps...]
+    length(subterms) == 0 && return zero_map(get_type(first(terms)))
     return add(remaining_terms..., new_maps...)
 end
 
@@ -1270,10 +1276,9 @@ function neighbors(d::Delta; settings=default_settings())
             base(get_type(i)) == N() &&
             base(get_type(j)) == N() &&
             push!(result, get_body(d); dired=true, name="double_delta")
-        # delta-ex
-        # there is currently no need to consider delta exchange
-        # because the multi-index sum is implemented as a single node.
-        #= push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
+
+        # Exchanging delta can be necessary
+        settings[:delta_ex] && push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
     end
 
     # TODO: use equivalence instead of equality

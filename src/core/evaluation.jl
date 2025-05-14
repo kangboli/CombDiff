@@ -336,12 +336,35 @@ function parametric_evaluation(c::Call)
     eval_all(call(pct_map(type_vars..., call(m, args(c)...)), [values[t] for t in type_vars]...))
 end
 
+function call_on_let(c::Call, i)
+    l = args(c)[i]
+    if isa(l, Let)
+        new_args = [args(c)[1:i-1]..., get_body(l), args(c)[i+1:end]...]
+    elseif isa(l, Splat)
+        l = get_body(l)
+        new_args = [args(c)[1:i-1]..., get_body(l)..., args(c)[i+1:end]...]
+    else
+        error("type $(typeof(l)) is not supported out of call.")
+    end
+    #= println(pretty.(new_args)) =#
+
+    new_map_var = var(first(new_symbol(c)), get_type(mapp(c)))
+    result = evaluate(call(pct_map(new_map_var, pct_let(
+            get_bound(l)..., args(l)...,
+            call(new_map_var, new_args...))), mapp(c)))
+    return result
+end
+
 function evaluate(c::Call)
     isa(get_type(mapp(c)), ParametricMapType) && return parametric_evaluation(c)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
 
     new_args = map(eval_all, args(c))
+
+    i = findfirst(a -> isa(a, AbstractLet) || (isa(a, Splat) && isa(get_body(a), AbstractLet)), content(args(c)))
+    i === nothing || return evaluate(call_on_let(c, i))
+
     if any(t -> isa(get_type(t), SplatType), new_args)
         return call(mapp(c), new_args...)
     end
