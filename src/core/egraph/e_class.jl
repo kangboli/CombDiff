@@ -32,6 +32,9 @@ end
 function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<:AbstractCall}
     get_type(mapp) == UndeterminedPCTType() && return T, [mapp, arguments], UndeterminedPCTType()
 
+    return_type = get_body_type(get_type(mapp))
+    isa(return_type, VecType) && length(return_type) == 0 && return repack(pct_vec())
+
     if mapp == nabla() && !isa(first(arguments), Var)
         maptype = get_type(first(arguments))
         z_types = get_content_type(get_bound_type(maptype))
@@ -150,16 +153,26 @@ end
 flatten_add(a::APN) = [a]
 flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
 
+is_zero_map(::APN) = false
+is_zero_map(m::Map) = is_zero(get_body(m)) || is_zero_map(get_body(m))
+
 function e_class_reduction(::Type{Add}, term::PCTVector)
     new_terms = vcat(flatten_add.(content(term))...)
+
+    if !isempty(new_terms) && isa(get_type(first(term)), MapType)
+        if count(t->isa(t, Map), new_terms) > 1
+            new_terms = combine_maps(new_terms)
+        end
+        new_terms = filter(t->!is_zero_map(t), new_terms)
+        isempty(new_terms) && return repack(zero_map(get_type(first(term))))
+        length(new_terms) == 1 && return repack(first(new_terms))
+        return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
+    end
+
     d = group(t -> isa(t, Constant), new_terms)
     const_term = sum(map(get_body, get(d, true, [])), init=0) |> constant
     new_terms = filter(t -> !is_zero(t), [const_term, get(d, false, [])...])
 
-    if count(a -> isa(a, Map), new_terms) > 1
-        new_map = combine_maps(new_terms)
-        return repack(new_map)
-    end
     #= all(t->t==pct_vec(), new_terms) && return repack(pct_vec()) =#
 
     #= sort!(new_terms) =#
@@ -370,6 +383,10 @@ function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::
 
     if t_lower == lower(get_type(t_upper)) || t_upper == upper(get_type(t_lower))
         return repack(body)
+    end
+
+    if isa(t_lower, Constant) && isa(t_upper, Constant) 
+        return get_body(t_lower) <= get_body(t_upper) ? repack(body) : repack(constant(0))
     end
 
     #= body = remove_dup_indicator(t_upper, t_lower, body) =#

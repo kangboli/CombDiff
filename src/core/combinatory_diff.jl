@@ -478,6 +478,8 @@ function pp(c::PComp)::Map
         end =#
         deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
         partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(pct_vec(deltas...)))))
+        @assert isa(chain, PCTVector)
+        @assert isa(partial, PCTVector)
         chain = pct_vec(map(add, chain, partial)...)
     end
     result = pct_map(ys..., ks..., v_unwrap(chain))
@@ -520,10 +522,22 @@ function decompose(z::APN, ov::Map)::PComp
     comp(z, Fibration(bs, decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(ov))))
 end
 
+
+is_const_map(m::APN) = false
+function is_const_map(m::Map)
+    body = get_body(m)
+    free = get_free(body)
+    result = !any(b -> b in free, get_bound(m))
+    return result
+end
+
 function pp(fib::Fibration)::Map
     bs = fiber_var(fib)
     zs, ks = zk_vars(fib)
     return pct_map(zs..., ks..., pct_sum(bs..., call(pp(fibers(fib)), zs..., splat(call(ks..., bs...)))))
+    #= fiber_map = as_map(fibers(fib))
+    p = is_const_map(fiber_map) ? pp(fibers(fib)) : primitive_pullback(fiber_map)
+    return pct_map(zs..., ks..., pct_sum(bs..., call(p, zs..., splat(call(ks..., bs...))))) =#
 end
 
 apns(fib::Fibration)::Vector{APN} = [fiber_var(fib)..., apns(fibers(fib))...]
@@ -706,7 +720,13 @@ end
 pretty(bp::BPullback) = pretty(as_map(bp))
 
 
-v_wrap(n::APN)::PCTVector = pct_vec(n)
+function v_wrap(n::APN)
+    if isa(get_type(n), VecType)
+        return n
+    else
+        return pct_vec(n)
+    end
+end
 v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
 v_unwrap(n::Union{PCTVector,Vector,VecType}) = length(n) == 1 ? first(n) : n
@@ -768,7 +788,7 @@ x0 -> y1 -> y2 -> y3
 k3 <- k2 <- k1 <- k0
 """
 
-function pp(cc::CopyComp)
+function pp(cc::CopyComp, dup=false)
     its = get_content_type(input_type(cc))
     func_input_types = map(get_bound_type, its)
     func_output_types = map(get_body_type, its)
@@ -802,18 +822,38 @@ function pp(cc::CopyComp)
         ls_values[i+1] = call(primitive_pullback(fs[N-i]), splat(y_feed), splat(l_prev))
     end
 
-    function body_elem(m::Int)
-        y_prev = m == 1 ? x_0 : get_body(ys[m-1])
-        l_next = m == N ? l_0 : get_body(ls[N-m])
-        λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
-        b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
-        return pct_map(λ..., pct_sum(v_wrap(x_0)..., pct_let(ys..., ls[1:end-1]...,
-            ys_values..., ls_values[1:end-1]..., b)))
-    end
-    body = map(body_elem, 1:N)
+    if dup # This creates N duplicated lets
+        body_elem = (m::Int) -> begin
+            y_prev = m == 1 ? x_0 : get_body(ys[m-1])
+            l_next = m == N ? l_0 : get_body(ls[N-m])
+            λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+            b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
+            return pct_map(λ..., pct_sum(v_wrap(x_0)..., pct_let(ys..., ls[1:end-1]...,
+                ys_values..., ls_values[1:end-1]..., b)))
+        end
+        body = map(body_elem, 1:N)
 
-    result = pct_map(fs..., k_0, pct_vec(body...))
-    return result
+        result = pct_map(fs..., k_0, pct_vec(body...))
+        return result
+
+    else
+        body_elem = (m::Int) -> begin
+            y_prev = m == 1 ? x_0 : get_body(ys[m-1])
+            l_next = m == N ? l_0 : get_body(ls[N-m])
+            λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+            b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
+            return pct_map(λ..., b)
+        end
+        body = map(body_elem, 1:N)
+
+        result = pct_map(fs..., k_0,
+            pct_sum(v_wrap(x_0)..., pct_let(ys..., ls[1:end-1]...,
+                ys_values..., ls_values[1:end-1]...,
+                pct_vec(body...))
+            ))
+
+        return result
+    end
 end
 
 struct BLetConst <: ABF

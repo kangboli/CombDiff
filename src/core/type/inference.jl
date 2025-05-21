@@ -108,7 +108,7 @@ function check_parametric_type_capture!(bounds, body, context)
     for t in free
         t_type = get_type(get_var(context, name(t)))
         t_free = [get_free(t_type)...]
-        i = findfirst(x->name(x) in name.(bounds), t_free) 
+        i = findfirst(x -> name(x) in name.(bounds), t_free)
         i === nothing || error("shadowing type parameter $(pretty(t_free[i])) is not allowed.")
     end
 end
@@ -234,13 +234,13 @@ function partial_inference(::Type{Pullback}, mapp)::AbstractPCTType
     if isa(get_type(mapp), MapType)
         bound_type = get_bound_type(get_type(mapp))
         body_type = get_body_type(get_type(mapp))
-        return MapType(add_content(bound_type, body_type), first(get_content_type(bound_type)))
+        return MapType(add_content(bound_type, body_type), v_unwrap(bound_type))
     elseif isa(get_type(mapp), ParametricMapType)
         bound_type = get_bound_type(get_param_body(get_type(mapp)))
         body_type = get_body_type(get_param_body(get_type(mapp)))
         return ParametricMapType(
             get_params(get_type(mapp)),
-            MapType(add_content(bound_type, body_type), first(get_content_type(bound_type))))
+            MapType(add_content(bound_type, body_type), v_unwrap(bound_type)))
     else
         error("$(pretty(get_type(mapp))) is not supported")
     end
@@ -251,13 +251,13 @@ function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
     if isa(get_type(v), MapType)
         bound_type = get_bound_type(get_type(v))
         body_type = get_body_type(get_type(v))
-        return MapType(add_content(bound_type, body_type), bound_type)
+        return MapType(add_content(bound_type, body_type), v_unwrap(bound_type))
     else
         type_vars = get_params(get_type(v))
         m_type = get_param_body(get_type(v))
         bound_type = get_bound_type(m_type)
         body_type = get_body_type(m_type)
-        return ParametricMapType(type_vars, MapType(add_content(bound_type, body_type), bound_type))
+        return ParametricMapType(type_vars, MapType(add_content(bound_type, body_type), v_unwrap(bound_type)))
 
     end
 end

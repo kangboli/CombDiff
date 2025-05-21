@@ -137,16 +137,32 @@ function let_out_pullback(p::AbstractCall)
     map_output_type = get_body_type(get_type(inner_map))
     isa(map_output_type, VecType) && return result
     new_args..., let_term = content(args(p))
-    isa(let_term, Let) || return result
+    if isa(let_term, Let)
 
-    t = var(first(new_symbol(p)), MapType(VecType([get_type(let_term)]), get_type(p)))
-    new_let = pct_map(t, pct_let(get_bound(let_term)..., args(let_term)...,
-        call(t, get_body(let_term))))
+        t = var(first(new_symbol(p)), MapType(VecType([get_type(let_term)]), get_type(p)))
+        new_let = pct_map(t, pct_let(get_bound(let_term)..., args(let_term)...,
+            call(t, get_body(let_term))))
 
-    k = var(first(new_symbol(p, t)), get_type(let_term))
-    new_map = pct_map(k, evaluate(call(mapp(p), new_args..., k)))
+        k = var(first(new_symbol(p, t)), get_type(let_term))
+        new_map = pct_map(k, evaluate(call(mapp(p), new_args..., k)))
 
-    push!(result, eval_all(call(new_let, new_map)); dired=true, name="let_out_pullback")
+        push!(result, eval_all(call(new_let, new_map)); dired=true, name="let_out_pullback")
+    elseif isa(let_term, Sum) && isa(get_body(let_term), Let)
+        sum_let = let_term
+        let_term = get_body(sum_let)
+
+        t = var(first(new_symbol(p)), MapType(VecType([get_type(sum_let)]), get_type(p)))
+        new_sum_let = pct_map(t,
+            pct_sum(get_bound(sum_let)...,
+                pct_let(get_bound(let_term)..., args(let_term)...,
+                    call(t, get_body(let_term)))))
+
+        k = var(first(new_symbol(p, t)), get_type(sum_let))
+        new_map = pct_map(k, evaluate(call(mapp(p), new_args..., k)))
+
+        push!(result, eval_all(call(new_sum_let, new_map)); dired=true, name="sum_let_out_pullback")
+
+    end
     return result
 end
 
@@ -409,9 +425,6 @@ end
 
     return result
 end =#
-is_zero_map(::APN) = false
-is_zero_map(m::Map) = is_zero(get_body(m)) || is_zero_map(get_body(m))
-    
 
 function combine_maps(terms::Vector)
     map_dict, remaining_terms = Dict{Int,Vector{APN}}(), Vector{APN}()
@@ -431,10 +444,7 @@ function combine_maps(terms::Vector)
     end
 
     new_maps = [process_kv(v) for (_, v) in map_dict]
-    filter!(m->!is_zero_map(m), new_maps)
-    subterms = [remaining_terms..., new_maps...]
-    length(subterms) == 0 && return zero_map(get_type(first(terms)))
-    return add(remaining_terms..., new_maps...)
+    return [remaining_terms..., new_maps...]
 end
 
 function combine_factors(a)
@@ -464,10 +474,10 @@ function neighbors(a::Add; settings=default_settings())
     time = @elapsed begin
         terms = content(get_body(a))
 
-        if count(a -> isa(a, Map), content(get_body(a))) > 1
-            new_add = combine_maps(content(get_body(a)))
+        #= if count(t -> isa(get_type(t), MapType), content(get_body(a))) > 1
+            new_add = add(combine_maps(content(get_body(a)))...)
             push!(result, new_add; dired=true, name="combine_map")
-        end
+        end =#
         #= append!(result, combine_map_neighbors(terms)) =#
         sub_result = sub_neighbors(a; settings=settings)
         #= for (i, t) in enumerate(nodes(sub_result))
@@ -812,7 +822,7 @@ function sum_out_primitive_pullback(s::Sum)
     summand = get_body(s)
     isa(summand, AbstractCall) && isa(mapp(summand), PrimitivePullback) || return result
     k_type = get_body_type(get_type(get_body(mapp(summand))))
-    isa(k_type, VecType) && error("moving contraction into a nontrivial pullback is not yet supported")
+    isa(k_type, VecType) && return result
     for b in get_bound(s)
         contains_name(mapp(summand), name(b)) && return result
     end
@@ -821,6 +831,7 @@ function sum_out_primitive_pullback(s::Sum)
     push!(result, new_pullback; dired=true, name="pullback_sum_out")
     return result
 end
+
 function sum_out_linear_op(s::Sum)
     result = NeighborList()
     summand = get_body(s)
@@ -1278,7 +1289,7 @@ function neighbors(d::Delta; settings=default_settings())
             push!(result, get_body(d); dired=true, name="double_delta")
 
         # Exchanging delta can be necessary
-        settings[:delta_ex] && push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex")
+        #= settings[:delta_ex] && push!(result, delta(p, q, delta(i, j, get_body(get_body(d)))); name="delta_ex") =#
     end
 
     # TODO: use equivalence instead of equality

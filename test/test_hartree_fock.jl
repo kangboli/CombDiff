@@ -1,35 +1,26 @@
 using CombDiff, Test
 
-@testset "Hartree Fock" begin
-
-    f, ctx = @pct begin
-        @space H begin
-            type = (I, I) -> C
-            symmetries = (((2, 1), :conj),)
+# Encode the symmetries of ERI 
+# as part of the type
+_, ctx = @comb :(
+    begin
+        @space ERI begin
+            type = (N, N, N, N) -> R
+            symmetries = (
+                J -> (j, i, b, a) -> J(i, j, a, b)',
+                J -> (a, b, i, j) -> J(i, j, a, b))
         end
-
-        @space V begin
-            type = (I,) -> C
-        end
-
-        @space T begin
-            type = (I, I, I, I) -> C
-            symmetries = (((2, 1, 4, 3), :conj), ((3, 4, 1, 2), :id))
-        end
-
-        @space U begin
-            type = (I, I) -> C
-        end
-
-        (A::H, J::T) -> _
     end
+)
 
-    g = get_body(@pct f ctx (C::U) -> sum((i, j, p, q, r, s), C(p, i)' * C(q, i) * C(r, j)' * C(s, j) * J(p, q, r, s)))
-    cg = decompose(g)
 
-    pcg = pp(cg)
-    pcg_1 = propagate_k(pcg)
-    pcg_2 = simplify(pcg_1) |> first
-    pcg_3 = simplify(pcg_2; settings=symmetry_settings) |> first
+# The Coulomb energy in Hartree Fock
+coul, _ = @main :(
+    (J::ERI) -> pullback((C::CM) ->
+        sum((i, j, p, q, r, s), C(p, i)' * C(q, i) * C(r, j)' * C(s, j) *
+                                J(p, q, r, s)))
+) _ ctx
 
-end
+
+# Differentiate the energy and simplify based on the symmetries.
+vdiff(coul) |> fast_symmetry_reduction 

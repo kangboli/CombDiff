@@ -69,6 +69,12 @@ Base.last(v::PCTVector) = last(content(v))
 Base.length(v::PCTVector) = length(content(v))
 Base.eachindex(v::PCTVector) = Base.OneTo(length(v))
 
+function Base.iterate(n::APN)
+    isa(get_type(n), VecType) || error("iterating a nonvector")
+    return splat(n), 2
+end
+
+Base.iterate(::APN, ::Int) = nothing
 
 function Base.iterate(v::PCTVector)
     isempty(content(v)) && return nothing

@@ -336,6 +336,27 @@ function parametric_evaluation(c::Call)
     eval_all(call(pct_map(type_vars..., call(m, args(c)...)), [values[t] for t in type_vars]...))
 end
 
+function call_on_sum_let(c::Call, i)
+    s = args(c)[i]
+    if isa(s, Sum)
+        new_args = [args(c)[1:i-1]..., get_body(s), args(c)[i+1:end]...]
+    elseif isa(s, Splat)
+        s = get_body(s)
+        new_args = [args(c)[1:i-1]..., get_body(s)..., args(c)[i+1:end]...]
+    else
+        error("type $(typeof(s)) is not supported out of call.")
+    end
+
+    new_map_var = var(first(new_symbol(c)), get_type(mapp(c)))
+    l = get_body(s)
+    result = evaluate(call(pct_map(new_map_var,
+            pct_sum(get_bound(s)...,
+                pct_let(
+                    get_bound(l)..., args(l)...,
+                    call(new_map_var, new_args...)))), mapp(c)))
+    return result
+end
+
 function call_on_let(c::Call, i)
     l = args(c)[i]
     if isa(l, Let)
@@ -365,13 +386,16 @@ function evaluate(c::Call)
     i = findfirst(a -> isa(a, AbstractLet) || (isa(a, Splat) && isa(get_body(a), AbstractLet)), content(args(c)))
     i === nothing || return evaluate(call_on_let(c, i))
 
+    j = findfirst(a -> isa(a, Sum) && isa(get_body(a), AbstractLet) || (isa(a, Splat) && isa(get_body(a), Sum) && isa(get_body(get_body(a)), AbstractLet)), content(args(c)))
+    j === nothing || return evaluate(call_on_sum_let(c, j))
+
     if any(t -> isa(get_type(t), SplatType), new_args)
         return call(mapp(c), new_args...)
     end
-    new_bound = map(var, new_symbol(c, num=length(get_bound(mapp(c))), symbol=:_e), get_type(get_bound(mapp(c))))
+    new_bound = map(var, new_symbol(c, num=length(get_bound_type(get_type(mapp(c)))), symbol=:_e), get_bound_type(get_type(mapp(c))))
     new_args = filter(a -> !(isa(get_type(a), VecType) && (length(get_type(a)) == 0)), content(new_args))
-    if length(new_bound) == 0 
-        n =  evaluate(get_body(mapp(c)))
+    if length(new_bound) == 0
+        n = evaluate(get_body(mapp(c)))
         return n
     end
     @assert isa(mapp(c), AbstractMap)
@@ -441,12 +465,13 @@ function let_copy_to_comp(zs::APN, l::Let)
     end
 
     state_vars::PCTVector = v_wrap(zs)
-    funcs = []
+    funcs = Vector{Any}()
     for i in 1:length(bound)
         filtered = filter_states(state_vars, i)
         push!(funcs, pct_map(state_vars..., pct_vec(args[i], filtered...)))
         state_vars = filtered
-        pushfirst!(content(state_vars), strip_copy(bound[i]))
+        state_vars = pct_vec(strip_copy(bound[i]), state_vars...)
+        #= pushfirst!(content(state_vars), strip_copy(bound[i])) =#
     end
     push!(funcs, pct_map(state_vars..., body))
     return call(rev_composite(reverse(funcs)...), v_wrap(zs)...)

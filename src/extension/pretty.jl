@@ -122,7 +122,7 @@ end
 verbose(c::Conjugate) = "$(pretty(get_body(c)))'::$(pretty(get_type(c)))"
 
 pretty(p::T) where {T<:AbstractPullback} = "𝒫($(pretty(get_body(p))))"
-pretty(p::PrimitivePullback) = "𝔓($(pretty(get_body(p))))"
+pretty(p::PrimitivePullback) = "P($(pretty(get_body(p))))"
 
 latex(p::AbstractPullback) = "\\mathcal{P}($(latex(get_body(p))))"
 
@@ -130,8 +130,8 @@ verbose(p::T) where {T<:AbstractPullback} = "$(T)($(pretty(get_body(p))))::$(pre
 
 
 function pretty(s::Sum)
-    bound_string = join(map(pretty, content(get_bound(s))), ",")
-    "∑(($(bound_string)), $(pretty(get_body(s))))"
+    bound_string = join(map(pretty, content(get_bound(s))), ", ")
+    "sum(($(bound_string)), $(pretty(get_body(s))))"
 end
 
 function latex(s::Sum, paren=false)
@@ -201,7 +201,7 @@ function verbose(d::T) where {T<:AbstractDelta}
     indent("$(pretty(last(content(d)))))::$(pretty(get_type(d)))")
 end
 
-pretty(m::Mul) = "$(join(pretty.(sort(content(get_body(m)),by=is_negative,rev=true)), "⋅"))"
+pretty(m::Mul) = "$(join(pretty.(sort(content(get_body(m)),by=is_negative,rev=true)), " * "))"
 
 function latex(m::Mul)
     negative_first = sort(content(get_body(m)), by=is_negative, rev=true)
@@ -275,6 +275,13 @@ end
 
 verbose(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))::$(pretty(get_type(p)))"
 
+function pretty(p::PrimitiveCall) 
+    if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
+        return "grad($(pretty(get_body(mapp(p)))))($(pretty(args(p)[1:end-1], false)))"
+    end
+    return "$(pretty(mapp(p)))($(pretty(args(p), false)))"
+end
+
 
 pretty(c::Constant) = is_negative(c) ? "($(get_body(c)))" : "$(get_body(c))"
 latex(c::Constant) = pretty(c)
@@ -284,7 +291,7 @@ verbose(c::Constant) = "$(get_body(c))::$(pretty(get_type(c)))"
 function pretty(v::PCTVector, paren=true)
     terms = (t -> isa(t, PCTVector) ? pretty(t, true) : pretty(t)).(content(v))
     result = join(terms, ", ")
-    return paren ? "𝕧($(result))" : "$(result)"
+    return paren ? "tuple($(result))" : "$(result)"
 end
 
 function latex(v::PCTVector, paren=false)

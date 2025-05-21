@@ -274,6 +274,7 @@ end
 
 function Base.:(==)(a::Map, b::Map)
     length(get_bound(a)) == length(get_bound(b)) || return false
+    get_type.(get_bound(a)) == get_type.(get_bound(b)) || return false
     new_vars = map(var, new_symbol(a, b; num=length(get_bound(a))), get_type.(get_bound(a)))
     new_a = ecall(a, new_vars...)
     new_b = ecall(b, new_vars...)

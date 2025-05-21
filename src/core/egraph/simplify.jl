@@ -14,7 +14,7 @@ vdiff(n::TerminalNode) = n
 dropp(n::TerminalNode) = n
 
 function vdiff(p::Pullback)
-    
+
     m = isa(get_body(p), ParametricMap) ? get_body(get_body(p)) : get_body(p)
 
     function vdiff_single(pcomp)
@@ -26,7 +26,7 @@ function vdiff(p::Pullback)
         result = simplify(result) |> first
     end
 
-    if isa(get_body(p), ParametricMap) 
+    if isa(get_body(p), ParametricMap)
         type_vars = get_bound(get_body(p))
         return parametric_map(type_vars..., pct_map(get_bound(m)..., v_unwrap(result)))
     end
@@ -49,20 +49,23 @@ function eval_pullback(p::Pullback)
     m = isa(get_body(p), ParametricMap) ? get_body(get_body(p)) : get_body(p)
     #= output_type == R() || error("Output must be a real scalar for the gradient to be defined") =#
     function vdiff_single(pcomp)
-        return pcomp |> pp |> eval_all
+        return pcomp |> pp
     end
 
-    univariate_map = f -> decompose(pct_map(f, get_body(m)))
+    function univariate_map(f)
+        result = decompose(pct_map(f, get_body(m)))
+        return result 
+    end
 
     output_type = get_body_type(get_type(m))
     k_types = isa(output_type, VecType) ? get_content_type(output_type) : [output_type]
 
     ks = map(var, new_symbol(m; num=length(v_wrap(get_body(m))), symbol=:_k), k_types)
 
-    result = v_unwrap(pct_vec(map(f -> ecall(vdiff_single(univariate_map(f)), f, ks...), get_bound(m))...))
+    result = v_unwrap(pct_vec(map(f -> evaluate(call(vdiff_single(univariate_map(f)), f, ks...)), get_bound(m))...))
     result = result |> simplify |> first
 
-    if isa(get_body(p), ParametricMap) 
+    if isa(get_body(p), ParametricMap)
         type_vars = get_bound(get_body(p))
         return parametric_map(type_vars..., pct_map(get_bound(m)..., v_unwrap(result)))
     end
