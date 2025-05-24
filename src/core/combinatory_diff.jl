@@ -127,7 +127,7 @@ function zero_map(::ElementType)
 end
 
 function zero_map(v::VecType)
-    return pct_vec(map(zero_map, content(v))...)
+    return pct_vec(map(zero_map, get_content_type(v))...)
 end
 
 """
@@ -826,7 +826,7 @@ function pp(cc::CopyComp, dup=false)
         body_elem = (m::Int) -> begin
             y_prev = m == 1 ? x_0 : get_body(ys[m-1])
             l_next = m == N ? l_0 : get_body(ls[N-m])
-            λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+            λ = map(var, new_symbol(; num=length(get_type(y_prev)), symbol=:_λ), v_wrap(get_type(y_prev)))
             b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
             return pct_map(λ..., pct_sum(v_wrap(x_0)..., pct_let(ys..., ls[1:end-1]...,
                 ys_values..., ls_values[1:end-1]..., b)))
@@ -840,7 +840,7 @@ function pp(cc::CopyComp, dup=false)
         body_elem = (m::Int) -> begin
             y_prev = m == 1 ? x_0 : get_body(ys[m-1])
             l_next = m == N ? l_0 : get_body(ls[N-m])
-            λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
+            λ = map(var, new_symbol(; num=length(get_type(y_prev)), symbol=:_λ), v_wrap(get_type(y_prev)))
             b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
             return pct_map(λ..., b)
         end

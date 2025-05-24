@@ -79,6 +79,8 @@ end
 
 function propagate_k(n::Map, k=constant(1))
     zs = get_bound(n)[1:end-1]
+    _..., k_type = get_bound_type(get_type(n))
+    @assert isa(k_type, ElementType)
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end
 
