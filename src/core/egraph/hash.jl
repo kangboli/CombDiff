@@ -206,10 +206,16 @@ function Base.hash(n::T, h::UInt) where {T<:Union{Mul,Add}}
     return reduce(xor, hashes) + hash(T, h) + h
 end
 
-function Base.:(==)(v_1::VecType, v_2::VecType)
+function Base.:(==)(v_1::AbstractVecType, v_2::AbstractVecType)
     objectid(v_1) == objectid(v_2) && return true
     length(v_1) == length(v_2) &&
         all(i -> get_content_type(v_1)[i] == get_content_type(v_2)[i], 1:length(v_1))
+end
+
+function Base.:(==)(v_1::ProductType, v_2::ProductType)
+    
+    invoke(Base.:(==), Tuple{AbstractVecType, AbstractVecType}, v_1, v_2) || return false
+    get_names(v_1) == get_names(v_2)
 end
 
 

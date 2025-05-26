@@ -27,6 +27,7 @@ end
 
 free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
 free_and_dummy(v::T) where {T<:Var} = union!(Set{Var}([v]), get_free(get_type(v))), Set{Var}()
+free_and_dummy(c::Constructor)  = get_free(get_type(c)), Set{Var}()
 
 get_free(d::Domain) = union(get_free(lower(d)), get_free(upper(d)))
 get_free(::AbstractPCTType) = Set{Var}()
@@ -128,6 +129,7 @@ end
 contains_name(v::Var, s::Symbol)::Bool = name(v) == s || contains_name(get_type(v), s)
 
 contains_name(c::Constant, ::Symbol)::Bool = false
+contains_name(c::Constructor, s::Symbol)::Bool = contains_name(get_type(c), s)
 
 contains_name(c::MapType, s::Symbol)::Bool = any(t -> contains_name(t, s), [get_bound_type(c), get_body_type(c)])
 contains_name(c::VecType, s::Symbol)::Bool = any(t -> contains_name(t, s), get_content_type(c))
@@ -204,6 +206,10 @@ function subst_type(n::ElementType, ::S, ::R, replace_dummy=false) where {S<:APN
     return n
 end
 
+function subst_type(n::ProductType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return ProductType(get_typename(n), map(t -> subst_type(t, old, new, replace_dummy), get_content_type(n)), get_names(n))
+end
+
 function subst_type(n::VecType, old::S, new::R, replace_dummy=false) where {S<:APN,R<:APN}
     return VecType(map(t -> subst_type(t, old, new, replace_dummy), get_content_type(n)))
 end
@@ -245,6 +251,10 @@ end
 
 function subst(n::T, old::T, new::APN, ::Bool) where {T<:APN}
     n == old ? new : n
+end
+
+function subst(n::Constructor, ::Var, ::APN, ::Bool)
+    return n
 end
 
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}

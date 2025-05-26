@@ -10,16 +10,25 @@ get_param_body(pd::ParametricDomain) = pd.body
 name(pd::ParametricDomain) = name(get_param_body(pd))
 
 struct ParametricMapType <: AbstractMapType
-    paramters::Vector
+    parameters::Vector
     body::MapType
 end
 
-get_params(pm::ParametricMapType) = pm.paramters
+get_params(pm::ParametricMapType) = pm.parameters
 get_param_body(pm::ParametricMapType) = pm.body
 name(pm::ParametricMapType) = name(get_param_body(pm))
 linear(c::ParametricMapType) = false
 
-function parametrize_type(t::T, args...) where {T <: Union{ParametricDomain, ParametricMapType}}
+struct ParametricProductType 
+    parameters::Vector 
+    body::ProductType
+end
+
+get_params(pv::ParametricProductType) = pv.parameters
+get_param_body(pv::ParametricProductType) = pv.body
+name(pv::ParametricProductType) = name(get_param_body(pv))
+
+function parametrize_type(t::T, args...) where {T <: Union{ParametricDomain, ParametricMapType, ParametricProductType}}
     args = [args...]
     append!(args, fill(infty(), length(get_params(t)) - length(args)))
     result = get_param_body(t)
@@ -36,7 +45,7 @@ parametrize_type(::N, arg) = Domain(N(), constant(1), arg, Dict(:name=>:N))
 parametrize_type(::T, lower, upper) where T <: ElementType = Domain(T(), lower, upper, Dict(:name=>Symbol(string(T))))
     
 function parametrize_type(mt::MapType, type_args...)
-    new_bounds = []
+    new_bounds = Vector{AbstractPCTType}()
     for i in 1:length(get_bound_type(mt))
         if i <= length(type_args)
             push!(new_bounds, parametrize_type(get_bound_type(mt)[i], type_args[i]))

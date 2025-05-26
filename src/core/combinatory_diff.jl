@@ -99,7 +99,7 @@ The identity map
 """
 
 function decompose(z::Var, ov::Var)::PComp
-    z == ov && return comp(z)
+    name(z) == name(ov) && return comp(z)
     return comp(z, Pconst(ov, MapType(v_wrap(get_type(z)), get_type(ov))))
 end
 
@@ -128,6 +128,11 @@ end
 
 function zero_map(v::VecType)
     return pct_vec(map(zero_map, get_content_type(v))...)
+end
+
+function zero_map(p::ProductType)
+    return call(var(get_typename(p), derive_constructor_type(p)),
+        map(zero_map, get_content_type(p))...)
 end
 
 """
@@ -476,14 +481,32 @@ function pp(c::PComp)::Map
         for (e, i) in zip(expr, is)
             deltas = map(d -> delta(e, i, d), deltas)
         end =#
-        deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
-        partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(pct_vec(deltas...)))))
+        #= deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks) =#
+        #= partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., pct_map(is..., v_unwrap(pct_vec(deltas...))))) =#
+        deltas = make_typed_delta(f_map, expr, is, ks)
+        partial = v_wrap(ecall(pp(decompose(zs, f_map)), ys..., deltas))
         @assert isa(chain, PCTVector)
         @assert isa(partial, PCTVector)
         chain = pct_vec(map(add, chain, partial)...)
     end
     result = pct_map(ys..., ks..., v_unwrap(chain))
     return result
+end
+
+function make_typed_delta(f_map, expr, is, ks)
+    if isa(get_type(f_map), MapType) 
+        deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
+        return pct_map(is..., v_unwrap(pct_vec(deltas...)))
+    elseif isa(get_type(f_map), ProductType)
+        @assert length(is) == length(ks) == length(expr) == 1
+
+        @assert isa(first(expr), Constant)
+
+        p = get_type(f_map)
+        constructor_args = Vector{APN}(map(zero_map, get_content_type(p)))
+        constructor_args[get_body(first(expr))] = first(ks)
+        return call(make_constructor(p), constructor_args...)
+    end
 end
 
 
@@ -619,13 +642,18 @@ Map to a call
 """
 struct BMap <: ABF
     param::APN
+    maptype::MapType
 end
+
+BMap(param) = BMap(param, get_type(param))
+
 param(b::BMap)::APN = b.param
 function maptype(b::BMap)::AbstractMapType
-    result = get_type(param(b))
+    return b.maptype
+    #= result = get_type(param(b))
     isa(result, VecType) && return MapType(VecType([I()]), first(content(result)))
     isa(result, ParametricMapType) && return get_param_body(result)
-    return result
+    return result =#
 end
 
 """
@@ -638,7 +666,8 @@ function decompose(zs::PCTVector, ov::Var)::PComp
     const_type = MapType(get_type(zs), get_type(ov))
     i = findfirst(t -> t == ov, content(zs))
     i === nothing && return comp(zs, Pconst(ov, const_type))
-    return comp(zs, Pconst(constant(i), MapType(get_type(zs), N())), BMap(zs))
+    return comp(zs, Pconst(constant(i), MapType(get_type(zs), N())), BMap(zs,
+        MapType(VecType([N()]), get_content_type(get_type(zs))[i])))
 end
 
 function pp(b::BMap)::AbstractMap
@@ -647,17 +676,24 @@ function pp(b::BMap)::AbstractMap
     # TODO: Implement the vector case.
     process_param(p::APN) = primitive_pullback(p)
     #= process_param(p::PrimitiveCall) = pp(decompose(p)) =#
+    function process_param(p::Constructor)
+        zs, ks = zk_vars(b)
+        bound_types = get_content_type(get_bound_type(get_type(p)))
+
+        k = first(ks)
+        pct_map(zs..., k, pct_vec(map(i->call(k, constant(i)), 1:length(bound_types))...))
+    end
     function process_param(p::Union{Var,PrimitivePullback})
-        if isa(get_type(p), MapType)
-            bound_types = get_content_type(get_bound_type(get_type(m)))
+        if isa(maptype(b), MapType)
+            bound_types = get_content_type(get_bound_type(maptype(b)))
             n_args = length(bound_types)
             zs, ks = zk_vars(b)
             if n_args == 1
-                linear(get_type(m)) || return pullback(p)
-                return pct_map(zs..., ks..., call(conjugate(m), ks...))
+                linear(maptype(b)) || return pullback(p)
+                return pct_map(zs..., ks..., call(conjugate(p), ks...))
             end
             #= new_bound = map(var, new_symbol(m, zs..., ks..., num=n_args), bound_types) =#
-            pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(m, zs...))), z, ks...), zs)
+            pullbacks = map(z -> call(primitive_pullback(pct_map(z, call(p, zs...))), z, ks...), zs)
             return pct_map(zs..., ks..., pct_vec(pullbacks...))
         else
             type_vars = get_params(get_type(p))
@@ -697,7 +733,7 @@ function decompose(z::APN, ov::AbstractCall)::PComp
             return push(decompose(z, k), bp)
         end
     end
-    b_map = BMap(set_type(mapp(ov), MapType(get_type(args(ov)), get_type(ov))))
+    b_map = BMap(mapp(ov), MapType(get_type(args(ov)), get_type(ov)))
     length(args(ov)) == 1 && return push(decompose(z, first(args(ov))), b_map)
     push(decompose(z, args(ov)), b_map)
 end
@@ -727,7 +763,7 @@ function v_wrap(n::APN)
         return pct_vec(n)
     end
 end
-v_wrap(n::T) where {T<:Union{ElementType,MapType}} = VecType([n])
+v_wrap(n::T) where {T<:Union{ElementType,MapType,ProductType}} = VecType([n])
 v_wrap(n::T) where {T<:Union{PCTVector,VecType}} = n
 v_unwrap(n::Union{PCTVector,Vector,VecType}) = length(n) == 1 ? first(n) : n
 v_unwrap(n::APN) = n

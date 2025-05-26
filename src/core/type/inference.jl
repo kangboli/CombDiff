@@ -11,7 +11,7 @@ function find_var_by_name(context::TypeContext, n::Symbol)
     d = get_name_to_variable(context)
     n_vars = get(d, n, [])
     !isempty(n_vars) && return last(n_vars)
-    error("variable \"$(n)\" not found")
+    return nothing
 end
 
 default_context() = TypeContext(
@@ -103,7 +103,7 @@ end =#
 inference(n::Any) = n
 
 function check_parametric_type_capture!(bounds, body, context)
-    free = get_free(body)
+    free = get_free(inference(body, context))
 
     for t in free
         t_type = get_type(get_var(context, name(t)))
@@ -137,7 +137,13 @@ end
 function inference(v::Var, context::TypeContext)
     startswith(string(get_body(v)), "__") && return v
     new_v = find_var_by_name(context, name(v))
-    return set_type(new_v, inference(get_type(new_v), context))
+    if new_v !== nothing
+        return set_type(new_v, inference(get_type(new_v), context))
+    else
+        constructor_type = first(get_name_to_type(context)[name(v)])
+        #= return set_type(v, inference(derive_constructor_type(constructor_type), context)) =#
+        return make_constructor(constructor_type)
+    end
 end
 
 function inference(l::T, context::TypeContext) where {T<:AbstractLet}
@@ -203,7 +209,7 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
             tuple(to_julia_type.(get_type.(args))...))[1])
     end
 
-    return get_body_type(get_type(mapp))
+    return get_return_type(mapp, terms[end])
 end
 
 function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
@@ -252,13 +258,14 @@ function partial_inference(::Type{PrimitivePullback}, v::APN)::AbstractPCTType
         bound_type = get_bound_type(get_type(v))
         body_type = get_body_type(get_type(v))
         return MapType(add_content(bound_type, body_type), v_unwrap(bound_type))
-    else
+    elseif isa(get_type(v), ParametricMapType)
         type_vars = get_params(get_type(v))
         m_type = get_param_body(get_type(v))
         bound_type = get_bound_type(m_type)
         body_type = get_body_type(m_type)
         return ParametricMapType(type_vars, MapType(add_content(bound_type, body_type), v_unwrap(bound_type)))
-
+    elseif isa(get_type(v), ProductType)
+        return UndeterminedPCTType()
     end
 end
 
@@ -297,8 +304,13 @@ end =#
 
 
 function inference(v::VecType, context::TypeContext=TypeContext())
-    new_vectype = VecType(map(t -> inference(t, context), get_content_type(v)))
+    new_vectype = VecType(map(t -> inference(t, context), get_content_type(v)), meta(v))
     return new_vectype
+end
+
+function inference(v::ProductType, context::TypeContext=TypeContext())
+    new_product_type = ProductType(get_typename(v), map(t -> inference(t, context), get_content_type(v)), get_names(v), meta(v))
+    return new_product_type
 end
 
 function inference(m::MapType, context::TypeContext=TypeContext())
@@ -371,3 +383,21 @@ end
 function partial_inference(::Type{ParametricMap}, terms...)
     return ParametricMapType([first(terms)...], get_type(last(terms)))
 end
+
+function partial_inference(::Type{Dot}, predot, postdot)
+    predot_type = get_type(predot)
+    if isa(predot_type, MultiType)
+        return MultiType(getfield(get_func_obj(predot_type), postdot))
+        #= elseif isa(predot_type, VecType)
+            i = findfirst(n -> n == terms[2], get_names(predot_type))
+            return get_content_type(predot_type)[i] =#
+    else
+        return UndeterminedPCTType()
+        #= error("accessing field of type $(predot_type) is not supported") =#
+    end
+end
+
+function partial_inference(::Type{Constructor}, ::Symbol)
+    return UndeterminedPCTType()
+end
+

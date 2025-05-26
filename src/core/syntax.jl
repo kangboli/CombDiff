@@ -23,8 +23,9 @@ macro pit(expr, ctx=interactive_context)
                       map(parse_node, expr.args) : [parse_node(expr)]
 
     statements = filter(n -> isa(n, AbstractStatement), top_level_nodes)
-    domains = map(get_expr, filter(n -> isa(n, DomainNode), top_level_nodes))
-    maps_types = map(get_expr, filter(n -> isa(n, MapTypeNode), top_level_nodes))
+    typenodes = map(get_expr, filter(n -> (isa(n, DomainNode) ||
+                                           isa(n, MapTypeNode) ||
+                                           isa(n, ProductTypeNode)), top_level_nodes))
     return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
     return_node = isempty(return_node_list) ? :(var($(QuoteNode(:_)))) : first(return_node_list)
@@ -33,8 +34,7 @@ macro pit(expr, ctx=interactive_context)
     rhs = :(
         begin
             _ctx = $(ctx)
-            $(domains...)
-            $(maps_types...)
+            $(typenodes...)
             ($(return_node), _ctx)
         end
     )
@@ -218,8 +218,9 @@ function parse_node(n::Expr)
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
         n.args[1] == Symbol("@domain") && return parse_domain_node(n)
-        n.args[1] == Symbol("@size") && return parse_size_node(n)
+        #= n.args[1] == Symbol("@size") && return parse_size_node(n) =#
     end
+    n.head == :struct && return parse_product_type_node(n)
     n.head == Symbol("->") && return parse_map_node(n)
     if n.head == :call
         func = n.args[1]
@@ -251,6 +252,27 @@ function parse_node(n::Expr)
     n.head == :tuple && return parse_pctvector_node(n)
     n.head == Symbol("::") && return parse_node(Param, n)
     return :()
+end
+
+struct ProductTypeNode
+    expr::Expr
+end
+
+get_expr(n::ProductTypeNode) = n.expr
+
+function parse_product_type_node(n)
+    type_name = n.args[2]
+    fields = n.args[end].args
+    fields = :([$(map(f -> parse_node(Param, f), fields)...)])
+    vectype = :(
+        let field_vars = $(fields)
+            ProductType($(QuoteNode(type_name)), get_type.(field_vars), name.(field_vars))
+        end
+    )
+
+    return ProductTypeNode(:(push_type!(_ctx, $(QuoteNode(type_name)),
+        $(vectype); replace=true)))
+
 end
 
 # The handling of division is adhoc.  There will be so many bugs because of this.
@@ -293,8 +315,11 @@ end
 
 function parse_escape_node(n::Expr)
     n.args[1] == :jl && return n.args[2].value
-    name = Symbol("$(n.args[1])__dot__$(n.args[2].value)")
-    return :(var($(QuoteNode(name))))
+
+    return :(pct_dot(var($(QuoteNode(n.args[1]))), $(QuoteNode(n.args[2].value))))
+
+    #= name = Symbol("$(n.args[1])__dot__$(n.args[2].value)")
+    return :(var($(QuoteNode(name)))) =#
 end
 
 struct MapTypeNode

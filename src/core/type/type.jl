@@ -9,7 +9,7 @@ export AbstractPCTType,
     C,
     Domain,
     symmetries,
-    VecType,
+    ProductType,
     lower,
     upper,
     UndeterminedPCTType,
@@ -53,9 +53,27 @@ end
 Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) =
     Domain(base, lower, upper, meta)
 
-struct ProductType <: AbstractPCTType
-    base::AbstractPCTType
-    power::APN
+abstract type AbstractMapType <: AbstractPCTType end
+
+abstract type AbstractVecType <: AbstractMapType end
+
+struct ProductType <: AbstractVecType
+    typename::Symbol
+    content::Vector{AbstractPCTType}
+    names::Vector{Symbol}
+    meta::Dict
+end
+
+ProductType(typename, content, names) = ProductType(typename, content, names, Dict())
+get_names(p::ProductType) = p.names
+get_typename(p::ProductType) = p.typename
+
+function derive_constructor_type(p::ProductType)
+    return MapType(VecType(get_content_type(p)), p)
+end
+
+function make_constructor(p::ProductType)
+    Constructor(derive_constructor_type(p), get_typename(p))
 end
 
 
@@ -82,20 +100,22 @@ end
 tensorize(t::AbstractPCTType) = false
 tensorize(t::N) = true
 
-struct VecType <: AbstractPCTType
+struct VecType <: AbstractVecType
     content::Vector{AbstractPCTType}
+    meta::Dict
 end
 
-get_content_type(v::VecType) = v.content
-Base.length(v::VecType) = length(get_content_type(v))
-Base.getindex(v::VecType, i::Int) = get_content_type(v)[i]
+VecType(content) = VecType(content, Dict())
+get_content_type(v::AbstractVecType) = v.content
+get_bound_type(::AbstractVecType) = VecType([N()])
+Base.length(v::AbstractVecType) = length(get_content_type(v))
+Base.getindex(v::AbstractVecType, i::Int) = get_content_type(v)[i]
 add_content(v::VecType, t::AbstractPCTType) = VecType(push!(copy(get_content_type(v)), t))
 
 struct SplatType <: AbstractPCTType
     body::VecType
 end
 
-abstract type AbstractMapType <: AbstractPCTType end
 
 struct MapType <: AbstractMapType
     bound::VecType
@@ -115,6 +135,7 @@ type_based(a::ElementType, b::ElementType) = a == b
 # Refuse the type inference for complicated types for now.
 type_based(a::MapType, ::ElementType) = false
 type_based(a::VecType, ::ElementType) = false
+type_based(a::ProductType, ::ElementType) = false
 type_based(a::SplatType, e::ElementType) = type_based(get_body_type(a), e)
 
 symmetries(c::MapType) = get(c.meta, :symmetries, [])

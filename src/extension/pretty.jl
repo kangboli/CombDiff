@@ -1,4 +1,4 @@
-using LaTeXStrings
+using LaTeXStrings, Crayons.Box
 export pretty, indent, verbose, latex
 
 function indent(s::AbstractString)
@@ -52,7 +52,14 @@ function verbose(m::Map)
 end
 
 function pretty(v::Var)
-    replace("$(name(v))", "__dot__" => ".")
+    var_str = replace("$(name(v))", "__dot__" => ".")
+    if isa(get_type(v), MapType)
+        return CYAN_FG(var_str)
+    elseif isa(get_type(v), ProductType)
+        return MAGENTA_FG(var_str)
+    else
+        return var_str
+    end
 end
 
 function latex(v::Var)
@@ -245,7 +252,7 @@ function verbose(a::Add)
     "\n)::$(pretty(get_type(a)))"
 end
 
-function pretty(p::AbstractCall) 
+function pretty(p::AbstractCall)
     mapp_str = (isa(mapp(p), Var) || isa(mapp(p), AbstractPullback)) ? pretty(mapp(p)) : "($(pretty(mapp(p))))"
     "$(mapp_str)($(pretty(args(p), false)))"
 end
@@ -275,10 +282,18 @@ end
 
 verbose(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))::$(pretty(get_type(p)))"
 
-function pretty(p::PrimitiveCall) 
+function pretty(p::PrimitiveCall)
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
         return "grad($(pretty(get_body(mapp(p)))))($(pretty(args(p)[1:end-1], false)))"
     end
+
+    if isa(get_type(mapp(p)), ProductType)
+        @assert length(args(p)) == 1
+        @assert isa(first(args(p)), Constant)
+        prod_type = get_type(mapp(p))
+        return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
+    end
+    
     return "$(pretty(mapp(p)))($(pretty(args(p), false)))"
 end
 
@@ -330,7 +345,7 @@ function latex(m::Monomial)
     "\\left($(latex(base(m)))\\right)^{$(latex(power(m)))}"
 end
 
-function pretty(l::Let) 
+function pretty(l::Let)
     "let \n$(join(map((f, a) -> indent("$(pretty(f)) $(isa(f, Copy) ? "=" : ":=") $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
 end
 pretty(l::Mutate) = "mut \n$(join(map((f, a) -> indent("$(pretty(f)) = $(pretty(a))"), get_bound(l), args(l)), "\n"))\n$(indent(pretty(get_body(l))))\nend"
@@ -428,7 +443,7 @@ function pretty(m::MapType)
     "[$(pretty(get_bound_type(m)))->$(pretty(get_body_type(m)))]"
 end
 
-function pretty(v::VecType)
+function pretty(v::AbstractVecType)
     "$(join(pretty.(get_content_type(v)), "×"))"
 end
 
@@ -487,4 +502,20 @@ end
 
 function pretty(s::FermionicState)
     "ℋ"
+end
+
+function pretty(d::Dot)
+    return "$(pretty(get_body(d))).$(get_field(d))"
+end
+
+function pretty(p::ProductType)
+    "$(get_typename(p))($(join(["$(pretty(n))::$(pretty(t))" for (n, t) in zip(get_names(p), get_content_type(p))], " * ")))"
+end
+
+function verbose(p::ProductType)
+    pretty(p)
+end
+
+function pretty(c::Constructor)
+    return GREEN_FG("$(get_body(c))")
 end

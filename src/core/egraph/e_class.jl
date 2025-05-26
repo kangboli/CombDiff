@@ -28,11 +28,32 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
     return process_type(T)..., inferenced_type(T)
 end
 
+function get_return_type(mapp::T, arguments::PCTVector) where {T<:APN}
+    isa(get_type(mapp), MapType) && return get_body_type(get_type(mapp))
+
+    if isa(get_type(mapp), AbstractVecType) && length(arguments) == 1
+
+        first_elem_type = get_content_type(get_type(mapp))[1]
+        if isa(first(arguments), Constant)
+            return get_type(mapp)[get_body(first(arguments))]
+        elseif all(t -> first_elem_type == t, get_content_type(get_type(mapp)))
+            return first_elem_type
+        end
+    end
+
+end
+
 
 function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<:AbstractCall}
     get_type(mapp) == UndeterminedPCTType() && return T, [mapp, arguments], UndeterminedPCTType()
 
-    return_type = get_body_type(get_type(mapp))
+    # Handle the types of interpolated functions.
+    # These functions can have side effect, so 
+    # they cannot be short circuited based on its return type.
+    if isa(get_type(mapp), MultiType)
+        return T, [mapp, arguments], partial_inference(T, mapp, arguments)
+    end
+    return_type = get_return_type(mapp, arguments)
     isa(return_type, VecType) && length(return_type) == 0 && return repack(pct_vec())
 
     if mapp == nabla() && !isa(first(arguments), Var)
@@ -62,7 +83,7 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
     end
 
     #= println(get_type(mapp)) =#
-    return T, [mapp, arguments], partial_inference(T, mapp, arguments)
+    return T, [mapp, arguments], return_type
 end
 
 function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where {T<:AbstractLet}
@@ -155,15 +176,19 @@ flatten_add(a::Add) = vcat(flatten_add.(content(get_body(a)))...)
 
 is_zero_map(::APN) = false
 is_zero_map(m::Map) = is_zero(get_body(m)) || is_zero_map(get_body(m))
+function is_zero_map(m::AbstractCall)
+    isa(get_type(m), ProductType) || return false
+    return all(t -> is_zero_map(t) || is_zero(t), args(m))
+end
 
 function e_class_reduction(::Type{Add}, term::PCTVector)
     new_terms = vcat(flatten_add.(content(term))...)
 
-    if !isempty(new_terms) && isa(get_type(first(term)), MapType)
-        if count(t->isa(t, Map), new_terms) > 1
+    if !isempty(new_terms) && isa(get_type(first(term)), AbstractMapType)
+        if count(t -> isa(t, Map), new_terms) > 1
             new_terms = combine_maps(new_terms)
         end
-        new_terms = filter(t->!is_zero_map(t), new_terms)
+        new_terms = filter(t -> !is_zero_map(t), new_terms)
         isempty(new_terms) && return repack(zero_map(get_type(first(term))))
         length(new_terms) == 1 && return repack(first(new_terms))
         return Add, [pct_vec(new_terms...)], partial_inference(Add, pct_vec(new_terms...))
@@ -385,7 +410,7 @@ function e_class_reduction(::Type{Indicator}, t_upper::APN, t_lower::APN, body::
         return repack(body)
     end
 
-    if isa(t_lower, Constant) && isa(t_upper, Constant) 
+    if isa(t_lower, Constant) && isa(t_upper, Constant)
         return get_body(t_lower) <= get_body(t_upper) ? repack(body) : repack(constant(0))
     end
 
@@ -423,4 +448,15 @@ function e_class_reduction(::Type{Splat}, body::T) where {T<:APN}
     end
     isa(get_type(body), VecType) || return repack(body)
     return Splat, [body], partial_inference(Splat, body)
+end
+
+function e_class_reduction(::Type{Dot}, predot, postdot)
+    predot_type = get_type(predot)
+    if isa(predot_type, AbstractVecType)
+        i = findfirst(n -> n == postdot, get_names(predot_type))
+        return repack(call(predot, constant(i)))
+    else  # isa(predot_type, MultiType)
+        return Dot, [predot, postdot], partial_inference(Dot, predot, postdot)
+        #= error("accessing field of type $(predot_type) is not supported") =#
+    end
 end

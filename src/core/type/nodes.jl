@@ -40,7 +40,8 @@ export
     domain_indicator,
     int_div,
     mul,
-    parametric_map
+    parametric_map, 
+    pct_dot
 
 abstract type TerminalNode <: APN end
 
@@ -567,4 +568,22 @@ struct Splat <: Univariate
 end
 
 splat(t::APN) = make_node(Splat, t)
+
+struct Dot <: APN
+    type::AbstractPCTType
+    body::APN
+    field::Symbol
+end
+
+content_fields(::Type{Dot}) = [:body]
+
+get_field(d::Dot) = d.field
+
+pct_dot(body::APN, field::Symbol) = make_node(Dot, body, field)
+
+
+struct Constructor <: TerminalNode
+    type::AbstractPCTType
+    body::Symbol
+end
 
