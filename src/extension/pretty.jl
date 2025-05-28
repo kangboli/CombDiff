@@ -25,7 +25,7 @@ function verbose(d::Domain)
     "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
 
-function pretty(m::Map, typed=false)
+function pretty(m::AbstractMap, typed=false)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
     params = typed ? map(v -> "$(pretty(v))::$(pretty(get_type(v)))", content(get_bound(m))) :
              map(v -> "$(pretty(v))", content(get_bound(m)))

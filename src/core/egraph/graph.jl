@@ -61,6 +61,7 @@ default_settings() = Settings(
     :link_pullback => false,
     :deadend => Set{UInt64}(),
     :delta_ex => true,
+    :cbi => false,
    )
 function custom_settings(custom...; preset=default_settings())::Settings
     new_settings = deepcopy(preset)

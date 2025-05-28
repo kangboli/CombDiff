@@ -139,7 +139,7 @@ macro main(expr, f=:_, ctx=:(TypeContext()))
 
             func = $(return_node)
             free = CombDiff.get_body.(CombDiff.get_free(func))
-            filter!(t->!(haskey(ctx, t) && isa(ctx[t], ProductType)), free)
+            filter!(t->!(haskey(_ctx, t) && isa(_ctx[t], ProductType)), free)
 
             #= context_types = typeof.([$(free...)]) =#
             local_vars = Base.@locals()
@@ -175,7 +175,7 @@ macro mein(expr, f=:_, ctx=:(TypeContext()))
             free = get(CombDiff.free_dict, $(QuoteNode(expr)), nothing)
             if free === nothing
                 free = CombDiff.get_body.(CombDiff.get_free(func))
-                filter!(t->!(haskey(ctx, t) && isa(ctx[t], ProductType)), free)
+                filter!(t->!(haskey(_ctx, t) && isa(_ctx[t], ProductType)), free)
                 CombDiff.free_dict[$(QuoteNode(expr))] = free
             end
 

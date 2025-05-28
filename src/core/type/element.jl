@@ -84,8 +84,8 @@ terms(n::T) where {T<:APN} = map(f -> getfield(n, f), fieldnames(T)[term_start(n
 
 Set the subterms of `n`.
 """
-function set_terms(::T, new_terms...) where {T<:APN}
-    make_node(T, new_terms...)
+function set_terms(n::T, new_terms...) where {T<:APN}
+    make_node(T, new_terms...; type=get_type(n))
 end
 
 

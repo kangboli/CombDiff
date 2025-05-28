@@ -1,3 +1,5 @@
+neighbor_registry = Dict{Type,Vector}()
+
 is_deadend!(::TerminalNode, _) = true
 function is_deadend(n::APN, settings)
     return objectid(n) in settings[:deadend]
@@ -297,17 +299,23 @@ for (indices, op) in symmetries(get_type(mapp(c)))
     return result
 end =#
 
+neighbor_registry[AbstractCall] = [
+    delta_out_pullback_neighbors,
+    let_out_pullback,
+    let_out_call,
+    delta_splat_call,
+    meta_prop_neighbors,
+    bypass_eval,
+]
+
 function neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
 
-    append!(result, delta_out_pullback_neighbors(c))
-    append!(result, let_out_pullback(c))
-    append!(result, let_out_call(c))
-    append!(result, delta_splat_call(c))
-    append!(result, meta_prop_neighbors(c))
-    append!(result, bypass_eval(c))
-    append!(result, sub_neighbors(c; settings=settings))
+    for edge in neighbor_registry[AbstractCall]
+        append!(result, edge(c))
+    end
 
+    append!(result, sub_neighbors(c; settings=settings))
 
     settings[:symmetry] || return result
 
@@ -621,6 +629,34 @@ function neighbors(m::Mul; settings=default_settings())
     return result
 end
 
+function map_let_out(s::Map; settings=default_settings())
+    result = NeighborList()
+    body = get_body(s)
+    isa(get_body(s), Let) || return result
+    all(t -> isa(get_type(t), ElementType) && base(get_type(t)) == N(), content(get_bound(s))) || return result
+    interior, exterior = [], []
+    for b in get_bound(s)
+        free_let = union!(get_free(get_bound(body)), get_free(args(body)))
+        if any(t -> get_body(t) == get_body(b), free_let)
+            push!(exterior, b)
+        else
+            push!(interior, b)
+        end
+    end
+    length(interior) == length(get_bound(s)) || return result
+
+    constructor = pct_map
+    new_term = pct_let(get_bound(body)..., args(body)...,
+        constructor(interior..., get_body(body)))
+    if !isempty(exterior)
+        new_term = constructor(exterior..., new_term)
+    end
+    push!(result, new_term; dired=true, name="let_out_map")
+    return result
+end
+
+neighbor_registry[Map] = [map_let_out, sub_neighbors]
+
 function neighbors(m::Map; settings=default_settings())
 
     result = NeighborList()
@@ -628,9 +664,12 @@ function neighbors(m::Map; settings=default_settings())
         if isa(get_body(m), Contraction)
             settings = custom_settings(:skip_self_as_intermediate => true; preset=settings)
         end
-        append!(result, sub_neighbors(m; settings=settings))
 
-        append!(result, map_let_out(m))
+        for edge in neighbor_registry[Map]
+            append!(result, edge(m; settings=settings))
+        end
+        #= append!(result, sub_neighbors(m; settings=settings))
+        append!(result, map_let_out(m)) =#
     end
     settings[:full_log] && println("exploring map $(time)")
     return result
@@ -682,7 +721,7 @@ function sum_mul_neighbors(s::Sum)
     for v in content(get_bound(s))
         contains_name(get_body(s), name(v)) && continue
         if isa(get_type(v), Domain)
-            push!(factors, add(upper(get_type(v)), mul(constant(-1), lower(get_type(v)))))
+            push!(factors, add(constant(1), upper(get_type(v)), mul(constant(-1), lower(get_type(v)))))
         else
             push!(i_rem, v)
         end
@@ -993,32 +1032,6 @@ function bound_let_out(s::Sum)
     return result
 end
 
-function map_let_out(s::Map)
-    result = NeighborList()
-    body = get_body(s)
-    isa(get_body(s), Let) || return result
-    all(t -> isa(get_type(t), ElementType) && base(get_type(t)) == N(), content(get_bound(s))) || return result
-    interior, exterior = [], []
-    for b in get_bound(s)
-        free_let = union!(get_free(get_bound(body)), get_free(args(body)))
-        if any(t -> get_body(t) == get_body(b), free_let)
-            push!(exterior, b)
-        else
-            push!(interior, b)
-        end
-    end
-    length(interior) == length(get_bound(s)) || return result
-
-    constructor = pct_map
-    new_term = pct_let(get_bound(body)..., args(body)...,
-        constructor(interior..., get_body(body)))
-    if !isempty(exterior)
-        new_term = constructor(exterior..., new_term)
-    end
-    push!(result, new_term; dired=true, name="let_out_map")
-    return result
-end
-
 """
 sum((i, j), x(i) + y(j)) <-> sum((i, j), x(i)) + sum((i, j), y(j))
 """
@@ -1130,6 +1143,7 @@ function sum_absorb_indicator(s::Sum)
     end
     return result
 end
+basis_simplify(n::TerminalNode) = n
 
 function basis_simplify(n::APN)
     simplified = combine_factors(n) |> nodes
@@ -1178,6 +1192,9 @@ function extract_intermediate_neighbors(s::Sum)
     return result
 end
 
+neighbor_registry[Sum] = [
+]
+
 function neighbors(s::Sum; settings=default_settings())
 
     result = NeighborList()
@@ -1203,6 +1220,9 @@ function neighbors(s::Sum; settings=default_settings())
         append!(result, sum_mul_neighbors(s))
         append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
         append!(result, sum_eliminate_dead_bound(s))
+        for edge in neighbor_registry[Sum]
+            append!(result, edge(s))
+        end
     end
 
     settings[:full_log] && println("exploring sum $(time)")
@@ -2030,7 +2050,7 @@ function mul_expand_neighbors(c)
 end
 
 
-function neighbors(n::Union{FermiScalar,IntDiv,AbstractPullback,ParametricMap}; settings=default_settings())
+function neighbors(n::APN; settings=default_settings())
     return sub_neighbors(n; settings=settings)
 end
 

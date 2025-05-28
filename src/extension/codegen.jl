@@ -132,9 +132,9 @@ function codegen(m::Map, memory_target=nothing)
     end
 
     loop = :($(loop_lhs)[$(codegen.(offset_bounds)...)] = $(codegen(get_body(m))))
-    @inbounds for (b, s) in zip(content(get_bound(m)), sizes)
+    for (b, s) in zip(content(get_bound(m)), sizes)
         loop = :(
-            for $(codegen(b)) in $(first(s)):$(last(s))
+            @inbounds for $(codegen(b)) in $(first(s)):$(last(s))
                 $(loop)
             end
         )
