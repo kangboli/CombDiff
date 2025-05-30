@@ -25,7 +25,8 @@ macro pit(expr, ctx=interactive_context)
     statements = filter(n -> isa(n, AbstractStatement), top_level_nodes)
     typenodes = map(get_expr, filter(n -> (isa(n, DomainNode) ||
                                            isa(n, MapTypeNode) ||
-                                           isa(n, ProductTypeNode)), top_level_nodes))
+                                           isa(n, ProductTypeNode) ||
+                                           isa(n, AliasNode)), top_level_nodes))
     return_node_list = filter(n -> isa(n, Expr) || isa(n, Symbol), top_level_nodes)
 
     return_node = isempty(return_node_list) ? :(var($(QuoteNode(:_)))) : first(return_node_list)
@@ -218,6 +219,7 @@ function parse_node(n::Expr)
     if n.head == :macrocall
         n.args[1] == Symbol("@space") && return parse_maptype_node(n)
         n.args[1] == Symbol("@domain") && return parse_domain_node(n)
+        n.args[1] == Symbol("@alias") && return parse_alias_node(n)
         #= n.args[1] == Symbol("@size") && return parse_size_node(n) =#
     end
     n.head == :struct && return parse_product_type_node(n)
@@ -261,18 +263,36 @@ end
 get_expr(n::ProductTypeNode) = n.expr
 
 function parse_product_type_node(n)
-    type_name = n.args[2]
-    fields = n.args[end].args
-    fields = :([$(map(f -> parse_node(Param, f), fields)...)])
-    vectype = :(
-        let field_vars = $(fields)
-            ProductType($(QuoteNode(type_name)), get_type.(field_vars), name.(field_vars))
-        end
-    )
+    if isa(n.args[2], Symbol)
+        type_name = n.args[2]
+        fields = n.args[end].args
+        fields = :([$(map(f -> parse_node(Param, f), fields)...)])
+        vectype = :(
+            let field_vars = $(fields)
+                ProductType($(QuoteNode(type_name)), get_type.(field_vars), name.(field_vars))
+            end
+        )
 
-    return ProductTypeNode(:(push_type!(_ctx, $(QuoteNode(type_name)),
-        $(vectype); replace=true)))
+        return ProductTypeNode(:(push_type!(_ctx, $(QuoteNode(type_name)),
+            $(vectype); replace=true)))
 
+    else
+        type_name = n.args[2].args[1]
+        parameters = map(parse_node, n.args[2].args[2:end])
+        fields = n.args[end].args
+        fields = :([$(map(f -> parse_node(Param, f), fields)...)])
+        vectype = :(
+            let field_vars = $(fields)
+                ProductType($(QuoteNode(type_name)), get_type.(field_vars), name.(field_vars))
+            end
+        )
+
+        return ProductTypeNode(:(push_type!(_ctx, $(QuoteNode(type_name)),
+                                            ParametricProductType(
+                                            [$(parameters...)],
+                                            $(vectype))
+        )))
+    end
 end
 
 # The handling of division is adhoc.  There will be so many bugs because of this.
@@ -371,6 +391,28 @@ struct DomainNode
 end
 
 get_expr(n::DomainNode) = n.expr
+
+struct AliasNode
+    alias::Symbol
+    aliased_type::Expr
+end
+
+get_alias(a::AliasNode) = a.alias
+get_aliased_type(a::AliasNode) = a.aliased_type
+
+get_expr(a::AliasNode) = :(push_type!(_ctx, $(QuoteNode(get_alias(a))), $(get_aliased_type(a))))
+
+function parse_alias_node(n::Expr)
+    alias = n.args[2]
+    type_expr = n.args[3]
+    type = if type_expr.head == :curly
+        :(parametrize_type(_ctx[$(QuoteNode(type_expr.args[1]))], $(parse_node.(type_expr.args[2:end])...)))
+    else
+        :(_ctx[$(QuoteNode(type_expr))])
+    end
+
+    return AliasNode(alias, type)
+end
 
 function parse_domain_node(n::Expr)
     name = n.args[2]
@@ -663,9 +705,25 @@ function parse_block_node(n::Expr)
     parsed_body = parse_node.(n.args)
     i = findfirst(t -> isa(t, DomainNode) || isa(t, MapTypeNode), parsed_body)
     i === nothing || error("$(n.args[i]): types have to be global.")
+    alias_indices = findall(t -> isa(t, AliasNode), parsed_body)
+    rest_indices = findall(t -> !isa(t, AliasNode), parsed_body)
+    isempty(alias_indices) || length(alias_indices) == maximum(alias_indices) || error("alias nodes must be at the begining of a block")
+    alias_nodes = parsed_body[alias_indices]
+    parsed_body = parsed_body[rest_indices]
     nodes = parsed_body[1:end-1]
     return_value = parsed_body[end]
-    return statement_to_let(nodes, return_value)
+    result = statement_to_let(nodes, return_value)
+    pushes = [:(push_type!(_ctx, $(QuoteNode(get_alias(a))), $(get_aliased_type(a)))) for a in alias_nodes]
+    pops = [:(pop_type!(_ctx, $(QuoteNode(get_alias(a))))) for a in alias_nodes]
+    result = :(
+        begin
+            $(pushes...)
+            __out = $(result)
+            $(pops...)
+            __out
+        end
+    )
+
 end
 
 function statement_to_let(statements::Vector, return_value::Union{Expr,Symbol})
