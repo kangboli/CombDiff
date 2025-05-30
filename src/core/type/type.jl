@@ -25,6 +25,10 @@ The most general and abstract node that represents anything in the theory.
 abstract type AbstractPCTNode end
 const APN = AbstractPCTNode
 
+abstract type AbstractMapType <: AbstractPCTType end
+
+abstract type AbstractVecType <: AbstractMapType end
+
 abstract type ElementType <: AbstractPCTType end
 struct UndeterminedPCTType <: ElementType end
 get_body_type(::UndeterminedPCTType) = UndeterminedPCTType()
@@ -53,9 +57,6 @@ end
 Domain(base::ElementType, lower::APN, upper::APN; meta=Dict()) =
     Domain(base, lower, upper, meta)
 
-abstract type AbstractMapType <: AbstractPCTType end
-
-abstract type AbstractVecType <: AbstractMapType end
 
 struct ProductType <: AbstractVecType
     typename::Symbol

@@ -493,7 +493,7 @@ function verbose(p::ParametricMap)
 end
 
 function verbose(p::ParametricMapType)
-    "{$(join(pretty.(get_params(p))))}$(pretty(get_param_body(p)))"
+    "{$(join(pretty.(get_params(p)), ","))}$(pretty(get_param_body(p)))"
 end
 
 function verbose(t::MultiType)
@@ -518,4 +518,9 @@ end
 
 function pretty(c::Constructor)
     return GREEN_FG("$(get_body(c))")
+end
+
+function pretty(p::ParametricProductType)
+
+    "{$(join(pretty.(get_params(p)), ","))}$(pretty(get_param_body(p)))"
 end
