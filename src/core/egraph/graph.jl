@@ -210,9 +210,9 @@ end
 
 function log_edge(n, t, d, name, i)
     println(i, " ", name)
-    # println(pretty(n))
-    # println(typeof(t))
-    # println(pretty(t))
+    #= println(pretty(n))
+    println(typeof(t))
+    println(pretty(t)) =#
     d || println("<->")
     d && println("-->")
     println()

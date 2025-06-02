@@ -462,7 +462,7 @@ end
 abstract type FieldOperators <: TerminalNode end
 
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FieldOperators}, args::Vararg)
+function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FieldOperators,Fold}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 

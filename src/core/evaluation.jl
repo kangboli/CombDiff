@@ -27,7 +27,7 @@ end
 
 free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
 free_and_dummy(v::T) where {T<:Var} = union!(Set{Var}([v]), get_free(get_type(v))), Set{Var}()
-free_and_dummy(c::Constructor)  = get_free(get_type(c)), Set{Var}()
+free_and_dummy(c::Constructor) = get_free(get_type(c)), Set{Var}()
 
 get_free(d::Domain) = union(get_free(lower(d)), get_free(upper(d)))
 get_free(::AbstractPCTType) = Set{Var}()
@@ -348,11 +348,12 @@ end
 
 function call_on_sum_let(c::Call, i)
     s = args(c)[i]
+
     if isa(s, Sum)
-        new_args = [args(c)[1:i-1]..., get_body(s), args(c)[i+1:end]...]
+        new_args = [args(c)[1:i-1]..., get_body(get_body(s)), args(c)[i+1:end]...]
     elseif isa(s, Splat)
         s = get_body(s)
-        new_args = [args(c)[1:i-1]..., get_body(s)..., args(c)[i+1:end]...]
+        new_args = [args(c)[1:i-1]..., get_body(get_body(s))..., args(c)[i+1:end]...]
     else
         error("type $(typeof(s)) is not supported out of call.")
     end
@@ -408,7 +409,7 @@ function evaluate(c::Call)
         n = evaluate(get_body(mapp(c)))
         return n
     end
-    @assert isa(mapp(c), AbstractMap)
+    @assert isa(get_type(mapp(c)), AbstractMapType)
     @assert length(new_bound) == length(new_args)
     @assert length(new_bound) == length(get_bound(mapp(c)))
 

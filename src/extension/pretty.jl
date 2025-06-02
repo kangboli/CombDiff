@@ -163,7 +163,7 @@ end
 
 function verbose(s::Sum)
     "∑(($(verbose(get_bound(s)))),\n" *
-    indent("$(pretty(get_body(s)))") *
+    indent("$(verbose(get_body(s)))") *
     "\n)::$(pretty(get_type(s)))"
 end
 
@@ -477,7 +477,7 @@ pretty(s::Union{Symbol,Number}) = string(s)
 
 pretty(d::IntDiv) = "div($(pretty(get_nom(d))), $(pretty(get_denom(d))))"
 latex(d::IntDiv) = "div($(latex(get_nom(d))),$(latex(get_denom(d))))"
-pretty(f::Fold) = "∧($(pretty(get_bound(f))), $(pretty(get_body(f))))"
+pretty(f::Fold) = "∧(($(join(pretty.(get_bound(f)), ","))), $(pretty(get_body(f))))"
 verbose(f::Fold) = "∧($(verbose(get_bound(f))), $(pretty(get_body(f))))"
 
 

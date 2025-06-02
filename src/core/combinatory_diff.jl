@@ -494,7 +494,7 @@ function pp(c::PComp)::Map
 end
 
 function make_typed_delta(f_map, expr, is, ks)
-    if isa(get_type(f_map), MapType) 
+    if isa(get_type(f_map), MapType)
         deltas = foldl((ds, (e, i)) -> map(d -> delta(e, i, d), ds), zip(content(expr), is); init=ks)
         return pct_map(is..., v_unwrap(pct_vec(deltas...)))
     elseif isa(get_type(f_map), ProductType)
@@ -681,7 +681,7 @@ function pp(b::BMap)::AbstractMap
         bound_types = get_content_type(get_bound_type(get_type(p)))
 
         k = first(ks)
-        pct_map(zs..., k, pct_vec(map(i->call(k, constant(i)), 1:length(bound_types))...))
+        pct_map(zs..., k, pct_vec(map(i -> call(k, constant(i)), 1:length(bound_types))...))
     end
     function process_param(p::Union{Var,PrimitivePullback})
         if isa(maptype(b), MapType)
@@ -921,72 +921,74 @@ function pp(lc::BLetConst)
     return result
 end
 
-#= function pp(cc::CopyComp)
-    its = get_content_type(input_type(cc))
-    func_input_types = map(get_bound_type, its)
-    func_output_types = map(get_body_type, its)
-    ots = v_wrap(output_type(cc))
-    y_0_type = first(func_input_types) |> get_content_type
-    #= x_0 = pct_vec(map(var, new_symbol(; num=length(y_0_type), symbol=:_x), y_0_type)...)
-    k_0 = pct_vec(map(var, new_symbol(; num=length(ots), symbol=:_k), ots)...) =#
+struct BFold <: ABF
+    maptype::MapType
+end
 
-    x_0 = pct_vec(copy_comp_bounds(:_x, y_0_type)...)
-    k_0 = pct_vec(copy_comp_bounds(:_k, ots)...)
-    l_0 = pct_vec(map((k, x) -> call(k, x), content(k_0), content(x_0))...)
-    x_0 = v_unwrap(x_0)
-    k_0 = v_unwrap(k_0)
-    l_0 = v_unwrap(l_0)
+param(::BFold)::Nothing = nothing
 
-    fs = map(var, new_symbol(; num=length(its), symbol=:_f), its)
+function decompose(z::APN, ov::Fold)
+    inner_map = pct_map(get_bound(ov)..., get_body(ov))
+    maptype = MapType(VecType([get_type(inner_map)]), get_type(ov))
+    return push(decompose(z, inner_map), BFold(maptype))
+end
 
-    #= ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
-    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types)))) =#
+"""
+Index = N{N_iter}
 
-    #= ys = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_y), func_output_types))
-    ls = map(pct_copy, map(var, new_symbol(; num=length(its), symbol=:_l), v_unwrap.(reverse(func_input_types)))) =#
+f = (i::Index) -> (s::State) -> ...::State
+
+y = (T::N{P}) -> ⋀ ((t::N{T}) -> f(t))(y0)
+g = (i::N{P}) -> (k::State) -> 𝒫 (f(P - i + 1))(y(P - i - 1), k)
+l = (M::N{P}) -> ⋀ ((m::N{M}) -> g(m))(k(y0))
+
+j -> λ -> ∑ (y0, δ(λ, y(j - 1), l(P - j)))
+"""
+
+function pp(fd::BFold)
+    f, k = first.(zk_vars(fd))
+    index_type = first(get_bound_type(get_type(f)))
+    state_type = get_body_type(get_body_type(get_type(f)))
+    y0 = map(var, new_symbol(; num=length(v_wrap(state_type)), symbol=:_y0), v_wrap(state_type))
+    P = upper(index_type)
+
+    # construct y
+    T = var(first(new_symbol(; symbol=:_T)), index_type)
+    t = var(first(new_symbol(; symbol=:_t)), parametrize_type(N(), T))
+    y_arg = pct_map(T, call(pct_fold(t, call(f, t)), y0...))
+    y_var = var(:_y, get_type(y_arg))
+
+    # construct g
+    k_g = var(first(new_symbol(; symbol=:_k)), state_type)
+    i = var(first(new_symbol(; symbol=:_i)), index_type)
+    g = pct_map(i, pct_map(k, call(
+        primitive_pullback(call(f, add(subtract(P, i), constant(1)))),
+        call(y_var, subtract(P, i)), k_g)))
+
+    # construct l
+    M = var(first(new_symbol(; symbol=:_M)), index_type)
+    m = var(first(new_symbol(; symbol=:_m)), parametrize_type(N(), M))
+    l_arg = pct_map(M, call(pct_fold(m, call(g, m)), call(k, y0...)))
+    l_var = var(:_l, get_type(l_arg))
 
 
-    ys_no_copy = copy_comp_bounds(:_y, func_output_types)
-    ls_no_copy = copy_comp_bounds(:_l, v_unwrap.(reverse(func_input_types)))
-    ys, ls = [], []
-    for i in 1:length(ys_no_copy)
-        if isa(ys_no_copy[i], Var)
-            push!(ys, pct_copy(ys_no_copy[i]))
-        else
-            push!(ys, pct_vec(map(pct_copy, ys_no_copy[i])...))
-        end
-        if isa(ls_no_copy[i], Var)
-            push!(ls, pct_copy(ls_no_copy[i]))
-        else
-            push!(ls, pct_vec(map(pct_copy, ls_no_copy[i])...))
-        end
-    end
+    # assemble the pullback
+    j = var(:_j, index_type)
+    λ = var(:_λ, state_type)
 
-    N = length(fs)
-    ys_values = Vector{APN}(undef, N)
-    for i in 0:N-1
-        y_prev = i == 0 ? v_wrap(x_0) : get_body.(v_wrap(ys[i]))
-        ys_values[i+1] = call(fs[i+1], y_prev...)
-    end
+    inner = pct_map(j, pct_map(λ,
+        delta(λ, call(y_var, subtract(j, constant(1))),
+            call(l_var, subtract(P, j)))))
 
-    ls_values = Vector{APN}(undef, N)
-    for i in 0:N-1
-        y_feed = i == N - 1 ? v_wrap(x_0) : get_body.(v_wrap(ys[N-i-1]))
-        l_prev = i == 0 ? v_wrap(l_0) : get_body.(v_wrap(ls[i]))
-        ls_values[i+1] = call(primitive_pullback(fs[N-i]), y_feed..., l_prev...)
-    end
+    result = pct_map(f, k, pct_sum(y0...,
+        pct_let(pct_copy(y_var), pct_copy(l_var), y_arg, l_arg, inner)))
 
-    function body_elem(m::Int)
-        y_prev = m == 1 ? v_wrap(x_0) : get_body.(v_wrap(ys[m-1]))
-        l_next = m == N ? v_wrap(l_0) : get_body.(v_wrap(ls[N-m]))
-        #= λ = var(:_λ, get_type(y_prev)) =#
-        λ = copy_comp_bounds(:_λ, get_type.(y_prev))
-        b = delta(y_prev..., λ..., v_unwrap(pct_vec(l_next...)))
-        return pct_map(λ..., pct_sum(x_0, pct_let(ys..., ls[1:end-1]...,
-            ys_values..., ls_values[1:end-1]..., b)))
-    end
-    body = map(body_elem, 1:N)
-
-    result = pct_map(fs..., k_0, pct_vec(body...))
     return result
-end =#
+end
+
+function as_map(fd::BFold)
+    f = first(z_vars(fd))
+    i_types = get_bound_type(get_type(f))
+    is = map(var, new_symbol(; num=length(i_types), symbol=:_i), i_types)
+    return pct_map(f, pct_fold(is..., call(f, is...)))
+end

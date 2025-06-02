@@ -86,12 +86,20 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
     return T, [mapp, arguments], return_type
 end
 
-function e_class_reduction(::Type{T}, bound::PCTVector, args::PCTVector, body::APN) where {T<:AbstractLet}
+function e_class_reduction(::Type{T}, bound::PCTVector, new_args::PCTVector, body::APN) where {T<:AbstractLet}
     if isempty(content(bound))
         return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
     end
 
-    return T, [bound, args, body], partial_inference(T, bound, args, body)
+    if isa(body, T)
+        new_terms = [pct_vec(bound..., get_bound(body)...),
+            pct_vec(new_args..., args(body)...),
+            get_body(body)]
+        return T, new_terms, partial_inference(T, new_terms...)
+    end
+
+
+    return T, [bound, new_args, body], partial_inference(T, bound, args, body)
 end
 
 function e_class_reduction(::Type{Monomial}, base::T, power::APN) where {T<:APN}

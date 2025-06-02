@@ -106,6 +106,26 @@ function is_pullback_of_univariate(p::AbstractPullback)
     isa(get_body_type(get_type(get_body(p))), ElementType)
 end
 
+function delta_out_linear(c::AbstractCall)
+    result = NeighborList()
+    i = findfirst(t -> isa(t, Delta), content(args(c)))
+    i === nothing && return result
+    d = args(c)[i]
+    m = if length(args(c)) == 1
+        mapp(c)
+    else
+        k = var(first(new_symbol(c)), get_type(d))
+        pct_map(k, call(mapp(c), set_i(args(c), i, k)))
+    end
+
+    is_linear(m) || return result
+
+    push!(result, delta(lower(d), upper(d), ecall(m, get_body(d))); dired=true, name="delta_out_linear")
+
+    return result
+end
+
+
 function delta_out_pullback_neighbors(c::AbstractCall)
     result = NeighborList()
     isa(mapp(c), AbstractPullback) || return result
@@ -301,6 +321,7 @@ end =#
 
 neighbor_registry[AbstractCall] = [
     delta_out_pullback_neighbors,
+    delta_out_linear,
     let_out_pullback,
     let_out_call,
     delta_splat_call,
@@ -655,7 +676,25 @@ function map_let_out(s::Map; settings=default_settings())
     return result
 end
 
-neighbor_registry[Map] = [map_let_out, sub_neighbors]
+function delta_out_map(m::Map; _...)
+    result = NeighborList()
+    delta_term = get_body(m)
+    D = typeof(get_body(m))
+    D <: AbstractDelta || return result
+
+    delta_map = make_node(D, upper(delta_term), lower(delta_term),
+        pct_map(get_bound(m)..., get_body(delta_term)))
+
+    push!(result, delta_map; dired=true, name="delta_out_map")
+    return result
+
+end
+
+neighbor_registry[Map] = [
+    map_let_out,
+    sub_neighbors,
+    #= delta_out_map =#
+]
 
 function neighbors(m::Map; settings=default_settings())
 
@@ -1477,18 +1516,18 @@ function neighbors(v::Univariate; settings=default_settings())
 end
 
 """
-x = delta(l, u, p)
+x = delta(l, u, b)
 y = x
 x + y
 
 -> 
 
-x = p
+x = b
 y = delta(l, u, x)
 delta(l, u, x)  + y
 
 -> 
-x = p
+x = b
 y = x
 delta(l, u, x) + delta(l, u, y)
 """
@@ -1498,22 +1537,28 @@ function let_const_bound_delta_prop(lt::Let)
     new_args = [args(lt)...]
     body = get_body(lt)
 
-    proped = false
     for i in 1:length(bound)
         v = new_args[i]
-        isa(v, Delta) || continue
-        u, l, b = upper(v), lower(v), get_body(v)
-        any(t -> contains_name(pct_vec(u, l), name(t)), bound[1:i]) && continue
-        new_args[i] = b
-        d = delta(u, l, get_body(bound[i]))
-        for j = i+1:length(bound)
-            new_args[j] = subst(new_args[j], get_body(bound[i]), d)
+        if isa(v, Delta)
+            u, l, b = upper(v), lower(v), get_body(v)
+            new_args[i] = b
+            d = delta(u, l, get_body(bound[i]))
+        elseif isa(v, Map) && isa(get_body(v), Delta)
+            inner_d = get_body(v)
+            u, l, b = upper(inner_d), lower(inner_d), get_body(inner_d)
+            new_args[i] = pct_map(get_bound(v)..., b)
+            l_inputs = map(var, new_symbol(lt; num=length(get_type(get_bound(v)))), get_type(get_bound(v)))
+            d = pct_map(l_inputs..., delta(u, l, call(get_body(bound[i]), l_inputs...)))
+        else
+            continue
         end
-        body = subst(body, get_body(bound[i]), d)
-        proped = true
+        new_let = pct_let(bound[1:i]..., new_args[1:i]...,
+            eval_all(subst(pct_let(bound[i+1:end]..., new_args[i+1:end]..., body), get_body(bound[i]), d)))
+        push!(result, new_let; dired=true, name="delta_prop")
+        break
     end
-    proped || return result
-    push!(result, pct_let(bound..., new_args..., body); dired=true, name="delta_prop")
+    #= proped || return result
+    push!(result, pct_let(bound..., new_args..., body); dired=true, name="delta_prop") =#
     return result
 end
 
