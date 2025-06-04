@@ -353,7 +353,7 @@ function neighbors(c::AbstractCall; settings=default_settings())
     return result
 end
 
-function neighbors(::PrimitivePullback; _=default_settings())
+function neighbors(::PrimitivePullback; _...)
     return NeighborList()
 end
 
@@ -733,7 +733,7 @@ function neighbors(m::Monomial; settings=default_settings())
     b, p = base(m), power(m)
 
     isa(p, Sum) && push!(result, pct_product(get_bound(p)..., monomial(b, get_body(p))); name="sum_prod")
-    append!(result, add_mul_neighbors(m))
+    #= append!(result, add_mul_neighbors(m)) =#
     append!(result, sub_neighbors(m, settings=settings))
     return result
 end
@@ -1231,6 +1231,42 @@ function extract_intermediate_neighbors(s::Sum)
     return result
 end
 
+"""
+(i::N{M}) -> ⋀ ((j::N{i}), f(j))
+
+=> 
+
+accumulate((i::N{M}), f(i))
+"""
+function iterator_to_accumuation(n::Map)
+
+end
+
+
+"""
+(M::N{P}) ->
+    ...
+    (i::N{M}) -> ⋀ ((j::N{i}), f(j))
+
+=>
+
+(M::N{P}) -> 
+    y = (i::N{P}) -> ⋀ ((j::N{i}), f(j))
+    ...
+    (i::N{M}) -> y(i)
+
+=> 
+
+y = (i::N{P}) -> ⋀ ((j::N{i}), f(j))
+(M::N{P}) -> 
+    ...
+    (i::N{M}) -> y(i)
+"""
+function extract_iterator_intermediate(n::Map)
+
+end
+
+
 neighbor_registry[Sum] = [
 ]
 
@@ -1724,6 +1760,14 @@ end
 need_pullback(v, node::APN) = any(t -> need_pullback(v, t), terms(node))
 need_pullback(v, node::TerminalNode) = false
 function need_pullback(v, node::PrimitivePullback)
+
+    if isa(get_body(node), Map)
+        m = get_body(node)
+        body = get_body(m)
+        @assert isa(body, AbstractCall)
+        return name(mapp(body)) == name(v)
+    end
+
     name(get_body(node)) == name(v) && return true
     invoke(need_pullback, Tuple{Any,APN}, v, node)
 end
@@ -1731,6 +1775,32 @@ end
 replace_pullback(n::APN, b, pb) = set_terms(n, map(t -> replace_pullback(t, b, pb), terms(n))...)
 replace_pullback(n::TerminalNode, ::Any, ::Any) = n
 function replace_pullback(n::PrimitivePullback, b, pb)
+    """
+    𝒫 (a -> h(a, b))(a, k)
+    = 𝒫 (h)(a, b, k)(1)
+    = ((a, k) -> 𝒫 (h)(a, b, k)(1))(a, k)
+    """
+    if isa(get_body(n), Map)
+        m = get_body(n)
+        bound, body = get_bound(m), get_body(m)
+        length(bound) == 1 || error("multiple partial derivatives not yet supported")
+        @assert isa(body, AbstractCall)
+        name(mapp(body)) == name(b) || return invoke(replace_pullback, Tuple{APN,Any,Any}, n, b, pb)
+
+        println(pretty(bound))
+        println(pretty(body))
+        i = findfirst(t -> t == first(bound), content(args(body)))
+        @assert i !== nothing
+
+        a_type = get_type(first(bound))
+        k_type = get_type(body)
+        a = var(first(new_symbol(n; symbol=Symbol("_$(name(first(bound)))"))), a_type)
+        k = var(first(new_symbol(n, a; symbol=:_k)), k_type)
+
+        result = pct_map(a, k, primitive_call(primitive_call(pb, set_i(args(body), i, a)..., k), constant(i)))
+        return result
+
+    end
     name(get_body(n)) == name(b) && return pb
     invoke(replace_pullback, Tuple{APN,Any,Any}, n, b, pb)
 end
@@ -1748,19 +1818,19 @@ pullback_mvp = ...
 g = pullback_mvp(...)
 """
 
-function link_pullback(l::Let)
+function link_pullback_neighbor(l::Let)
     result = NeighborList()
     new_bound = []
     new_args = []
     new_body = get_body(l)
-    for i in length(get_bound(l))
+    for i in 1:length(get_bound(l))
         b = get_bound(l)[i]
         a = args(l)[i]
         push!(new_args, a)
         push!(new_bound, b)
         any(t -> need_pullback(b, t), [args(l)[i+1:end]..., get_body(l)]) || continue
 
-        pullback_name = first(new_symbol(get_bound(l)[i+1:end]..., args(l)[i+1:end]..., get_body(l); symbol=Symbol("pullback_$(name(b))")))
+        pullback_name = first(new_symbol(get_bound(l)[i+1:end]..., args(l)[i+1:end]..., get_body(l); symbol=Symbol("_pullback_$(name(b))")))
         pullback_a = pullback(a)
         pullback_b = var(pullback_name, get_type(pullback_a))
         push!(new_args, pullback_a)
@@ -1792,7 +1862,7 @@ function neighbors(lt::Let; settings=default_settings())
         append!(result, let_remove_alias(lt))
         append!(result, let_split_multi_return(lt))
         # append!(result,unused_let(lt))
-        settings[:link_pullback] && append!(result, link_pullback(lt))
+        settings[:link_pullback] && append!(result, link_pullback_neighbor(lt))
     end
 
     settings[:full_log] && println("exploring let $(time)")

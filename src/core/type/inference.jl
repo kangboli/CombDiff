@@ -191,7 +191,8 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
     end
 
     if isa(get_type(mapp), ParametricMapType)
-        param_type = get_type(mapp)
+        return get_return_type(mapp, last(terms))
+        #= param_type = get_type(mapp)
         values = Dict()
         concrete_type = get_type(last(terms))
         parametric_type = get_bound_type(get_param_body(param_type))
@@ -199,7 +200,7 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
             get_params(param_type), values,
             parametric_type, concrete_type)
 
-        return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type
+        return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type =#
     end
 
     args = terms[2]
@@ -399,5 +400,18 @@ end
 
 function partial_inference(::Type{Constructor}, ::Symbol)
     return UndeterminedPCTType()
+end
+
+function partial_inference(::Type{Grad}, body::APN)
+    maptype = get_type(body)
+    maptype == UndeterminedPCTType() && return UndeterminedPCTType()
+    if isa(maptype, MapType)
+        input_types = get_bound_type(maptype)
+        return MapType(input_types, input_types)
+    else isa(maptype, ParametricMap)
+        input_types = get_bound_type(get_param_body(maptype))
+
+        return ParametricMapType(get_params(maptype), MapType(input_types, input_types))
+    end
 end
 

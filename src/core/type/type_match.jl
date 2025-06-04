@@ -3,6 +3,7 @@ function type_match!(::Vector, ::Dict, ::S, ::T) where {S <: AbstractPCTType, T 
     error("trying to match different types: $(S) and $(T)")
 end
 
+
 function type_match!(parameters::Vector, values::Dict,
     parametric::VecType, concrete::VecType)
 
@@ -46,5 +47,9 @@ function type_match!(parameters::Vector, values::Dict,
 end
 
 function type_match!(_::Vector, values::Dict, ::T, ::T) where {T<:ElementType}
+    return values
+end
+
+function type_match!(::Vector, values::Dict, ::S, ::T) where {S <: ElementType, T <: ElementType}
     return values
 end

@@ -1,4 +1,4 @@
-export process_directive, dropp, eval_pullback, symmetry_reduction, fast_symmetry_reduction, clench
+export process_directive, dropp, eval_pullback, symmetry_reduction, fast_symmetry_reduction, clench, link_pullback, eval_pullback_full
 
 function vdiff(n::APN)
     set_content(n, vcat(map(t -> vdiff(t), content(n))...)...)
@@ -45,6 +45,11 @@ function eval_pullback(c::AbstractCall)
     return call(eval_pullback(mapp(c)), map(eval_pullback, content(args(c)))...)
 end
 
+function eval_pullback(g::Grad)
+    return evaluate(propagate_k(eval_pullback(pullback(get_body(g)))))
+end
+
+
 function eval_pullback(p::Pullback)
     m = isa(get_body(p), ParametricMap) ? get_body(get_body(p)) : get_body(p)
     #= output_type == R() || error("Output must be a real scalar for the gradient to be defined") =#
@@ -72,9 +77,28 @@ function eval_pullback(p::Pullback)
     return pct_map(get_bound(m)..., ks..., v_unwrap(result))
 end
 
+function eval_pullback_full(n::APN)
+    n_prev = pct_vec()
+
+    while n != n_prev
+        n_prev =  n
+        linked = link_pullback(eval_pullback(n))
+        n = deprimitize(linked)
+    end
+
+    return eval_all(n)
+end
+
 function dropp(p::Pullback)
     m = get_body(p)
     return dropp(m)
+end
+
+function propagate_k(n::AbstractMap, k=constant(1))
+    z_types..., k_type = get_bound_type(get_type(n))
+    zs = map(var, new_symbol(n; num=length(z_types)), z_types)
+    @assert isa(k_type, ElementType)
+    return pct_map(zs..., ecall(n, zs..., k))
 end
 
 function propagate_k(n::Map, k=constant(1))
@@ -84,6 +108,9 @@ function propagate_k(n::Map, k=constant(1))
     return pct_map(zs..., ecall(n, get_bound(n)[1:end-1]..., k))
 end
 
+function propagate_k(n::ParametricMap, k=constant(1))
+    parametric_map(get_bound(n)..., propagate_k(get_body(n), k))
+end
 """
 Redux will be a higher level interface to simplify to reduce the complexity.
 I haven't figured out how to go about this so it just calls simplify right now.
@@ -119,6 +146,11 @@ function simplify(n::APN; settings=default_settings(), logger=Logger())
         pct_size(n) == min_size && push!(smallest, n)
     end
     return smallest
+end
+
+function link_pullback(n::APN)
+    result = first(simplify(n; settings=custom_settings(:link_pullback=>true)))
+    return result
 end
 
 #= function simplify(n::Map; settings=default_settings(), logger=Logger())

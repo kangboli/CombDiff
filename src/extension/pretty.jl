@@ -1,15 +1,17 @@
-using LaTeXStrings, Crayons.Box
+using LaTeXStrings, Crayons.Box, Crayons
 export pretty, indent, verbose, latex
 
-function indent(s::AbstractString)
-    contains(s, "\n") || return " "^4 * s
+function indent(s::Any)
+    contains(s, "\n") || return "    $(s)" 
     join(indent.(split(s, "\n")), "\n")
 end
 
-function latex_indent(s::AbstractString)
+function latex_indent(s::Any)
     contains(s, "\\\\") || return "\\quad " * s
     join(latex_indent.(split(s, "\\\\")), "\\\\")
 end
+
+Base.contains(s::Crayons.CrayonWrapper, n::String) = any(t->contains(t, n), s.v)
 
 verbose(t::MapType) = "[$(verbose(get_bound_type(t)))->$(verbose(get_body_type(t)))]"
 
@@ -138,7 +140,7 @@ verbose(p::T) where {T<:AbstractPullback} = "$(T)($(pretty(get_body(p))))::$(pre
 
 function pretty(s::Sum)
     bound_string = join(map(pretty, content(get_bound(s))), ", ")
-    "sum(($(bound_string)), $(pretty(get_body(s))))"
+    "sum(($(bound_string)) -> $(pretty(get_body(s))))"
 end
 
 function latex(s::Sum, paren=false)
@@ -280,12 +282,12 @@ function latex(p::PrimitiveCall)
     end
 end
 
-verbose(p::PrimitiveCall) = "$(pretty(mapp(p)))($(pretty(args(p))))::$(pretty(get_type(p)))"
+verbose(p::PrimitiveCall) = "$(RED_FG(pretty(mapp(p))))$(pretty(args(p))))::$(pretty(get_type(p)))"
 
 function pretty(p::PrimitiveCall)
-    if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
+    #= if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
         return "grad($(pretty(get_body(mapp(p)))))($(pretty(args(p)[1:end-1], false)))"
-    end
+    end =#
 
     if isa(get_type(mapp(p)), ProductType)
         @assert length(args(p)) == 1
@@ -294,7 +296,7 @@ function pretty(p::PrimitiveCall)
         return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
     end
     
-    return "$(pretty(mapp(p)))($(pretty(args(p), false)))"
+    return "$(GREEN_FG(pretty(mapp(p))))($(pretty(args(p), false)))"
 end
 
 
@@ -523,4 +525,8 @@ end
 function pretty(p::ParametricProductType)
 
     "{$(join(pretty.(get_params(p)), ","))}$(pretty(get_param_body(p)))"
+end
+
+function pretty(g::Grad)
+    "grad($(pretty(get_body(g))))"
 end

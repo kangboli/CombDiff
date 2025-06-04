@@ -178,6 +178,7 @@ struct Pullback <: AbstractPullback
 end
 
 pullback(map::Map) = make_node(Pullback, map)
+pullback(map::ParametricMap) = parametric_map(get_bound(map)..., make_node(Pullback, get_body(map)))
 
 struct PrimitivePullback <: AbstractPullback
     type::AbstractPCTType
@@ -188,6 +189,13 @@ pullback(map::Union{Var,PCTVector}) = make_node(PrimitivePullback, map)
 # TODO: Figure out the right pattern for a map to be a primitive one instead of 
 # asuuming that the caller knows it.
 primitive_pullback(n::APN) = make_node(PrimitivePullback, n)
+
+struct Grad <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+grad(n::APN) = make_node(Grad, n)
 
 abstract type AbstractCall <: APN end
 
@@ -265,6 +273,10 @@ abstract type Contraction <: PermInv end
 function pct_sum(terms::Vararg)
     length(terms) == 1 && return last(terms)
     return make_node(Sum, pct_vec(terms[1:end-1]...), last(terms))
+end
+
+function pct_sum(m::Map)
+    return pct_sum(get_bound(m)..., get_body(m))
 end
 
 mutable struct Sum <: Contraction

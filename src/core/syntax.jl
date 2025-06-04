@@ -288,9 +288,9 @@ function parse_product_type_node(n)
         )
 
         return ProductTypeNode(:(push_type!(_ctx, $(QuoteNode(type_name)),
-                                            ParametricProductType(
-                                            [$(parameters...)],
-                                            $(vectype))
+            ParametricProductType(
+                [$(parameters...)],
+                $(vectype))
         )))
     end
 end
@@ -315,7 +315,8 @@ function parse_composite_node(n::Expr)
     return :(CombDiff.composite($(f1), $(f2)))
 end
 function parse_grad_node(n::Expr)
-    :(CombDiff.call(nabla(), ($(parse_node(n.args[2])))))
+    :(CombDiff.grad($(parse_node(n.args[2]))))
+    #= :(CombDiff.propagate_k(CombDiff.pullback($(parse_node(n.args[2]))))) =#
 end
 
 function parse_reverse_composite_node(n::Expr)
@@ -601,7 +602,7 @@ end
 
 function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     @assert s.args[1] in [:sum, :int, :∑, :∫]
-    length(s.args) == 3 || error("summation: multiple indices must be in a tuple, and there can be only one summand.")
+    length(s.args) > 3 && error("summation: multiple indices must be in a tuple, and there can be only one summand.")
     if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         params = s.args[2].args
     else

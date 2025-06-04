@@ -63,6 +63,9 @@ strip_copy(v::Var) = v
 strip_copy(v::Copy) = get_body(v)
 strip_copy(v::TerminalNode) = v
 strip_copy(v::APN) = set_terms(v, strip_copy.(terms(v))...)
+#= function strip_copy(v::PrimitiveCall)
+    call(strip_copy(mapp(v)), map(strip_copy, args(v))...)
+end =#
 function strip_copy(v::Call)
     set_terms(v, strip_copy.(terms(v))...)
 end
@@ -388,6 +391,7 @@ function call_on_let(c::Call, i)
 end
 
 function evaluate(c::Call)
+    has_call(c) || return c
     isa(get_type(mapp(c)), ParametricMapType) && return parametric_evaluation(c)
     isa(mapp(c), Call) && return evaluate(call(eval_all(mapp(c)), args(c)...))
     isa(mapp(c), Add) && return add(map(t -> eval_all(call(t, args(c)...)), content(get_body(mapp(c))))...)
@@ -479,7 +483,7 @@ function let_copy_to_comp(zs::APN, l::Let)
     funcs = Vector{Any}()
     for i in 1:length(bound)
         filtered = filter_states(state_vars, i)
-        push!(funcs, pct_map(state_vars..., pct_vec(args[i], filtered...)))
+        push!(funcs, pct_map(state_vars..., v_unwrap(pct_vec(args[i], filtered...))))
         state_vars = filtered
         state_vars = pct_vec(strip_copy(bound[i]), state_vars...)
         #= pushfirst!(content(state_vars), strip_copy(bound[i])) =#
@@ -497,7 +501,7 @@ function has_call(c::Call)
     has_call(mapp(c)) && return true
     any(has_call, content(args(c))) && return true
     (isa(mapp(c), PCTVector) && length(args(c)) == 1 && isa(first(args(c)), Constant)) && return true
-    isa(mapp(c), Map) && !any(t -> isa(get_type(t), SplatType), args(c)) && return true
+    (isa(mapp(c), Map) || isa(mapp(c), ParametricMap) && !any(t -> isa(get_type(t), SplatType), args(c))) && return true
     return false
 end
 

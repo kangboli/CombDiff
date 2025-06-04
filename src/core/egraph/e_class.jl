@@ -29,9 +29,9 @@ function e_class_reduction(::Type{Conjugate}, term::T) where {T<:APN}
 end
 
 function get_return_type(mapp::T, arguments::PCTVector) where {T<:APN}
-    isa(get_type(mapp), MapType) && return get_body_type(get_type(mapp))
-
-    if isa(get_type(mapp), AbstractVecType) && length(arguments) == 1
+    if isa(get_type(mapp), MapType)
+        return get_body_type(get_type(mapp))
+    elseif isa(get_type(mapp), AbstractVecType) && length(arguments) == 1
 
         first_elem_type = get_content_type(get_type(mapp))[1]
         if isa(first(arguments), Constant)
@@ -39,6 +39,19 @@ function get_return_type(mapp::T, arguments::PCTVector) where {T<:APN}
         elseif all(t -> first_elem_type == t, get_content_type(get_type(mapp)))
             return first_elem_type
         end
+    elseif isa(get_type(mapp), ParametricMapType)
+        param_type = get_type(mapp)
+        values = Dict()
+        concrete_type = get_type(arguments)
+        parametric_type = get_bound_type(get_param_body(param_type))
+        type_match!(
+            get_params(param_type), values,
+            parametric_type, concrete_type)
+
+        return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type
+    else
+        error("type $(pretty(get_type(mapp))) cannot be inferenced")
+
     end
 
 end
@@ -56,13 +69,13 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
     return_type = get_return_type(mapp, arguments)
     isa(return_type, VecType) && length(return_type) == 0 && return repack(pct_vec())
 
-    if mapp == nabla() && !isa(first(arguments), Var)
+    #= if mapp == nabla() && !isa(first(arguments), Var)
         maptype = get_type(first(arguments))
         z_types = get_content_type(get_bound_type(maptype))
         pb = pullback(first(arguments))
         zs = map(var, new_symbol(mapp, arguments; num=length(z_types), symbol=:_z), z_types)
         return repack(pct_map(zs..., call(pb, zs..., constant(1))))
-    end
+    end =#
     if any(a -> isa(a, Splat) && isa(get_body(a), PCTVector), arguments)
         new_args = Vector{APN}()
         for a in arguments

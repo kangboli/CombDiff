@@ -293,7 +293,18 @@ end
 param(b::BMon)::APN = b.param
 
 function decompose(z::APN, ov::Monomial)::PComp
-    push(decompose(z, base(ov)), BMon(power(ov), MapType(v_wrap(get_type(base(ov))), get_type(ov))))
+
+    if any(t -> t in get_free(base(ov)), z)
+        return push(decompose(z, base(ov)), BMon(power(ov), MapType(v_wrap(get_type(base(ov))), get_type(ov))))
+    elseif any(t -> t in get_free(power(ov)), z)
+        # a^b = exp(log(a^b)) = exp(b * log(a))
+        new_base = mul(power(ov), pct_log(base(ov)))
+        return push(decompose(z, new_base), BExp(
+            MapType(v_wrap(get_type(new_base)), get_type(ov))
+        ))
+    else
+        comp(z, Pconst(ov, MapType(v_wrap(get_type(z)), get_type(ov))))
+    end
 end
 
 """
@@ -466,6 +477,16 @@ function pp(c::PComp)::Map
     expr = v_wrap(ecall(as_map(x_expr), ys...))
     p_expr = pp(x_expr)
     p_f = pp(f)
+    #= println("<<<<")
+    println(pretty(as_map(f)))
+    println("----")
+    println(pretty(p_f))
+    println("----")
+    println(pretty(expr))
+    println("----")
+    println(pretty(as_map(x_expr)))
+    println(">>>>")
+    println() =#
     #= p_f = pp(f)
     chain = v_wrap(eval_all(call(p_f, expr..., ks...)))
     p_expr = pp(x_expr)
@@ -541,6 +562,16 @@ end
 # z -> f(z) => b -> z -> f(z)(b)
 # z -> f(z)(b) is then decomposed.
 function decompose(z::APN, ov::Map)::PComp
+    new_bounds = get_bound(ov)
+
+    for i in 1:length(new_bounds)
+        name(new_bounds[i]) in name.(z) || continue
+        
+        new_bounds = set_i(new_bounds, i, var(first(new_symbol(new_bounds, ov, z; symbol=Symbol("_$(name(new_bounds[i]))")))))
+    end
+    #= new_bounds = map(var, new_symbol(z, ov; num=length(get_bound(ov))), get_type(get_bound(ov))) =#
+    ov = pct_map(new_bounds..., evaluate(call(ov, new_bounds...)))
+
     bs, fb = get_bound(ov), get_body(ov)
     comp(z, Fibration(bs, decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(ov))))
 end
@@ -876,7 +907,7 @@ function pp(cc::CopyComp, dup=false)
         body_elem = (m::Int) -> begin
             y_prev = m == 1 ? x_0 : get_body(ys[m-1])
             l_next = m == N ? l_0 : get_body(ls[N-m])
-            λ = map(var, new_symbol(; num=length(get_type(y_prev)), symbol=:_λ), v_wrap(get_type(y_prev)))
+            λ = map(var, new_symbol(; num=length(v_wrap(get_type(y_prev))), symbol=:_λ), v_wrap(get_type(y_prev)))
             b = delta(y_prev, v_unwrap(pct_vec(λ...)), l_next)
             return pct_map(λ..., b)
         end

@@ -78,7 +78,7 @@ struct GetData <: AbstractMap
     body::APN
 end
 
-function call(mapp::GetData, args::Vararg)
+function call(mapp::Union{GetData, Dot}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
@@ -233,6 +233,19 @@ end
 
 function construct_from_index((l, u), i::Int)
     return i + l
+end
+
+function find_dimensions(::Var, ::T) where {T<:Dot}
+    return []
+end
+
+function contains_name(d::Dot, s::Symbol) 
+    return contains_name(get_body(d), s)
+end
+
+
+function codegen(d::Dot)
+    return :($(codegen(get_body(d))).$(get_field(d)))
 end
 
 #= function construct_from_index(domains, i::Int)

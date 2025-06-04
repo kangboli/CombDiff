@@ -135,8 +135,8 @@ function codegen(m::Map, memory_target=nothing)
     for (b, s) in zip(content(get_bound(m)), sizes)
         loop = :(
             @inbounds for $(codegen(b)) in $(first(s)):$(last(s))
-                $(loop)
-            end
+            $(loop)
+        end
         )
     end
 
@@ -180,10 +180,9 @@ function codegen(pm::ParametricMap)
             end
         )
     end
+    params = Expr(:tuple, codegen.(get_bound(m))...)
 
-    return :(($(codegen.(get_bound(m))...)) ->
-        $(body)
-    )
+    return :($params -> $(body))
 
 end
 
@@ -205,8 +204,11 @@ function codegen(c::Conjugate)
 end
 
 function codegen(c::PrimitiveCall)
-    isa(get_type(mapp(c)), MultiType) || length(get_bound_type(get_type(mapp(c)))) == length(args(c)) ||
-        error("$(pretty(mapp(c))) takes $(length(get_bound_type(get_type(mapp(c))))) inputs, but $(length(args(c))) are given.")
+    maptype = get_type(mapp(c))
+    isa(maptype, ParametricMapType) && (maptype = get_param_body(maptype))
+
+    isa(maptype, MultiType) || length(get_bound_type(maptype)) == length(args(c)) ||
+        error("$(pretty(mapp(c))) takes $(length(get_bound_type(maptype))) inputs, but $(length(args(c))) are given.")
     if all(t -> isa(get_type(t), ElementType) && (base(get_type(t)) == N() || base(get_type(t)) == I()), args(c))
         offsets = lower.(get_content_type(get_bound_type(get_type(mapp(c)))))
         new_args = map((t, o) -> first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), content(args(c)), offsets)
@@ -379,4 +381,18 @@ function codegen(n::PrimitivePullback)
 end
 
 find_pullback(n) = error("pullback $(n) not found")
+
+function codegen(c::Constructor)
+    product_type = get_body_type(get_type(c))
+    fields = get_names(product_type)
+    field_types = get_content_type(get_bound_type(get_type(c)))
+    args = Expr(:tuple,
+        [Expr(:(::), f, codegen(t)) for (f, t) in zip(fields, field_types)]...)
+    return_value = Expr(:tuple, [Expr(:(=), f, f) for f in fields]...,
+        Expr(:(=), :__type_name, QuoteNode(get_typename(product_type))),
+    )
+
+    :($args -> $return_value)
+
+end
 
