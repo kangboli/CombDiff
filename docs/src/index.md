@@ -1,27 +1,41 @@
+## What is `CombDiff` about
 
-`CombDiff` implements the *theory of combinatory differentiation*, which is not
-based on the chain-rule or the computation graph. It is based on the
-combinatory logic and a set of rules for differentiating the combinators.
+### It is a Language
 
-Most things are still under development and need more engineering, but the
-package is already viable some hard automation problems.
+- ✓  It is an experimental domain specific functional programming language.
+- ✓  It *describes and compiles* tensor algebra and second quantization.
+- × It is not a numerical library for linear/nonlinear/multi-linear algebra.
+- × It is not a coupled cluster code generator.
+- × It is not a quantum chemistry code/distribution/library/framework.
+ 
+### $O(1)$ Gradient
 
-- [Differentiate tensor calculus](@ref "Tensor Calculus"), including tensor contractions, analytically, with symmetries.
-- [Calculus of variations](@ref "Calculus of Variations") (differentiate with respect to paths).
-- [Analytic back-propagation](@ref "Analytic Backpropagation"). 
-- Complex differentiation without splitting into the real and imaginary parts.
+- ✓  It differentiates *before any evaluation*, thus avoiding the computation graph or expression swell.
+- ✓  It produces an gradient abstract syntax tree (AST) resembling hand-written gradient. Examples include tensor algebra, neural networks, ODE solve, structural/functional programming.
+- ✓  It is based on Schröfinkel's combinatory logic.
+- × It is not based on the chain rule. 
+- × It is neither algorithmic nor symbolic differentiation, which evaluate numerically or symbolically before differentiation.
+- × It is not based on high-level primitives. There is no matrix/tensor routines at all in the language.
 
-These problems benefit from `CombDiff` because they are the same problem
-through the lens of combinatory logic.  The problems distill down to
-differentiating through two constructs:
 
-- functions whose input and/or output are functions. For example, $f \mapsto (i \mapsto x \cdot f(i))$.
-- functions whose input is captured. For example, $w \mapsto (f(w) \circ
-  g(w))(x)$. This has to be differentiated *without partial evaluations*.
+### Compiler Optimization
 
-A few more things are within reach and are planned 
+- ✓ `CombDiff` has a static and dependent type system with type inference. 
+- ✓  Tensor sizes and symmetries are encoded in dependent types and propagated through type inference.
+- ✓  It  tracks contextual assumptions necessary for compiler optimization.
+- × It is not about optimizing single primitives such as finding the optimal contraction order.
+- × It is not a symbolic algebra system.
 
-- Second quantized operators with indices such as $c_i^{\dagger}$ and the Wick contraction.
-- Differentiate fixed points.
+### Target Applications
 
-This is pre-alpha stage academic software. Things will break.
+- ✓  Computational quantum Chemistry & condense matter.
+- ?  Quantum computing.
+- ?  Machine learning & data science.
+
+### Abstraction
+
+- × `CombDiff` is not meant to be high level.
+- ✓ It has a static and dependent type system. Tensor sizes are type parameters.
+- ✓ Memory usage is fully inferenced at compile time, so the memory is basically static.
+
+

@@ -3,10 +3,11 @@ using Documenter
 makedocs(sitename="CombDiff",
     pages=[
         "Introduction" => "index.md",
-        "Tensor Calculus" => "tensor.md",
+        "Tour" => "intro.md",
+        #= "Tensor Calculus" => "tensor.md",
         "Calculus of Variations" => "calculus.md",
         "Analytic Backpropagation" => "backprop.md",
-         "API (to be written)" => "api.md",
+         "API (to be written)" => "api.md", =#
         #= "Language" => "api.md" =#
     ],
     format=Documenter.HTML(; mathengine=
