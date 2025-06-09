@@ -527,6 +527,17 @@ function make_typed_delta(f_map, expr, is, ks)
         constructor_args = Vector{APN}(map(zero_map, get_content_type(p)))
         constructor_args[get_body(first(expr))] = first(ks)
         return call(make_constructor(p), constructor_args...)
+
+    elseif isa(get_type(f_map), VecType)
+        @assert length(is) == length(ks) == length(expr) == 1
+
+        index = first(expr)
+        @assert isa(index, Constant)
+
+        p = get_type(f_map)
+        vec_args = Vector{APN}(map(zero_map, get_content_type(p)))
+        vec_args[get_body(index)] = first(ks)
+        return pct_vec(constructor_args...)
     end
 end
 
@@ -566,7 +577,7 @@ function decompose(z::APN, ov::Map)::PComp
 
     for i in 1:length(new_bounds)
         name(new_bounds[i]) in name.(z) || continue
-        
+
         new_bounds = set_i(new_bounds, i, var(first(new_symbol(new_bounds, ov, z; symbol=Symbol("_$(name(new_bounds[i]))")))))
     end
     #= new_bounds = map(var, new_symbol(z, ov; num=length(get_bound(ov))), get_type(get_bound(ov))) =#
@@ -1022,4 +1033,52 @@ function as_map(fd::BFold)
     i_types = get_bound_type(get_type(f))
     is = map(var, new_symbol(; num=length(i_types), symbol=:_i), i_types)
     return pct_map(f, pct_fold(is..., call(f, is...)))
+end
+
+struct BFixed <: ABF
+    update::APN
+    maptype::MapType
+end
+
+get_update(f::BFixed) = f.update
+param(f::BFixed) = get_update(f)
+
+function as_map(f::BFixed)
+    z = first(z_vars(f))
+
+    update = get_update(f)
+    bounds = get_bound(update)
+
+    pct_map(z, fixed_point(pct_map(bounds..., pct_vec(get_body(update), call(z, bounds...)))))
+end
+
+function decompose(z::APN, f::FixedPoint)
+    m = get_body(f)
+    test_eq = pct_map(get_bound(m)..., last(get_body(m)))
+    update_eq = pct_map(get_bound(m)..., first(get_body(m)))
+    push(decompose(z, test_eq), BFixed(update_eq,
+        MapType(VecType([get_type(test_eq)]),
+            get_bound_type(get_type(test_eq)))))
+end
+
+function pp(f::BFixed)
+    gs, ks = zk_vars(f)
+
+    g = first(gs)
+    g_star = ecall(as_map(f), g)
+
+    ts = map(var, new_symbol(g, ks..., g_star; num=length(ks), symbol=:_t), get_type.(ks))
+    is = map(var, new_symbol(g, ks..., ts..., g_star; num=length(gs), symbol=:_i), get_type.(ks))
+    g_star_var = var(first(new_symbol(g, ks..., g_star, ts..., is...; symbol=:_g_opt)), get_type(g_star))
+
+    # H^(-1)(k) = ρ(t -> 𝒫 g(ρ(g), t) - k)
+    eq_test = subtract(call(pullback(g), g_star_var, ts...), v_unwrap(pct_vec(ks...)))
+    h_inv_k = fixed_point(pct_map(ts..., pct_vec(
+        call(pct_dot(
+                var(:CombDiff, MultiType(CombDiff)), :linear_solve),
+             pct_map(ts..., call(pullback(g), g_star_var, ts...)), v_unwrap(pct_vec(ks...))),
+        eq_test)))
+
+    d = delta(v_unwrap(pct_vec(is...)), g_star_var, mul(constant(-1), h_inv_k))
+    return pct_map(gs..., ks..., pct_let(pct_copy(g_star_var), g_star, pct_map(is..., d)))
 end

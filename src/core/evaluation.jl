@@ -205,6 +205,10 @@ end =#
 
 #= subst(v::Var, ::PrimitiveCall, ::AbstractCall, ::Bool)::Var = v
 subst(c::Constant, ::PrimitiveCall, ::APN, ::Bool)::Constant = c =#
+function subst_type(n::MultiType, ::S, ::R, replace_dummy=false) where {S<:APN,R<:APN}
+    return n
+end
+
 function subst_type(n::ElementType, ::S, ::R, replace_dummy=false) where {S<:APN,R<:APN}
     return n
 end
@@ -254,6 +258,10 @@ end
 
 function subst(n::T, old::T, new::APN, ::Bool) where {T<:APN}
     n == old ? new : n
+end
+
+function subst(n::Dot, old::Var, new::APN, replace_dummy::Bool)
+    return pct_dot(subst(get_body(n), old, new, replace_dummy), get_field(n))
 end
 
 function subst(n::Constructor, ::Var, ::APN, ::Bool)

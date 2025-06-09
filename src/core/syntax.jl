@@ -229,7 +229,8 @@ function parse_node(n::Expr)
         (func == :∑ || func == :sum) && return parse_contraction_node(Sum, n)
         (func == :∫ || func == :int) && return parse_contraction_node(Integral, n)
         (func == :∏ || func == :prod) && return parse_prod_node(n)
-        (func == :∧ || func == :fold) && return parse_fold_node(n)
+        (func == :∧ || func == :fold || func == :seq) && return parse_fold_node(n)
+        func == :fixed && return parse_fixed_node(n)
         (func == :delta || func == :δ) && return parse_delta_node(Delta, n)
         func == :delta_not && return parse_delta_node(DeltaNot, n)
         (func == :indicator || func == :𝕀) && return parse_indicator_node(Indicator, n)
@@ -242,9 +243,11 @@ function parse_node(n::Expr)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
         (func == :∇ || func == :grad) && return parse_grad_node(n)
+        #= (func == :𝒥 || func == :jacobian) && return parse_jacobian_node(n) =#
         func == :vac_exp && return parse_vac_exp_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
+        (func == :pushforward || func == :ℱ) && return parse_pushforward_node(n)
         return parse_node(AbstractCall, n)
     end
     n.head == :block && return parse_block_node(n)
@@ -317,6 +320,14 @@ end
 function parse_grad_node(n::Expr)
     :(CombDiff.grad($(parse_node(n.args[2]))))
     #= :(CombDiff.propagate_k(CombDiff.pullback($(parse_node(n.args[2]))))) =#
+end
+
+#= function parse_jacobian_node(n)
+    :(CombDiff.jacobian($(parse_node(n.args[2]))))
+end =#
+
+function parse_pushforward_node(n)
+    :(CombDiff.pushforward($(parse_node(n.args[2]))))
 end
 
 function parse_reverse_composite_node(n::Expr)
@@ -613,7 +624,9 @@ function parse_contraction_node(::Type{T}, s::Expr) where {T<:Contraction}
     constructor = T == Sum ? pct_sum : pct_int
     return :($(constructor)($(param_nodes...), $(parse_node(s.args[end]))))
 end
-
+function parse_fixed_node(n)
+    return :(CombDiff.fixed_point($(parse_node(n.args[2]))))
+end
 function parse_fold_node(s::Expr)
     params = if hasfield(typeof(s.args[2]), :head) && s.args[2].head == :tuple
         s.args[2].args
@@ -819,7 +832,10 @@ to_julia_type(m::MultiType) = typeof(get_func_obj(m))
 to_julia_type(d::AbstractDomain) = to_julia_type(base(d))
 
 function to_julia_type(m::MapType)
-    all(t -> base(t) == N(), get_content_type(get_bound_type(m))) || error("cannot convert $(m)")
+    if all(t -> base(t) == N(), get_content_type(get_bound_type(m))) 
+        return Function
+        #= error("cannot convert $(m)") =#
+    end
     return Array{to_julia_type(get_body_type(m)),length(get_bound_type(m))}
 end
 

@@ -408,10 +408,48 @@ function partial_inference(::Type{Grad}, body::APN)
     if isa(maptype, MapType)
         input_types = get_bound_type(maptype)
         return MapType(input_types, input_types)
-    else isa(maptype, ParametricMap)
+    else
+        isa(maptype, ParametricMap)
         input_types = get_bound_type(get_param_body(maptype))
 
         return ParametricMapType(get_params(maptype), MapType(input_types, input_types))
     end
 end
 
+function partial_inference(::Type{FixedPoint}, body::APN)
+    return v_unwrap(get_bound_type(get_type(body)))
+end
+
+#= function partial_inference(::Type{Jacobian}, body::APN)
+    maptype = get_type(body)
+    maptype == UndeterminedPCTType() && return UndeterminedPCTType()
+    if isa(maptype, MapType)
+        input_type = first(get_bound_type(maptype))
+        in_bound = get_content_type(get_bound_type(input_type))
+        return MapType(VecType([input_type]), MapType(VecType(repeat(in_bound, 2)), get_body_type(input_type)))
+    else
+        isa(maptype, ParametricMap)
+        input_type = first(get_bound_type(get_param_body(maptype)))
+        in_bound = get_content_type(get_bound_type(input_type))
+
+        return ParametricMapType(get_params(maptype),
+            MapType(VecType([input_type]), MapType(VecType(repeat(in_bound, 2)), get_body_type(input_type))))
+        return
+    end
+end =#
+
+function partial_inference(::Type{T}, mapp) where {T<:AbstractPushforward}
+    if isa(get_type(mapp), MapType)
+        bound_type = get_bound_type(get_type(mapp))
+        body_type = get_body_type(get_type(mapp))
+        return MapType(VecType([bound_type..., bound_type...]), body_type)
+    elseif isa(get_type(mapp), ParametricMapType)
+        bound_type = get_bound_type(get_param_body(get_type(mapp)))
+        body_type = get_body_type(get_param_body(get_type(mapp)))
+        return ParametricMapType(
+            get_params(get_type(mapp)),
+            MapType(VecType([bound_type..., bound_type...]), body_type))
+    else
+        error("$(pretty(get_type(mapp))) is not supported")
+    end
+end

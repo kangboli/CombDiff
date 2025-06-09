@@ -49,6 +49,43 @@ function eval_pullback(g::Grad)
     return evaluate(propagate_k(eval_pullback(pullback(get_body(g)))))
 end
 
+#= """
+𝒥f(x) = (i, j) -> 𝒫(f)(x, t -> δ(i, t, 1))(j)
+"""
+function eval_pullback(g::Jacobian)
+
+    m = get_body(g)
+    bound = first(get_bound(m))
+    bound_types = get_bound_type(get_type(bound))
+    i_vars = map(var, new_symbol(g; num=length(bound_types), symbol=:_i), get_content_type(bound_types))
+    j_vars = map(var, new_symbol(g, i_vars...; num=length(bound_types), symbol=:_j), get_content_type(bound_types))
+    t_vars = map(var, new_symbol(g, i_vars..., j_vars...; num=length(bound_types), symbol=:_t), get_content_type(bound_types))
+
+    return pct_map(bound, pct_map(i_vars..., j_vars...,
+        ecall(ecall(pullback(get_body(g)), bound,
+                pct_map(t_vars..., delta(
+                    i_vars..., t_vars..., constant(1)))
+            ), j_vars...)))
+end =#
+
+"""
+ℱ (g) = (x, h) -> 𝒫 (k -> 𝒫 g(x, k))(x, h)
+"""
+function eval_pullback(p::Pushforward)
+    g = get_body(p)
+    xs, ts = get_bound(g), v_wrap(get_body(g))
+
+    hs = map(var, new_symbol(p; num=length(xs), symbol=:_h), get_type.(xs))
+    ks = map(var, new_symbol(p; num=length(ts), symbol=:_k), get_type.(ts))
+
+    return pct_map(xs..., hs...,
+        ecall(eval_pullback(pullback(
+                pct_map(ks..., ecall(eval_pullback(pullback(g)), xs..., ks...))
+            )), xs..., hs...)
+    )
+
+end
+
 
 function eval_pullback(p::Pullback)
     m = isa(get_body(p), ParametricMap) ? get_body(get_body(p)) : get_body(p)
@@ -59,7 +96,7 @@ function eval_pullback(p::Pullback)
 
     function univariate_map(f)
         result = decompose(pct_map(f, get_body(m)))
-        return result 
+        return result
     end
 
     output_type = get_body_type(get_type(m))
@@ -81,7 +118,7 @@ function eval_pullback_full(n::APN)
     n_prev = pct_vec()
 
     while n != n_prev
-        n_prev =  n
+        n_prev = n
         linked = link_pullback(eval_pullback(n))
         n = deprimitize(linked)
     end
@@ -149,7 +186,7 @@ function simplify(n::APN; settings=default_settings(), logger=Logger())
 end
 
 function link_pullback(n::APN)
-    result = first(simplify(n; settings=custom_settings(:link_pullback=>true)))
+    result = first(simplify(n; settings=custom_settings(:link_pullback => true)))
     return result
 end
 

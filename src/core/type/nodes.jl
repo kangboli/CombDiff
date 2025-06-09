@@ -170,6 +170,26 @@ function parametric_map(terms::Vararg{APN})
     return result
 end
 
+abstract type AbstractPushforward <: AbstractMap end
+
+struct Pushforward <: AbstractPushforward
+    type::AbstractPCTType
+    body::AbstractMap
+end
+
+pushforward(map::Map) = make_node(Pushforward, map)
+pushforward(map::ParametricMap) = parametric_map(get_bound(map)..., make_node(Pushforward, get_body(map)))
+
+struct PrimitivePushforward <: AbstractPushforward
+    type::AbstractPCTType
+    body::APN
+end
+
+pushforward(map::Union{Var,PCTVector}) = make_node(PrimitivePushforward, map)
+# TODO: Figure out the right pattern for a map to be a primitive one instead of 
+# asuuming that the caller knows it.
+primitive_pushforward(n::APN) = make_node(PrimitivePushforward, n)
+
 abstract type AbstractPullback <: AbstractMap end
 
 struct Pullback <: AbstractPullback
@@ -196,6 +216,13 @@ struct Grad <: APN
 end
 
 grad(n::APN) = make_node(Grad, n)
+
+#= struct Jacobian <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+jacobian(n::APN) = make_node(Jacobian, n) =#
 
 abstract type AbstractCall <: APN end
 
@@ -581,7 +608,7 @@ end
 
 splat(t::APN) = make_node(Splat, t)
 
-struct Dot <: APN
+struct Dot <: TerminalNode
     type::AbstractPCTType
     body::APN
     field::Symbol
@@ -597,5 +624,15 @@ pct_dot(body::APN, field::Symbol) = make_node(Dot, body, field)
 struct Constructor <: TerminalNode
     type::AbstractPCTType
     body::Symbol
+end
+
+
+struct FixedPoint <: APN
+    type::AbstractPCTType
+    body::APN
+end
+
+function fixed_point(body)
+    return make_node(FixedPoint, body)
 end
 

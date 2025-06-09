@@ -530,3 +530,15 @@ end
 function pretty(g::Grad)
     "grad($(pretty(get_body(g))))"
 end
+
+function pretty(f::FixedPoint)
+    "fixed($(pretty(get_body(f))))"
+end
+
+#= function pretty(f::Jacobian)
+    "jacobian($(pretty(get_body(f))))"
+end =#
+
+function pretty(p::Pushforward)
+    "pushforward($(pretty(get_body(p))))"
+end

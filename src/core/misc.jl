@@ -1,4 +1,5 @@
 export group, ranged_tensor, RangedTensor, get_data
+using KrylovKit
 
 function group(f::Function, vec::AbstractVector{T}) where T
     d = Dict{Bool, Vector{T}}()
@@ -45,3 +46,10 @@ function Base.:+(t_1::RangedTensor, t_2::RangedTensor)
     @assert t_1.ranges == t_2.ranges
     return RangedTensor(t_1.data + t_2.data, t_1.ranges)
 end
+
+function linear_solve(f::Any, b::Any)::Vector
+    return linsolve(f, b)  # KrylovKit accepts abstract matrix vector product.
+end
+
+
+

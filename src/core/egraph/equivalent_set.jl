@@ -1764,7 +1764,7 @@ function need_pullback(v, node::PrimitivePullback)
     if isa(get_body(node), Map)
         m = get_body(node)
         body = get_body(m)
-        @assert isa(body, AbstractCall)
+        isa(body, AbstractCall) || return false
         return name(mapp(body)) == name(v)
     end
 
