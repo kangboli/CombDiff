@@ -101,7 +101,7 @@ end
 
 function e_class_reduction(::Type{T}, bound::PCTVector, new_args::PCTVector, body::APN) where {T<:AbstractLet}
     if isempty(content(bound))
-        return typeof(body), terms(body), partial_inference(typeof(body), terms(body)...)
+        return repack(body)
     end
 
     if isa(body, T)

@@ -27,5 +27,6 @@ include("extension/blaserize.jl")
 include("extension/pretty.jl")
 include("extension/codegen.jl")
 include("extension/call_by_indexing.jl")
+include("extension/memory.jl")
 
 end

@@ -58,6 +58,9 @@ function parametrize_type(mt::MapType, type_args...)
     return MapType(VecType(new_bounds), get_body_type(mt), meta(mt))
 end
 
+const AbstractParametricType = Union{ParametricDomain, ParametricMapType, ParametricProductType}
+
+meta(pd::AbstractParametricType) = meta(get_param_body(pd))
 
 #= function parametrize_type(::N, args...) 
     length(args) == 1 && return Domain(N(), constant(1), first(args))

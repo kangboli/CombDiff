@@ -210,7 +210,7 @@ function verbose(d::T) where {T<:AbstractDelta}
     indent("$(pretty(last(content(d)))))::$(pretty(get_type(d)))")
 end
 
-pretty(m::Mul) = "$(join(pretty.(sort(content(get_body(m)),by=is_negative,rev=true)), " * "))"
+pretty(m::Mul) = "$(join(pretty.(sort(content(get_body(m)),by=is_negative,rev=true)), "*"))"
 
 function latex(m::Mul)
     negative_first = sort(content(get_body(m)), by=is_negative, rev=true)

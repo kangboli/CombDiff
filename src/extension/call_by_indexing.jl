@@ -27,7 +27,7 @@ end
 
 function pretty(m::CBI)
     params = map(v -> "$(pretty(v))", content(get_bound(m)))
-    CYAN_FG("($(join(params, ", "))) -> $(pretty(get_body(m)))")
+    Crayon(italics=true)("($(join(params, ", "))) -> $(pretty(get_body(m)))")
 end
 
 struct Indexing <: APN
@@ -97,6 +97,8 @@ pretty(g::GetData) = "get_data($(pretty(get_body(g))))"
 
 partial_inference(::Type{T}, body...) where {T<:Union{CBI,Indexing,Serialize}} = UndeterminedPCTType()
 
+
+cbi_applicable(t::AbstractPCTType) = false
 
 function cbi_applicable(t::MapType)
     isempty(get_bound_type(t)) && return false

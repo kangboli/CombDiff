@@ -174,7 +174,7 @@ function partial_inference(::Type{Map}, terms...)::AbstractPCTType
     return MapType(get_type(bound), get_type(content))
 end
 
-function partial_inference(::Type{T}, ::PCTVector, ::Symbol)::AbstractPCTType where {T<:Var}
+function partial_inference(::Type{T}, ::Any, ::Symbol)::AbstractPCTType where {T<:Var}
     UndeterminedPCTType()
 end
 

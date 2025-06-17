@@ -1,3 +1,4 @@
+using Accessors
 export
     APN,
     Let,
@@ -109,14 +110,14 @@ terms(v::PCTVector) = content(v)
 
 mutable struct Var{T<:AbstractPCTType} <: TerminalNode
     type::T
-    range::PCTVector
+    memory::Any
     body::Symbol
 end
 
 name(v::Var) = v.body
-range(v::Var) = v.range
-var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, pct_vec(), s; type=type)
-var(range::PCTVector, s::Symbol, type=UndeterminedPCTType()) = make_node(Var, range, s; type=type)
+get_memory(v::Var) = v.memory
+set_memory(v::Var, new_memory) = @set v.memory = new_memory
+var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, :_, s; type=type)
 infty() = var(:∞, R())
 # nabla maps one input to one output. 
 # for now we only need to know of the number of input/output, but 
@@ -160,7 +161,7 @@ end
 struct ParametricMap <: AbstractMap
     type::AbstractPCTType
     bound::PCTVector
-    body::AbstractMap
+    body::APN
 end
 
 function parametric_map(terms::Vararg{APN})
@@ -515,6 +516,9 @@ function pct_copy(body::Var)
 end
 
 name(c::Copy) = name(get_body(c))
+
+set_memory(c::Copy, new_mem) = pct_copy(set_memory(get_body(c), new_mem))
+get_memory(c::Copy) = get_memory(get_body(c))
 
 """
 The indicator function is inclusive (the test is lower <= upper)
