@@ -1,5 +1,21 @@
 using Accessors
-export alloc_memory!, get_memory
+export alloc_memory!, get_memory, MemoryManager
+
+mutable struct MemoryManager
+    curr_id::UInt
+    ownerships::Dict{UInt,Stack{Bool}}
+end
+
+MemoryManager() = MemoryManager(0, Dict{UInt,Stack{Bool}}())
+
+function next_id!(m::MemoryManager)
+    m.curr_id = get_curr_id(m) + 1
+    m.ownerships[get_curr_id(m)] = Stack{Bool}()
+    push!(m.ownerships[get_curr_id(m)], true)
+    return m.curr_id
+end
+
+get_curr_id(m::MemoryManager) = m.curr_id
 
 abstract type AbstractMemory end
 
@@ -74,8 +90,10 @@ struct MapMemory <: MemoryIntermediate
     _proto::WorkMemory
 end
 
-function instantiate(m::MapMemory, _id::UInt)
-    return offset_id(m._proto, _id)
+function instantiate(m::MapMemory, mm::MemoryManager)
+    result = offset_id(m._proto, get_curr_id(mm))
+    mm.curr_id += max_id(m._proto)
+    return result
 end
 
 function get_proto(m::MapMemory)
@@ -88,18 +106,25 @@ struct ParametricMapMemory <: MemoryIntermediate
     map_mem::MapMemory
 end
 
-function instantiate(pm::ParametricMapMemory, _id::UInt, args...)
+
+function instantiate(pm::ParametricMapMemory, mm::MemoryManager, args...)
     values = Dict()
     type_vars = get_bound(pm.parametric_map)
     m = get_body(pm.parametric_map)
     type_match!([type_vars...], values, get_bound_type(get_type(m)), VecType(get_type.([args...])))
 
-    offseted = instantiate(pm.map_mem, _id)
+    offseted = instantiate(pm.map_mem, mm)
     for t in type_vars
         offseted = mem_subst(offseted, t, values[t])
     end
     return offseted
 end
+
+struct MemPlaceHolder <: AbstractMemory
+    order::UInt
+end
+
+order(m::MemPlaceHolder) = m.order
 
 function mem_subst(m::MemorySeg, old, new)
     return @set m._size = subst(m._size, old, new)
@@ -127,9 +152,15 @@ end
 
 max_id(m::Union{MemorySeg,MemPlaceHolder,MemoryStack}) = get_id(m)
 max_id(m::Union{MemoryBlock,WorkMemory}) = max(get_id(m), max_id.(get_sub_units(m))...)
-max_id(m::MapMemory) = max_id(m._proto)
-max_id(m::ParametricMapMemory) = max_id(m.map_mem)
+max_id(m::MapMemory) = 0
+max_id(m::ParametricMapMemory) = 0
+#= max_id(m::MapMemory) = max_id(m._proto)
+max_id(m::ParametricMapMemory) = max_id(m.map_mem) =#
 
+all_id(m::Union{MemorySeg,MemPlaceHolder,MemoryStack}) = [get_id(m)]
+all_id(m::Union{MemoryBlock,WorkMemory}) = vcat([get_id(m)], all_id.(get_sub_units(m))...)
+all_id(::MapMemory) = []
+all_id(::ParametricMapMemory) = []
 
 struct WithMemory <: APN
     type::AbstractPCTType
@@ -152,51 +183,57 @@ function partial_inference(::Type{WithMemory}, memory, body)
     return get_type(body)
 end
 
-function alloc_memory!(n::CBI, _id::UInt)
+
+#= function push_ownership!(m::MemoryManager, l::APN)
+    free = get_free(l)
+    get_memory.(free)
+end =#
+
+function alloc_memory!(n::CBI, m::MemoryManager)
     n_type = get_type(n)
-    mem = MemorySeg(_id, type_size(n_type))
-    return with_memory(mem, n), _id + 1
+    mem = MemorySeg(next_id!(m), type_size(n_type))
+    return with_memory(mem, n)
 end
 
-function alloc_memory!(n::APN, _id::UInt)
+function alloc_memory!(n::APN, m::MemoryManager)
     new_terms = []
     for t in terms(n)
-        new_t, _id = alloc_memory!(t, _id)
+        new_t = alloc_memory!(t, m)
         push!(new_terms, new_t)
     end
 
-    buf = MemoryBlock(_id + 1, get_memory.(new_terms))
-    value_mem = MemorySeg(_id + 2, type_size(get_type(n)))
-    return with_memory(WorkMemory(_id + 3, buf, value_mem), set_terms(n, new_terms...)), _id + 4
+    buf = MemoryBlock(next_id!(m), get_memory.(new_terms))
+    value_mem = MemorySeg(next_id!(m), type_size(get_type(n)))
+    return with_memory(WorkMemory(next_id!(m), buf, value_mem), set_terms(n, new_terms...))
 end
 
-function alloc_memory!(n::TerminalNode, _id::UInt)
+function alloc_memory!(n::TerminalNode, ::MemoryManager)
     mem = get_memory(n)
     mem = mem == :_ ? MemoryStack(0) : mem
-    return with_memory(mem, n), _id
+    return with_memory(mem, n)
 end
 
-function alloc_memory!(lt::Let, _id::UInt)
+function alloc_memory!(lt::Let, m::MemoryManager)
     b, b_rest... = get_bound(lt)
     a, a_rest... = args(lt)
 
-    a_new, _id = alloc_memory!(a, _id)
+    a_new = alloc_memory!(a, m)
     b_new = set_memory(b, get_memory(a_new))
 
     let_rest = subst(pct_let(b_rest..., a_rest..., get_body(lt)), get_body(b), get_body(b_new))
-    let_rest, _id = alloc_memory!(let_rest, _id)
+    let_rest = alloc_memory!(let_rest, m)
 
     work_mem = get_memory(let_rest)
 
     if !isa(get_body(let_rest), Let)
-        buf_mem = MemoryBlock(_id + 1)
+        buf_mem = MemoryBlock(next_id!(m))
         #= hasfield(typeof(get_memory(let_rest)), :_id) && println(get_id(get_memory(let_rest))) =#
         if !(isa(get_memory(a_new), MapMemory) || isa(get_memory(a_new), ParametricMapMemory))
             buf_mem = pushfirst_unit(buf_mem, get_memory(a_new))
         end
 
-        mem = WorkMemory(_id + 2, buf_mem, work_mem)
-        return with_memory(mem, pct_let(b_new, a_new, let_rest)), _id + 3
+        mem = WorkMemory(next_id!(m), buf_mem, work_mem)
+        return with_memory(mem, pct_let(b_new, a_new, let_rest))
     else
         buf_mem = get_buf_mem(work_mem)
         if !(isa(get_memory(a_new), MapMemory) || isa(get_memory(a_new), ParametricMapMemory))
@@ -206,56 +243,51 @@ function alloc_memory!(lt::Let, _id::UInt)
             buf_mem,
             get_value_mem(work_mem))
 
-        return with_memory(mem, pct_let(b_new, a_new, get_body(let_rest))), _id + 1
+        return with_memory(mem, pct_let(b_new, a_new, get_body(let_rest)))
     end
 
 end
 
-function alloc_memory!(m::Map, _id::UInt)
-    body, _id_map = alloc_memory!(get_body(m), UInt(1))
+function alloc_memory!(m::Map, ::MemoryManager)
+    mm = MemoryManager()
+    body = alloc_memory!(get_body(m), mm)
     mem = if isa(get_memory(body), WorkMemory)
         MapMemory(get_memory(body))
     else
-        MapMemory(WorkMemory(_id_map + 1, MemoryBlock(_id_map + 1, Vector{MemoryUnit}()), get_memory(body)))
+        MapMemory(WorkMemory(next_id!(mm), MemoryBlock(next_id!(mm), Vector{MemoryUnit}()), get_memory(body)))
     end
-    return with_memory(mem, pct_map(get_bound(m)..., body)), _id
+    return with_memory(mem, pct_map(get_bound(m)..., body))
 end
 
-function alloc_memory!(m::ParametricMap, _id::UInt)
-    new_body, _ = alloc_memory!(get_body(m), _id)
+function alloc_memory!(m::ParametricMap, mm::MemoryManager)
+    new_body = alloc_memory!(get_body(m), mm)
     new_map = parametric_map(get_bound(m)..., new_body)
     mem = ParametricMapMemory(new_map, get_memory(new_body))
-    return with_memory(mem, new_map), _id
+    return with_memory(mem, new_map)
 end
 
-function alloc_memory!(c::PrimitiveCall, _id::UInt)
+function alloc_memory!(c::PrimitiveCall, mm::MemoryManager)
     m, ags = mapp(c), args(c)
 
-    m, _id = alloc_memory!(m, _id)
+    m = alloc_memory!(m, mm)
     new_args = []
     for a in ags
-        a_new, _id = alloc_memory!(a, _id)
+        a_new = alloc_memory!(a, mm)
         push!(new_args, a_new)
     end
 
     isa(get_memory(m), MapMemory) || isa(get_memory(m), ParametricMapMemory) ||
         error("allocating memory for $(pretty(m)) is not supported")
 
-    exe_mem = instantiate(get_memory(m), _id, new_args...)
-    _id = max_id(exe_mem) + 1
+    exe_mem = instantiate(get_memory(m), mm, new_args...)
 
-    buf = MemoryBlock(_id + 1, get_memory.(new_args))
+    buf = MemoryBlock(next_id!(mm), get_memory.(new_args))
 
-    mem = WorkMemory(_id + 2, buf, exe_mem)
+    mem = WorkMemory(next_id!(mm), buf, exe_mem)
 
-    return with_memory(mem, call(m, new_args...)), _id + 3
+    return with_memory(mem, call(m, new_args...))
 end
 
-struct MemPlaceHolder <: AbstractMemory
-    order::UInt
-end
-
-order(m::MemPlaceHolder) = m.order
 
 order(m::MemorySeg) = length(string(get_id(m))) #+ 1 + length(string(pretty(m._size))) 
 order(m::MemoryStack) = 0
@@ -295,15 +327,15 @@ function mem_summary(m::AbstractMemory)
     segs = collect_segs(m)
     sort!(segs, by=get_id)
     unique!(get_id, segs)
-    return join(map(s -> Crayon(underline=true, background=(150, 230, 130), foreground=(30, 90, 10))("$(get_id(s)):$(pretty(get_size(s)))"), segs), " ")
+    return join(map(s -> Crayon(underline=true, background=(190, 230, 180), foreground=(30, 10, 40))("$(get_id(s)):$(pretty(get_size(s)))"), segs), " ")
 end
 
 
 function pretty(m::AbstractMemory)
     bg = Dict(
         MemorySeg => Crayon(background=(60, 120, 60), underline=true),
-        MemoryBlock => Crayon(background=(80, 30, 80), underline=true),
-        WorkMemory => Crayon(background=(20, 100, 120), underline=true),
+        MemoryBlock => Crayon(background=(30, 30, 120), underline=true),
+        WorkMemory => Crayon(background=(120, 40, 80), underline=true),
     )
 
     function single_memory_str(m::T) where {T<:AbstractMemory}
@@ -329,22 +361,21 @@ function pretty(m::AbstractMemory)
     block_string = ""
     while !isempty(mem_list) && !all(t -> isa(last(t), MemPlaceHolder), mem_list)
         block_string = block_string == "" ? block_string : block_string * "\n"
-        block_string *= join(map(((color, t),) -> color(single_memory_str(t)), mem_list),
-            " ")
+        block_string *= join(map(((color, t),) -> color(single_memory_str(t)), mem_list), " ")
         new_mem_list = []
 
         for n in mem_list
             n = last(n)
             if isa(n, WorkMemory)
-                buf_units = filter(u -> order(u) > 0, get_sub_units(get_buf_mem(n)))
-                append!(new_mem_list, [Crayon(foreground=(210, 10, 10)) => t for t in buf_units])
-                #= append!(new_mem_list, [Crayon(bold=true) => get_buf_mem(n)]) =#
-                append!(new_mem_list, [Crayon(foreground=(10, 220, 10)) => get_value_mem(n)])
+                #= buf_units = filter(u -> order(u) > 0, get_sub_units(get_buf_mem(n)))
+                append!(new_mem_list, [Crayon(foreground=(210, 10, 10)) => t for t in buf_units]) =#
+                append!(new_mem_list, [Crayon(foreground=(210, 80, 80)) => get_buf_mem(n)])
+                append!(new_mem_list, [Crayon(foreground=(80, 230, 80)) => get_value_mem(n)])
             elseif isa(n, MemoryBlock)
                 sub_units = filter(u -> order(u) > 0, get_sub_units(n))
-                append!(new_mem_list, [(x->x) => t for t in sub_units])
+                append!(new_mem_list, [(x -> x) => t for t in sub_units])
             elseif isa(n, MemorySeg) || isa(n, MemPlaceHolder)
-                append!(new_mem_list, [(x->x) => MemPlaceHolder(order(n))])
+                append!(new_mem_list, [(x -> x) => MemPlaceHolder(order(n))])
             end
         end
         mem_list = filter(u -> order(last(u)) > 0, new_mem_list)
