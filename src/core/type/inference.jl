@@ -218,7 +218,7 @@ function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
 end
 
 
-function partial_inference(::Type{T}, term::PCTVector)::AbstractPCTType where {T<:Union{Add,Mul}}
+function partial_inference(::Type{T}, term)::AbstractPCTType where {T<:Union{Add,Mul}}
     @assert length(term) > 0
     return escalate(map(get_type, content(term))...)
 end

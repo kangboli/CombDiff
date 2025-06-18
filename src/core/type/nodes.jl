@@ -1,4 +1,4 @@
-using Accessors
+
 export
     APN,
     Let,
@@ -115,8 +115,6 @@ mutable struct Var{T<:AbstractPCTType} <: TerminalNode
 end
 
 name(v::Var) = v.body
-get_memory(v::Var) = v.memory
-set_memory(v::Var, new_memory) = @set v.memory = new_memory
 var(s::Symbol, type=UndeterminedPCTType()) = make_node(Var, :_, s; type=type)
 infty() = var(:∞, R())
 # nabla maps one input to one output. 
