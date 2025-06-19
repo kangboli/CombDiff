@@ -104,12 +104,12 @@ function e_class_reduction(::Type{T}, bound::PCTVector, new_args::PCTVector, bod
         return repack(body)
     end
 
-    if isa(body, T)
+    #= if isa(body, T)
         new_terms = [pct_vec(bound..., get_bound(body)...),
             pct_vec(new_args..., args(body)...),
             get_body(body)]
         return T, new_terms, partial_inference(T, new_terms...)
-    end
+    end =#
 
 
     return T, [bound, new_args, body], partial_inference(T, bound, args, body)

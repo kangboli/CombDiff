@@ -8,9 +8,10 @@ mutable struct MemoryManager
     depth::UInt
     ownerships::Dict{UInt,Stack{Bool}}
     memories::Dict{UInt,AbstractMemory}
+    hints::Stack{Symbol}
 end
 
-MemoryManager() = MemoryManager(0, 1, Dict{UInt,Stack{Bool}}(), Dict{UInt,AbstractMemory}())
+MemoryManager() = MemoryManager(0, 1, Dict{UInt,Stack{Bool}}(), Dict{UInt,AbstractMemory}(), Stack{Symbol}())
 
 function register!(mm::MemoryManager, m::AbstractMemory)
     mm.memories[get_id(m)] = m
@@ -248,6 +249,28 @@ function pop_ownership!(m::MemoryManager)
     m.depth = m.depth - 1
 end
 
+push_hint!(mm::MemoryManager, h::Symbol) = push!(mm.hints, h)
+pop_hint!(mm::MemoryManager) = pop!(mm.hints)
+get_hint(mm::MemoryManager) = isempty(mm.hints) ? nothing : top(mm.hints)
+
+
+function get_hint_memory(n::CBI, mm::MemoryManager)
+    h = get_hint(mm)
+    h === nothing && return nothing
+    n_type = get_type(n)
+
+    free = [get_free(n)...]
+    i = findfirst(t -> name(t) == h, free)
+
+    i === nothing && return nothing
+    b = free[i]
+
+    id = get_id(get_memory(b))
+
+    (mm.ownerships[id] && get_size(get_memory(b)) == type_size(n_type)) || return nothing
+    get_memory(b)
+end
+
 function alloc_memory!(n::CBI, mm::MemoryManager)
     n_type = get_type(n)
     lock_ownership!(mm)
@@ -256,9 +279,14 @@ function alloc_memory!(n::CBI, mm::MemoryManager)
 
     body_mem = get_memory(new_body)
 
-    push_ownership!(mm, n)
-    mem = allocate_segment!(mm, type_size(n_type))
-    pop_ownership!(mm)
+    #= mem = get_hint_memory(n, mm) =#
+    mem = nothing
+
+    if mem === nothing
+        push_ownership!(mm, n)
+        mem = allocate_segment!(mm, type_size(n_type))
+        pop_ownership!(mm)
+    end
 
     if isa(body_mem, WorkMemory)
         mem = register!(mm, WorkMemory(get_id(body_mem),
@@ -317,14 +345,18 @@ function alloc_memory!(lt::Let, mm::MemoryManager)
     b, b_rest... = get_bound(lt)
     a, a_rest... = args(lt)
 
-    let_rest = pct_let(b_rest..., a_rest..., get_body(lt))
+    let_rest = split_let(pct_let(b_rest..., a_rest..., get_body(lt)))
 
     push_ownership!(mm, let_rest)
+    push_hint!(mm, name(b))
     a_new = alloc_memory!(a, mm)
+    pop_hint!(mm)
     pop_ownership!(mm)
 
     b_new = set_memory(b, get_return_memory(get_memory(a_new)))
+    #= let_rest = ecall(pct_map(get_body(b), let_rest), get_body(b_new)) =#
     let_rest = subst(let_rest, get_body(b), get_body(b_new))
+
     let_rest = alloc_memory!(let_rest, mm)
     work_mem = get_memory(let_rest)
 
@@ -335,7 +367,7 @@ function alloc_memory!(lt::Let, mm::MemoryManager)
         end
 
         mem = register!(mm, WorkMemory(next_id!(mm), buf_mem, work_mem))
-        return with_memory(mem, pct_let(b_new, a_new, let_rest))
+        return with_memory(mem, combine_let(pct_let(b_new, a_new, let_rest)))
     else
         buf_mem = get_buf_mem(work_mem)
         if !(isa(get_memory(a_new), MapMemory) || isa(get_memory(a_new), ParametricMapMemory))
@@ -345,7 +377,7 @@ function alloc_memory!(lt::Let, mm::MemoryManager)
             buf_mem,
             get_value_mem(work_mem))
 
-        return with_memory(mem, pct_let(b_new, a_new, get_body(let_rest)))
+        return with_memory(mem, combine_let(pct_let(b_new, a_new, get_body(let_rest))))
     end
 
 end

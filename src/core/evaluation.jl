@@ -25,6 +25,7 @@ function free_and_dummy(n::APN)
     return all_free, unique(all_dummies)
 end
 
+free_and_dummy(l::Let) = free_and_dummy(let_to_call(l))
 free_and_dummy(::Constant) = Set{Var}(), Set{Var}()
 free_and_dummy(v::T) where {T<:Var} = union!(Set{Var}([v]), get_free(get_type(v))), Set{Var}()
 free_and_dummy(c::Constructor) = get_free(get_type(c)), Set{Var}()
@@ -80,7 +81,7 @@ function strip_copy(v::RevComposition)
     return pct_map(inputs..., v_unwrap(outputs))
 end
 
-function own_dummy(c::T) where {T<:Union{PermInv,Let,Map,ParametricMap}}
+function own_dummy(c::T) where {T<:Union{PermInv,Map,ParametricMap}}
     vars = Vector{Var}()
     for b in get_bound(c)
         if isa(b, PCTVector)
@@ -268,6 +269,11 @@ function subst(n::Constructor, ::Var, ::APN, ::Bool)
     return n
 end
 
+function subst(l::Let, old::Var, new::APN, replace_dummy::Bool)
+    result = subst(let_to_call(l), old, new, replace_dummy)
+    return call_to_let(result)
+end
+
 function subst(n::T, old::S, new::R, replace_dummy=false) where {T<:APN,S<:APN,R<:APN}
     new = R == Call ? eval_all(new) : new
     if !replace_dummy
@@ -287,7 +293,7 @@ end
 function reconstruct(n::PrimitiveCall, old::APN, new::APN, replace_dummy::Bool)
     new_args = map(t -> all_subst(t, old, new), content(args(n)))
     new_map = all_subst(mapp(n), old, new, replace_dummy)
-    return call(new_map, new_args...)
+    return primitive_call(new_map, new_args...)
 end
 
 #= function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)

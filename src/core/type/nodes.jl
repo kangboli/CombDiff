@@ -41,7 +41,7 @@ export
     domain_indicator,
     int_div,
     mul,
-    parametric_map, 
+    parametric_map,
     pct_dot
 
 abstract type TerminalNode <: APN end
@@ -164,7 +164,7 @@ end
 
 function parametric_map(terms::Vararg{APN})
     terms = collect(terms)
-    @assert all(t->isa(t, Var), terms[1:end-1])
+    @assert all(t -> isa(t, Var), terms[1:end-1])
     result = make_node(ParametricMap, pct_vec(terms[1:end-1]...), last(terms))
     return result
 end
@@ -446,6 +446,9 @@ args(l::AbstractLet) = l.args
 function pct_let(terms::Vararg{APN})
     terms = collect(terms)
     make_node(Let, pct_vec(terms[1:end÷2]...), pct_vec(terms[end÷2+1:end-1]...), terms[end])
+    #= length(terms) == 1 && return make_node(Let, pct_vec(), pct_vec(), terms[end])
+    inner = make_node(Let, pct_vec(terms[end÷2]), pct_vec(terms[end-1]), terms[end])
+    pct_let(terms[1:end÷2-1]..., terms[end÷2+1:end-2]..., inner) =#
 end
 
 content_fields(::Type{<:AbstractLet}) = [:bound, :args, :body]

@@ -55,6 +55,7 @@ end
 
 function pretty(v::Var)
     var_str = replace("$(name(v))", "__dot__" => ".")
+    var_str = "$(var_str):$(get_id(get_memory(v)))"
     if isa(get_type(v), MapType)
         return CYAN_FG(var_str)
     elseif isa(get_type(v), ProductType)
