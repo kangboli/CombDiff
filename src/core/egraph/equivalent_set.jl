@@ -1351,10 +1351,7 @@ end
 function neighbors(p::Prod; settings=default_settings())
     result = NeighborList()
 
-    neighbor_list = neighbors(get_body(p), settings=settings)
-    for (t, d, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
-        push!(result, set_content(p, t); dired=d, name=s)
-    end
+    append!(result, sub_neighbors(p; settings=settings))
 
     isa(get_body(p), Prod) && append!(result, prod_ex_neighbors(p))
     symmetric(get_bound(p)) && append!(result, prod_sym_neighbors(p))
@@ -1368,11 +1365,13 @@ end
 
 function neighbors(d::Delta; settings=default_settings())
     result = NeighborList()
-    neighbor_list = neighbors(get_body(d); settings=settings)
+    
+    append!(result, sub_neighbors(d; settings=settings))
+    #= neighbor_list = neighbors(get_body(d); settings=settings)
 
     for (t, dir, s) in zip(nodes(neighbor_list), directed(neighbor_list), names(neighbor_list))
         push!(result, delta(upper(d), lower(d), t); dired=dir, name=s)
-    end
+    end =#
 
     if isa(get_body(d), Delta)
         i, j = upper(d), lower(d)
@@ -1861,6 +1860,7 @@ function neighbors(lt::Let; settings=default_settings())
         append!(result, let_collapse(lt))
         append!(result, let_remove_alias(lt))
         append!(result, let_split_multi_return(lt))
+        append!(result, cbi_to_mutation_neighbor(lt))
         # append!(result,unused_let(lt))
         settings[:link_pullback] && append!(result, link_pullback_neighbor(lt))
     end

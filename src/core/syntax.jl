@@ -248,6 +248,7 @@ function parse_node(n::Expr)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
         (func == :pushforward || func == :ℱ) && return parse_pushforward_node(n)
+        (isa(func, Expr) && func.head == :curly) && return parse_parametric_call_node(n)
         return parse_node(AbstractCall, n)
     end
     n.head == :block && return parse_block_node(n)
@@ -582,6 +583,13 @@ end
 
 parse_node(i::Number) = :(CombDiff.constant($(i)))
 
+function parse_parametric_call_node(n::Expr)
+    param_func = n.args[1]
+    func = parse_node(param_func.args[1])
+    params = parse_node.(param_func.args[2:end])
+    return :(CombDiff.call(CombDiff.parametric_var($(func), $(params...)), $(parse_node.(n.args[2:end])...)))
+end
+
 function parse_node(::Type{AbstractCall}, c::Expr)
     @assert c.head == :call
     func = c.args[1]
@@ -832,7 +840,7 @@ to_julia_type(m::MultiType) = typeof(get_func_obj(m))
 to_julia_type(d::AbstractDomain) = to_julia_type(base(d))
 
 function to_julia_type(m::MapType)
-    if all(t -> base(t) == N(), get_content_type(get_bound_type(m))) 
+    if all(t -> base(t) == N(), get_content_type(get_bound_type(m)))
         return Function
         #= error("cannot convert $(m)") =#
     end

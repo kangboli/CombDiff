@@ -63,7 +63,7 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
     # Handle the types of interpolated functions.
     # These functions can have side effect, so 
     # they cannot be short circuited based on its return type.
-    if isa(get_type(mapp), MultiType)
+    if isa(get_type(mapp), MultiType) || T == ParametricVar
         return T, [mapp, arguments], partial_inference(T, mapp, arguments)
     end
     return_type = get_return_type(mapp, arguments)

@@ -4,6 +4,9 @@ makedocs(sitename="CombDiff",
     pages=[
         "Introduction" => "index.md",
         "Tour" => "intro.md",
+         #= "Design Doc" => [
+            "Memory" => "design/memory.md"
+         ] =#
         #= "Tensor Calculus" => "tensor.md",
         "Calculus of Variations" => "calculus.md",
         "Analytic Backpropagation" => "backprop.md",

@@ -1,4 +1,4 @@
-## What is `CombDiff` about
+## What `CombDiff` is about
 
 ### It is a Language
 
@@ -8,7 +8,7 @@
 - × It is not a coupled cluster code generator.
 - × It is not a quantum chemistry code/distribution/library/framework.
  
-### $O(1)$ Gradient
+### Raw Gradient
 
 - ✓  It differentiates *before any evaluation*, thus avoiding the computation graph or expression swell.
 - ✓  It produces an gradient abstract syntax tree (AST) resembling hand-written gradient. Examples include tensor algebra, neural networks, ODE solve, structural/functional programming.
@@ -26,16 +26,12 @@
 - × It is not about optimizing single primitives such as finding the optimal contraction order.
 - × It is not a symbolic algebra system.
 
-### Target Applications
+### Design Target 
 
+- ✓ Low-level similar to Fortran. Statically typed and no garbage collector.
+- × Not high-level like Matlab. 
 - ✓  Computational quantum Chemistry & condense matter.
 - ?  Quantum computing.
 - ?  Machine learning & data science.
-
-### Abstraction
-
-- × `CombDiff` is not meant to be high level.
-- ✓ It has a static and dependent type system. Tensor sizes are type parameters.
-- ✓ Memory usage is fully inferenced at compile time, so the memory is basically static.
 
 

@@ -213,6 +213,10 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
     return get_return_type(mapp, terms[end])
 end
 
+function partial_inference(::Type{ParametricVar}, mapp, args)
+    return parametrize_type(get_type(mapp), args...)
+end
+
 function partial_inference(::Type{<:AbstractLet}, terms...)::AbstractPCTType
     return get_type(last(terms))
 end

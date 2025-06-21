@@ -242,6 +242,7 @@ struct Call <: AbstractCall
 end
 
 function call(mapp::APN, args::Vararg)
+    length(args) > 0 && all(t -> isa(t, Copy), get_bound(mapp)) && return make_node(PrimitiveCall, mapp, pct_vec(args...))
     make_node(Call, mapp, pct_vec(args...))
 end
 
@@ -249,6 +250,16 @@ struct PrimitiveCall <: AbstractCall
     type::AbstractPCTType
     mapp::APN
     args::PCTVector
+end
+
+struct ParametricVar <: AbstractCall
+    type::AbstractPCTType
+    mapp::APN
+    args::PCTVector
+end
+
+function parametric_var(mapp::APN, args::Vararg)
+    return make_node(ParametricVar, mapp, pct_vec(args...))
 end
 
 abstract type Univariate <: APN end

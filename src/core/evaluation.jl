@@ -270,7 +270,7 @@ function subst(n::Constructor, ::Var, ::APN, ::Bool)
 end
 
 function subst(l::Let, old::Var, new::APN, replace_dummy::Bool)
-    result = subst(let_to_call(l), old, new, replace_dummy)
+    result = all_subst(let_to_call(l), old, new, replace_dummy)
     return call_to_let(result)
 end
 
@@ -445,40 +445,9 @@ end
 
 
 function evaluate(l::Let)
-    copies, substs, subst_args, copy_args = [], [], [], []
-    for (b, a) in zip(get_bound(l), args(l))
-        if isa(b, Copy) || (isa(b, PCTVector) && all(t -> isa(t, Copy), content(b)))
-            push!(copies, b)
-            push!(copy_args, eval_all(a))
-        else
-            push!(substs, b)
-            push!(subst_args, eval_all(a))
-        end
-    end
-
-    function subst_all(substs, subst_args, body)
-        isempty(substs) && return body
-        old, substs... = substs
-        new, subst_args... = subst_args
-        subst_args = map(t -> subst(t, old, new), subst_args)
-        return subst_all(substs, subst_args, subst(body, old, new))
-    end
-    new_call = evaluate(get_body(l))
-
-    if !isempty(substs)
-        # TODO: Bug! This does not consider the case where one variable is part of the other.
-        #= for i in length(substs)
-            old, new = substs[i], subst_args[i]
-            for j in i+1:length(substs)
-                subst_args[j] = ecall(pct_map(old, subst_args[j]), new)
-            end
-            new_call = ecall(pct_map(old, new_call), new)
-        end =#
-        new_call = subst_all(substs, subst_args, new_call)
-        #= new_call = evaluate(call(pct_map(substs..., get_body(l)), subst_args...)) =#
-    end
-    result = pct_let(copies..., copy_args..., new_call)
-    return result
+    call = let_to_call(l)
+    has_call(call) || return l
+    return call_to_let(evaluate(call))
 end
 
 function let_copy_to_comp(zs::APN, l::Let)
