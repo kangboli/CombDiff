@@ -63,7 +63,7 @@ function instantiate(m::MemoryStack, ::MemoryManager, _...)
 end
 
 function instantiate(m::MemorySeg, ::MemoryManager, args...)
-    return m
+    return MemoryStack(0)
 end
 
 struct MemoryBlock <: MemoryUnit
@@ -82,12 +82,12 @@ get_sub_units(b::MemoryBlock) = b.sub_units
 pushfirst_unit(b::MemoryBlock, new_unit) = @set b.sub_units = [new_unit, b.sub_units...]
 Base.length(b::MemoryBlock) = length(get_sub_units(b))
 
-function instantiate(m::MemoryBlock, mm::MemoryManager)
+#= function instantiate(m::MemoryBlock, mm::MemoryManager)
     register!(mm, MemoryBlock(
         next_id!(mm),
         map(u -> instantiate(u, mm), get_sub_units(m))
     ))
-end
+end =#
 
 abstract type MemoryIntermediate <: AbstractMemory end
 
@@ -103,12 +103,12 @@ mutable struct WorkMemory <: MemoryUnit
     value::AbstractMemory
 end
 
-function instantiate(m::WorkMemory, mm::MemoryManager)
+#= function instantiate(m::WorkMemory, mm::MemoryManager)
     register!(mm, WorkMemory(
         next_id!(mm),
         instantiate(get_buf_mem(m), mm),
         instantiate(get_value_mem(m), mm)))
-end
+end =#
 
 get_buf_mem(lm::WorkMemory) = lm.buf
 get_value_mem(lm::WorkMemory) = lm.value
@@ -253,8 +253,7 @@ push_hint!(mm::MemoryManager, h::Symbol) = push!(mm.hints, h)
 pop_hint!(mm::MemoryManager) = pop!(mm.hints)
 get_hint(mm::MemoryManager) = isempty(mm.hints) ? nothing : top(mm.hints)
 
-
-function get_hint_memory(n::CBI, mm::MemoryManager)
+function get_hint_var(n::CBI, mm::MemoryManager)
     h = get_hint(mm)
     h === nothing && return nothing
     n_type = get_type(n)
@@ -265,34 +264,33 @@ function get_hint_memory(n::CBI, mm::MemoryManager)
     i === nothing && return nothing
     b = free[i]
 
+    validate_write_location(get_body(n), b, get_bound(n)) || return nothing
+
     id = get_id(get_memory(b))
 
-    (mm.ownerships[id] && get_size(get_memory(b)) == type_size(n_type)) || return nothing
-    get_memory(b)
+    (top(mm.ownerships[id]) && get_size(get_memory(b)) == type_size(n_type)) || return nothing
+
+    return b
 end
 
 function alloc_memory!(n::CBI, mm::MemoryManager)
     n_type = get_type(n)
     lock_ownership!(mm)
-    new_body = alloc_memory!(get_body(n), mm)
     pop_ownership!(mm)
 
+    push_ownership!(mm, n)
+    mem = allocate_segment!(mm, type_size(n_type))
+    pop_ownership!(mm)
+
+    new_body = alloc_memory!(get_body(n), mm)
     body_mem = get_memory(new_body)
-
-    #= mem = get_hint_memory(n, mm) =#
-    mem = nothing
-
-    if mem === nothing
-        push_ownership!(mm, n)
-        mem = allocate_segment!(mm, type_size(n_type))
-        pop_ownership!(mm)
-    end
 
     if isa(body_mem, WorkMemory)
         mem = register!(mm, WorkMemory(get_id(body_mem),
             get_buf_mem(body_mem), mem))
     end
-    return with_memory(mem, pct_map(get_bound(n)..., new_body))
+    result = with_memory(mem, set_terms(n, get_bound(n), new_body))
+    return result
 end
 
 function alloc_memory_from_type!(n::T, mm::MemoryManager) where {T<:APN}
@@ -433,7 +431,7 @@ function alloc_memory!(c::PrimitiveCall, mm::MemoryManager)
     else
         exe_mem
     end
-    return with_memory(mem, call(m, new_args...))
+    return with_memory(mem, call(get_body(m), new_args...))
 end
 
 
@@ -448,6 +446,7 @@ function order(m::WorkMemory)
     return result
 end
 order(m::MapMemory) = 0
+order(m::ParametricMapMemory) = 0
 
 width(m::AbstractMemory) = order(m)
 function width(m::Union{MemoryBlock,WorkMemory})

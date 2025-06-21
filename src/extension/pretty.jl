@@ -55,7 +55,6 @@ end
 
 function pretty(v::Var)
     var_str = replace("$(name(v))", "__dot__" => ".")
-    var_str = "$(var_str):$(get_id(get_memory(v)))"
     if isa(get_type(v), MapType)
         return CYAN_FG(var_str)
     elseif isa(get_type(v), ProductType)
@@ -253,6 +252,10 @@ function verbose(a::Add)
     "(+\n" *
     indent("$(join(pretty.(content(get_body(a))), ",\n"))") *
     "\n)::$(pretty(get_type(a)))"
+end
+
+function pretty(p::ParametricVar)
+    return "$(pretty(mapp(p))){$(pretty(args(p), false))}"
 end
 
 function pretty(p::AbstractCall)

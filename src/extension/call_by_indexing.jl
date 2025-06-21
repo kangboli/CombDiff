@@ -15,6 +15,10 @@ function type_length(t::ProductType)
     return mul(map(type_length, get_content_type(t))...)
 end
 
+function call_by_indexing(bound::PCTVector, body::APN)
+    return make_node(CBI, bound, body)
+end
+
 function call_by_indexing(body::Map)
     bounds = get_bound(body)
     new_bound_types = map(l -> parametrize_type(N(), l), type_length.(get_type.(bounds)))
