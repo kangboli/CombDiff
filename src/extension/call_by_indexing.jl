@@ -12,7 +12,7 @@ function type_length(t::ElementType)
 end
 
 function type_length(t::ProductType)
-    return mul(map(type_length, get_content_type(t))...)
+    return pct_vec(map(type_length, get_content_type(t))...)
 end
 
 function call_by_indexing(bound::PCTVector, body::APN)
@@ -31,9 +31,17 @@ end
 
 function pretty(m::CBI)
     params = map(v -> "$(pretty(v))", content(get_bound(m)))
-    Crayon(italics=true)("($(join(params, ", "))) -> $(pretty(get_body(m)))")
+    "[($(join(params, ", "))) -> $(pretty(get_body(m)))]"
 end
 
+function verbose(m::CBI)
+    params = map(v -> "$(verbose(v))", content(get_bound(m)))
+    "[($(join(params, ", "))) -> $(verbose(get_body(m)))]"
+end
+
+"""
+Given an linear index, return an element in the set.
+"""
 struct Indexing <: APN
     type::AbstractPCTType
     body::APN
@@ -43,10 +51,20 @@ function pct_indexing(i::APN, type::AbstractPCTType)
     return make_node(Indexing, i, type=type)
 end
 
+print_colors_defaults[:indexing] = Crayon(foreground=(200, 100, 130))
+
 function pretty(i::Indexing)
-    RED_FG("($(pretty(get_type(i))))($(pretty(get_body(i))))")
+    type_str = isa(get_type(i), ProductType) ? string(get_typename(get_type(i))) : pretty(get_type(i))
+    if type_str == "__anonymous"
+        print_colors_defaults[:indexing]("|$(pretty(get_body(i)))|")
+    else
+        print_colors_defaults[:indexing]("($type_str)($(pretty(get_body(i))))")
+    end
 end
 
+"""
+indexing{N{1:M}}(i) = i
+"""
 function neighbors(i::Indexing; settings=default_settings())
     result = NeighborList()
     settings[:cbi] || return result
@@ -56,24 +74,58 @@ function neighbors(i::Indexing; settings=default_settings())
     return result
 end
 
+"""
+Given a element in a set, return the linear index in the set.
+
+The linear index is from 1 to number of elements in the set.
+"""
 struct Serialize <: APN
     type::AbstractPCTType
     body::APN
 end
 
-function serialize(body::APN, type::AbstractPCTType)
+function serialize(body::APN, type=parametrize_type(N(), type_length(get_type(body))))
     result = make_node(Serialize, body, type=type)
     return result
 end
 
-pretty(s::Serialize) = RED_FG("serial($(pretty(get_body(s))))")
+pretty(s::Serialize) = "serial($(pretty(get_body(s))))"
 
-function neighbors(s::Serialize; _...)
+
+function serialize_product(s::Serialize)
+    result = NeighborList()
+    p = get_body(s)
+    isa(get_type(p), ProductType) || return result
+
+    indices = args(p)
+
+    dims = [constant(1), accumulate(mul, type_length.(get_content_type(get_type(indices))))...]
+
+    new_s = add(map((prefactor, c, a) -> mul(prefactor, subtract(strip_indexing(c, a), constant(1))), dims,
+            map(t -> parametrize_type(N(), type_length(t)), get_content_type(get_type(p))),
+            indices)..., constant(1))
+    push!(result, new_s; dired=true, name="serialize_product")
+    return result
+end
+
+function serialization_canceling(s::Serialize)
     result = NeighborList()
     isa(get_body(s), Indexing) || return result
     serial = get_body(get_body(s))
+    #= println(pretty(get_type(s)))
+    println(pretty(get_type(serial))) =#
     @assert get_type(s) == get_type(serial)
     push!(result, get_body(get_body(s)); dired=true, name="serialization_canceling")
+    return result
+end
+
+"""
+serialize{S}(index{S}(i)) = i
+"""
+function neighbors(s::Serialize; _...)
+    result = NeighborList()
+    append!(result, serialization_canceling(s))
+    append!(result, serialize_product(s))
     return result
 end
 
@@ -82,7 +134,7 @@ struct GetData <: AbstractMap
     body::APN
 end
 
-function call(mapp::Union{GetData, Dot}, args::Vararg)
+function call(mapp::Union{GetData,Dot}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
@@ -92,9 +144,21 @@ end
 
 
 function partial_inference(::Type{GetData}, body)
-    bound_types = get_bound_type(get_type(body))
-    new_bound_types = map(l -> parametrize_type(N(), l), type_length.(bound_types))
-    return MapType(VecType(new_bound_types), get_body_type(get_type(body)))
+    body_type = get_type(body)
+
+    function inference_maptype(body_type)
+        bound_types = get_bound_type(body_type)
+        new_bound_types = map(l -> parametrize_type(N(), l), type_length.(bound_types))
+        return MapType(VecType(new_bound_types), get_body_type(get_type(body)))
+    end
+
+    #= if isa(body_type, ParametricMapType)
+        return ParametricMapType(get_params(body_type), inference_maptype(get_body_type(body_type)))
+    else
+        return inference_maptype(body_type)
+    end =#
+
+    return inference_maptype(body_type)
 end
 
 pretty(g::GetData) = "get_data($(pretty(get_body(g))))"
@@ -138,6 +202,7 @@ end
 
 push!(neighbor_registry[Map], map_cbi)
 
+
 function to_cbi(n::APN)
     simplify(n; settings=custom_settings(:cbi => true))
 end
@@ -154,7 +219,9 @@ function call_get_data(c::AbstractCall)
     all(is_basic_type, get_bound_type(get_type(m))) && return result
     data = get_data(m)
 
-    push!(result, call(data, map(strip_indexing, get_bound_type(get_type(data)), args(c))...); dired=true, name="get_data")
+    push!(result, call(data, map(strip_indexing,
+            map(t -> parametrize_type(N(), type_length(t)), get_bound_type(get_type(data))),
+            args(c))...); dired=true, name="get_data")
     return result
 end
 
@@ -216,7 +283,7 @@ function gen_range(t::ProductType)
         map(gen_range, get_content_type(t)))
 
     return :(
-        typename = $(QuoteNode(get_typename(t))),
+        typename=$(QuoteNode(get_typename(t))),
         $(entries...)
     )
 end
@@ -245,7 +312,7 @@ function find_dimensions(::Var, ::T) where {T<:Dot}
     return []
 end
 
-function contains_name(d::Dot, s::Symbol) 
+function contains_name(d::Dot, s::Symbol)
     return contains_name(get_body(d), s)
 end
 
@@ -254,14 +321,62 @@ function codegen(d::Dot)
     return :($(codegen(get_body(d))).$(get_field(d)))
 end
 
-#= function construct_from_index(domains, i::Int)
-    sizes = [u - l + 1 for (u, l) in domains]
-
-    result = Vector{Int}()
-    for j in 1:length(domains)
-        i, r = divrem(i, prod(sizes[j:end]))
-        push!(result, r)
-    end
+function cbi_to_blas(n::CBI)
+    result = NeighborList()
+    s = get_body(n)
+    isa(s, Sum) || return result
+    summand = get_body(s)
+    isa(summand, Mul) || return result
+    length(get_body(summand)) == 2 || return result
+    t_1, t_2 = get_body(summand)
+    isa(t_1, PrimitiveCall) && isa(t_2, PrimitiveCall) || return result
 
 end
- =#
+
+function indexing_get_field_neighbor(c::AbstractCall)
+    result = NeighborList()
+    isa(mapp(c), Indexing) || return result
+
+    length(args(c)) == 1 || return result
+    field = first(args(c))
+    i = get_body(field)
+
+    type, index = get_type(mapp(c)), get_body(mapp(c))
+    dim = [constant(1), accumulate(mul, type_length.(get_content_type(type)))...]
+    offset = subtract(lower(get_content_type(type)[i]), constant(1))
+    new_index = add(call(var(:div, MultiType(div)), call(var(:rem, MultiType(rem)), index, dim[i+1]), dim[i]), offset)
+    push!(result, new_index; dired=true, name="index_get_field")
+    return result
+end
+
+push!(neighbor_registry[AbstractCall], indexing_get_field_neighbor)
+
+
+#= function matricize(t::PrimitiveCall, rows::PCTVector, cols::PCTVector)
+    row_dim = [constant(1), accumulate(mul, type_length.(get_type.(rows)))...]
+    col_dim = [constant(1), accumulate(mul, type_length.(get_type.(cols)))...]
+
+    row_var = var(first(new_symbol(t, rows, cols; symbol=:_r)),
+        parametrize_type(N(), row_dim[end]))
+    col_var = var(first(new_symbol(t, rows, cols, row_var; symbol=:_c)),
+        parametrize_type(N(), col_dim[end]))
+
+    function get_index(v::Var)
+        i = findfirst(t -> name(t) == name(v), collect(rows))
+        if i !== nothing
+            rc = row_var
+            dim = row_dim
+            offset = subtract(lower(get_type(rows[i])), constant(1))
+        else
+            i = findfirst(t -> name(t) == name(v), collect(cols))
+            rc = col_var
+            dim = col_dim
+            offset = subtract(lower(get_type(cols[i])), constant(1))
+        end
+
+        return add(call(var(:div, MultiType(div)), call(var(:rem, MultiType(rem)), rc, dim[i+1]), dim[i]), offset)
+    end
+
+    result = pct_map(row_var, col_var, call(mapp(t), get_index.(args(t))...))
+    return result
+end =#

@@ -113,29 +113,105 @@ function check_parametric_type_capture!(bounds, body, context)
     end
 end
 
+function retrieve_type_from_usage(::APN, ::TerminalNode, context)
+    return []
+end
+
+function retrieve_type_from_usage(v::APN, body::APN, context)
+    body = inference(body, context)
+    result = vcat(map(t -> retrieve_type_from_usage(v, t, context), terms(body))...)
+    return result
+end
+
+
+function retrieve_type_from_usage(v::APN, body::AbstractCall, context)
+    body = inference(body, context)
+
+    for (a, t) in zip(args(body), get_bound_type(get_type(mapp(body))))
+        if isa(a, Var)
+            name(v) == name(a) && is_undetermined_type(t)
+            return [t]
+        elseif isa(a, PrimitiveCall)
+            get_body(mapp(v)) == get_body(mapp(a)) && args(v) == args(a) && !is_undetermined_type(t)
+            return [t]
+        end
+    end
+    return invoke(retrieve_type_from_usage, Tuple{APN,APN,TypeContext}, v, body, context)
+end
+
+function retrieve_type_from_usage(v::Var{ProductType}, body::AbstractCall, context)
+    invoke(retrieve_type_from_usage, Tuple{Var{ProductType},APN,TypeContext}, v, body, context)
+end
+
+function retrieve_type_from_usage(v::Var{ProductType}, body::APN, context)
+    body = inference(body, context)
+
+    field_types = map(i -> retrieve_type_from_usage(primitive_call(v, constant(i)), body, context),
+        1:length(get_type(v)))
+    any(isempty, field_types) && return []
+    field_types = first.(field_types)
+    new_type = ProductType(get_typename(get_type(v)), field_types, get_names(get_type(v)), meta(get_type(v)))
+    return [new_type]
+end
+
+is_undetermined_type(t::AbstractPCTType) = false
+
+is_undetermined_type(t::UndeterminedPCTType) = true
+
+function is_undetermined_type(t::AbstractVecType)
+    return any(is_undetermined_type, get_content_type(t))
+end
+
+check_call_type!(::APN) = return
+function check_call_type!(n::AbstractCall)
+    get_bound_type(get_type(mapp(n))) == get_type(args(n)) ||
+        error("$(verbose(mapp(n))) called on $(verbose(args(n)))")
+end
+
 function inference(n::T, context::TypeContext=TypeContext()) where {T<:APN}
     has_bound = any(f -> hasfield(T, f), bound_fields(T))
+
     if has_bound
         #= op_context!(get_bound(n), pct_push!, context) =#
         for b in content(get_bound(n))
-            if get_type(b) == UndeterminedPCTType()
-                b = set_type(b, N())
-            end
+            b = set_type(b, inference(get_type(b), context))
             push_var!(context, get_body(b), b)
+        end
+
+        for b in content(get_bound(n))
+            if is_undetermined_type(get_type(b))
+                b_types = retrieve_type_from_usage(b, get_body(n), context)
+                if !isempty(b_types)
+                    b = set_type(b, first(b_types))
+                    pop_var!(context, get_body(b))
+                    push_var!(context, get_body(b), b)
+                end
+            end
         end
         # the following line may be redundant.
         n = set_bound(n, map(t -> inference(t, context), [get_bound(n)])...)
-
         check_parametric_type_capture!(get_bound(n), get_body(n), context)
     end
     n = set_content(n, map(t -> inference(t, context), content(n))...)
     has_bound && map(b -> pop_var!(context, get_body(b)), content(get_bound(n)))
     # Setting the type may also be redundant.
+    #= check_call_type!(n) =#
     return set_type(n, partial_inference(typeof(n), terms(n)...))
 end
 
+function inference(n::PrimitiveCall, context::TypeContext=TypeContext())
+    isa(mapp(n), Constructor) || return invoke(inference, Tuple{APN,TypeContext}, n, context)
+
+    field_names = new_symbol(n; num=length(args(n)), symbol=:_s)
+    new_args = map(t -> inference(t, context), args(n))
+    m = set_type(mapp(n),
+        MapType(VecType(get_type.(new_args)),
+            ProductType(:__anonymous, get_type.(new_args), field_names)))
+    return primitive_call(m, new_args...)
+end
+
+
 function inference(v::Var, context::TypeContext)
-    startswith(string(get_body(v)), "__") && return v
     new_v = find_var_by_name(context, name(v))
     if new_v !== nothing
         return set_type(new_v, inference(get_type(new_v), context))
@@ -183,11 +259,6 @@ function partial_inference(::Type{T}, terms...)::AbstractPCTType where {T<:Abstr
     if mapp == nabla()
         t = first(terms[2])
         return MapType(get_bound_type(get_type(t)), v_unwrap(get_bound_type(get_type(t))))
-    end
-
-    if isa(mapp, Var) && startswith(string(get_body(mapp)), "__")
-        length(collect(terms)) != 2 && error("control function on more than one argument is not supported")
-        return get_type(last(terms))
     end
 
     if isa(get_type(mapp), ParametricMapType)

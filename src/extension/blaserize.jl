@@ -55,7 +55,8 @@ function e_class_reduction(::Type{BlasMul}, term::PCTVector)
 end
 
 function pretty(n::BlasMul)
-    join(map(pretty, content(get_body(n))), "⋅")
+    print_settings[:unicode] && return join(map(pretty, content(get_body(n))), "⋅")
+    return "mat_mul($(join(map(pretty, content(get_body(n))), ", ")))"
 end
 
 function verbose(n::BlasMul)
@@ -374,7 +375,7 @@ end
 
 function partial_inference(::Type{ElementWiseAdd}, body::PCTVector)
     return get_type(first(body))
-end    
+end
 
 function tensor_addition_neighbors(a::Add)
     result = NeighborList()
@@ -450,8 +451,8 @@ function map_elementwise_prod(m::Map)
     isa(term, Mul) || return result
     subterms = content(get_body(term))
     all(t -> isa(t, AbstractCall), subterms) || return result
-    if reduce(isequal, [map(args, subterms)..., get_bound(m)])
-        push!(result, elementwise_mul(map(mapp, subterms)...); dired=true, name="map elementwise prod")
+    if all(t -> isequal(t, get_bound(m)), map(args, subterms))
+        push!(result, elementwise_mul(pct_vec(map(mapp, subterms)...)); dired=true, name="map elementwise prod")
     end
     return result
 end
@@ -462,6 +463,7 @@ function blaserize_neighbors(m::Map)
     append!(result, map_cancel_neighbors(m))
     append!(result, map_out_neighbors(m))
     append!(result, map_dist_neighbors(m))
+    append!(result, map_elementwise_prod(m))
     append!(result, sub_blaserize_neighbors(m))
     return result
 end
@@ -523,7 +525,7 @@ function partial_inference(::Type{ElementWiseMul}, body::PCTVector)
 end
 
 function pretty(n::ElementWiseMul)
-    return join(map(pretty, get_body(n)), "⊙")
+    return join(pretty.(get_body(n)), " ⊙ ")
 end
 
 function latex(n::ElementWiseMul)

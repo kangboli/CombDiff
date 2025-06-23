@@ -145,9 +145,26 @@ struct Map <: AbstractMap
     body::APN
 end
 
-function pct_map(terms::Vararg{APN})
+function pct_map(terms::Vararg)
     terms = collect(terms)
-    make_node(Map, pct_vec(terms[1:end-1]...), last(terms))
+    n_product_type = count(t -> isa(t, ProductType), terms)
+    p_names = new_symbol(terms...; num=n_product_type, symbol=:__p)
+
+    body = last(terms)
+    new_terms = []
+    for t in terms[1:end-1]
+        if isa(t, ProductType) 
+            name = popfirst!(p_names)
+            push!(new_terms, var(name, t))
+            for n in get_names(t)
+                body = subst(body, var(n), pct_dot(var(name, t), n))
+            end
+        else
+            push!(new_terms, t)
+        end
+    end
+
+    make_node(Map, pct_vec(new_terms...), body)
 end
 
 function is_univariate(m::AbstractMap)
@@ -165,7 +182,9 @@ end
 function parametric_map(terms::Vararg{APN})
     terms = collect(terms)
     @assert all(t -> isa(t, Var), terms[1:end-1])
-    result = make_node(ParametricMap, pct_vec(terms[1:end-1]...), last(terms))
+    body = last(terms)
+    result = make_node(ParametricMap, pct_vec(terms[1:end-1]...), body)
+    cbi_applicable(get_type(body)) && error("A tensor of parametric dimension is not allowed $(pretty(result))")
     return result
 end
 

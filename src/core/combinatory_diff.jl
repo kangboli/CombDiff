@@ -526,7 +526,7 @@ function make_typed_delta(f_map, expr, is, ks)
         p = get_type(f_map)
         constructor_args = Vector{APN}(map(zero_map, get_content_type(p)))
         constructor_args[get_body(first(expr))] = first(ks)
-        return call(make_constructor(p), constructor_args...)
+        return primitive_call(make_constructor(p), constructor_args...)
 
     elseif isa(get_type(f_map), VecType)
         @assert length(is) == length(ks) == length(expr) == 1

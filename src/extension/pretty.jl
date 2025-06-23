@@ -1,8 +1,39 @@
 using LaTeXStrings, Crayons.Box, Crayons
-export pretty, indent, verbose, latex
+export pretty, indent, verbose, latex, custom_print_settings!
+
+print_settings = Dict(
+    :color => true,
+    :unicode => false
+)
+
+print_colors_defaults = Dict(
+    :map => CYAN_FG,
+    :product_type => MAGENTA_FG,
+    :primitivecall => GREEN_FG,
+    :hidden => Crayon(underline=true),
+    :constructor => Crayon(foreground=(10, 190, 170))
+)
+
+print_color = print_colors_defaults
+
+function custom_print_settings!(custom...)
+    for (s, b) in custom
+        s in keys(print_settings) || error("$(s) is not an option")
+        print_settings[s] == b || @info "updating $(s) to $(b)"
+        print_settings[s] = b
+    end
+
+    if print_settings[:color]
+        CombDiff.print_color = print_colors_defaults
+    else
+        CombDiff.print_color = Dict(k => identity for (k, _) in print_colors_defaults)
+    end
+    return nothing
+end
+
 
 function indent(s::Any)
-    contains(s, "\n") || return "    $(s)" 
+    contains(s, "\n") || return "    $(s)"
     join(indent.(split(s, "\n")), "\n")
 end
 
@@ -11,7 +42,7 @@ function latex_indent(s::Any)
     join(latex_indent.(split(s, "\\\\")), "\\\\")
 end
 
-Base.contains(s::Crayons.CrayonWrapper, n::String) = any(t->contains(t, n), s.v)
+Base.contains(s::Crayons.CrayonWrapper, n::String) = any(t -> contains(t, n), s.v)
 
 verbose(t::MapType) = "[$(verbose(get_bound_type(t)))->$(verbose(get_body_type(t)))]"
 
@@ -24,14 +55,15 @@ verbose(t::APN) = pretty(t)
 
 function verbose(d::Domain)
     name = haskey(meta(d), :name) ? meta(d)[:name] : ""
-    "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
+    "$(name)[$(verbose(lower(d))), $(verbose(upper(d)))]"
 end
 
 function pretty(m::AbstractMap, typed=false)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
     params = typed ? map(v -> "$(pretty(v))::$(pretty(get_type(v)))", content(get_bound(m))) :
              map(v -> "$(pretty(v))", content(get_bound(m)))
-    "($(join(params, ", "))) -> $(pretty(get_body(m)))"
+    result = "($(join(params, ", "))) -> $(pretty(get_body(m)))"
+    return cbi_applicable(get_type(m)) ? "[$(result)]" : result
 end
 
 function latex(m::Map)
@@ -55,10 +87,20 @@ end
 
 function pretty(v::Var)
     var_str = replace("$(name(v))", "__dot__" => ".")
-    if isa(get_type(v), MapType)
-        return CYAN_FG(var_str)
-    elseif isa(get_type(v), ProductType)
-        return MAGENTA_FG(var_str)
+
+    v_type = get_type(v)
+    if startswith(string(name(v)), "__")
+        if isa(v_type, ProductType)
+            return "(;$(join(map((n, t) -> "$(string(n))" ,get_names(v_type), get_content_type(v_type)), ", ")))"
+        else
+            return print_color[:hidden](lstrip(var_str, '_'))
+        end
+    end
+
+    if isa(v_type, MapType)
+        return print_color[:map](var_str)
+    elseif isa(v_type, ProductType)
+        return print_color[:product_type](var_str)
     else
         return var_str
     end
@@ -259,11 +301,13 @@ function pretty(p::ParametricVar)
 end
 
 function pretty(p::AbstractCall)
+
     mapp_str = (isa(mapp(p), Var) || isa(mapp(p), AbstractPullback)) ? pretty(mapp(p)) : "($(pretty(mapp(p))))"
     "$(mapp_str)($(pretty(args(p), false)))"
 end
 
 function latex(p::PrimitiveCall)
+
     if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
         return "\\nabla ($(latex(get_body(mapp(p)))))($(latex(args(p)[1:end-1])))"
     end
@@ -286,21 +330,26 @@ function latex(p::PrimitiveCall)
     end
 end
 
-verbose(p::PrimitiveCall) = "$(RED_FG(pretty(mapp(p))))$(pretty(args(p))))::$(pretty(get_type(p)))"
+verbose(p::PrimitiveCall) = "$(print_color[:constructor](pretty(mapp(p))))($(pretty(args(p), false)))::$(pretty(get_type(p)))"
 
 function pretty(p::PrimitiveCall)
     #= if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
         return "grad($(pretty(get_body(mapp(p)))))($(pretty(args(p)[1:end-1], false)))"
     end =#
+    if isa(get_type(p), ProductType) && isa(mapp(p), Constructor) && get_typename(get_type(p)) == :__anonymous
+        return "(;$(pretty(args(p), false)))"
+    end
 
     if isa(get_type(mapp(p)), ProductType)
         @assert length(args(p)) == 1
         @assert isa(first(args(p)), Constant)
         prod_type = get_type(mapp(p))
+
+        startswith(string(get_typename(get_type(mapp(p)))), "__") && return print_color[:product_type](string(get_names(prod_type)[get_body(first(args(p)))]))
         return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
     end
-    
-    return "$(GREEN_FG(pretty(mapp(p))))($(pretty(args(p), false)))"
+
+    return "$(print_color[:primitivecall](pretty(mapp(p))))($(pretty(args(p), false)))"
 end
 
 
@@ -515,15 +564,17 @@ function pretty(d::Dot)
 end
 
 function pretty(p::ProductType)
-    "$(get_typename(p))($(join(["$(pretty(n))::$(pretty(t))" for (n, t) in zip(get_names(p), get_content_type(p))], " * ")))"
+    typename_str = startswith(string(get_typename(p)), "__") ? "_" : string(get_typename(p))
+    "$(typename_str)($(join(["$(pretty(n))::$(pretty(t))" for (n, t) in zip(get_names(p), get_content_type(p))], " * ")))"
 end
 
 function verbose(p::ProductType)
-    pretty(p)
+    typename_str = startswith(string(get_typename(p)), "__") ? "_" : string(get_typename(p))
+    "$(typename_str)($(join(["$(pretty(n))::$(verbose(t))" for (n, t) in zip(get_names(p), get_content_type(p))], " * ")))"
 end
 
 function pretty(c::Constructor)
-    return GREEN_FG("$(get_body(c))")
+    print_color[:constructor]("$(get_body(c))")
 end
 
 function pretty(p::ParametricProductType)

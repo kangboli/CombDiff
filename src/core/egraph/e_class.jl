@@ -48,8 +48,9 @@ function get_return_type(mapp::T, arguments::PCTVector) where {T<:APN}
             get_params(param_type), values,
             parametric_type, concrete_type)
 
-        return parametrize_type(param_type, [values[p] for p in get_params(param_type)]...) |> get_body_type
+        return parametrize_type(param_type, [get(values, p, infty()) for p in get_params(param_type)]...) |> get_body_type
     else
+        println(pretty(mapp))
         error("type $(pretty(get_type(mapp))) cannot be inferenced")
 
     end
@@ -93,6 +94,20 @@ function e_class_reduction(::Type{T}, mapp::APN, arguments::PCTVector) where {T<
         new_bounds = map(var, new_symbol(mapp; num=length(arguments)), get_type.(arguments))
         new_call = call(pct_map(new_bounds..., call(get_body(mapp), new_bounds...)), arguments...)
         return repack(pct_let(get_bound(mapp)..., args(mapp)..., new_call))
+    end
+
+    if isa(get_type(mapp), ParametricMapType)
+        param_type = get_type(mapp)
+        values = Dict()
+        concrete_type = get_type(arguments)
+        parametric_type = get_bound_type(get_param_body(param_type))
+        type_match!(
+            get_params(param_type), values,
+            parametric_type, concrete_type)
+
+        param_vars = [get(values, p, infty()) for p in get_params(param_type)]
+        
+        return repack(primitive_call(parametric_var(mapp, param_vars...), arguments...))
     end
 
     #= println(get_type(mapp)) =#

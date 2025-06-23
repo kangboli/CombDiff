@@ -161,29 +161,8 @@ function equate_param_with_size(p, f_types::Vector{<:AbstractPCTType})
 end
 
 function codegen(pm::ParametricMap)
-    p_bound = get_bound(pm)
-    m = get_body(pm)
-
-    sizes = []
-
-    for p in (p_bound)
-        i, j = equate_param_with_size(p, get_type.(get_bound(m)))
-        i === nothing && error("$(p) cannot be resolved.")
-        push!(sizes, (i, j))
-    end
-
-    body = codegen(get_body(m))
-    for (p, (i, j)) in zip(p_bound, sizes)
-        body = :(
-            let $(codegen(p)) = size($(codegen(get_bound(m)[i])), $(j))
-                $(body)
-            end
-        )
-    end
-    params = Expr(:tuple, codegen.(get_bound(m))...)
-
-    return :($params -> $(body))
-
+    params = Expr(:tuple, codegen.(get_bound(pm))...)
+    return :($(params) -> $(codegen(get_body(pm))))
 end
 
 codegen(d::Domain) = codegen(base(d))
@@ -205,7 +184,7 @@ end
 
 function codegen(c::PrimitiveCall)
     maptype = get_type(mapp(c))
-    isa(maptype, ParametricMapType) && (maptype = get_param_body(maptype))
+    #= isa(maptype, ParametricMapType) && (maptype = get_param_body(maptype)) =#
 
     isa(maptype, MultiType) || length(get_bound_type(maptype)) == length(args(c)) ||
         error("$(pretty(mapp(c))) takes $(length(get_bound_type(maptype))) inputs, but $(length(args(c))) are given.")

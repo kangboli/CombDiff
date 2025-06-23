@@ -255,6 +255,7 @@ function parse_node(n::Expr)
     n.head == :let && return parse_let_node(n)
     n.head == Symbol("'") && return parse_conjugate_node(n)
     (n.head == :(=) || n.head == :(:=)) && return parse_statement_node(n)
+    n.head == :tuple && isa(n.args[1], Expr) && n.args[1].head == :parameters && return parse_group_index_node(n)
     n.head == :tuple && return parse_pctvector_node(n)
     n.head == Symbol("::") && return parse_node(Param, n)
     return :()
@@ -518,13 +519,68 @@ function parse_map_node(f::Expr)
     end
 
     body = f.args[2]
-
     result_map = :(CombDiff.pct_map($(map(p -> parse_node(Param, p), params)...), $(parse_node(body))))
     parametric_types === nothing && return result_map
 
     return :(CombDiff.parametric_map($(map(parse_node, parametric_types)...), $(result_map)))
 end
 
+function parse_anonymouse_function_type(n)
+    parameter_expr = n.args[1]
+    if isa(parameter_expr, Symbol)
+        parameters = [parse_anonymous_type(parameter_expr)]
+    else
+        parameters = map(parse_anonymous_type, parameter_expr.args)
+    end
+    body = parse_anonymous_type(n.args[2])
+
+    return :(CombDiff.MapType(VecType([$(parameters...)]), $(body)))
+end
+
+function parse_anonymouse_map_type(n)
+
+    map_fields = Dict()
+
+    supported_properties = [:symmetries, :linear, :off_diag]
+    for a in n.args
+        if a.args[1] == :type
+            map_fields[:type] = parse_anonymous_type(a.args[2])
+        elseif a.args[1] in supported_properties
+            map_fields[a.args[1]] = parse_node(a.args[2])
+        else
+            error("field $(a.args[1]) not supported.")
+        end
+    end
+    properties = [:($(QuoteNode(k)) => $(map_fields[k])) for k in supported_properties if haskey(map_fields, k)]
+    dict = :(Dict($(properties...)))
+    return :(CombDiff.MapType($(map_fields[:type]...), $(dict),))
+end
+
+function parse_anonymouse_product_type(n)
+    prod_fields = map(parse_anonymous_type, first(n.args).args)
+
+    return :(CombDiff.ProductType(:__anonymous, [$(prod_fields...)],
+        [$([QuoteNode(Symbol("_$(i)")) for i in 1:length(prod_fields)]...)]))
+end
+
+function parse_named_type(n::Symbol)
+    n in [:N, :C, :I, :R] && return :($n())
+end
+
+function parse_parametrized_type(n)
+    :(CombDiff.parametrize_type($(parse_anonymous_type(n.args[1])), $(map(parse_node, n.args[2:end])...)))
+end
+
+function parse_anonymous_type(n)
+    is_assignment(n) = isa(n, Expr) && n.head == :(=)
+    is_product(n) = isa(n, Expr) && n.head == :parameters
+    isa(n, Symbol) && return parse_named_type(n)
+    n.head == :-> && return parse_anonymouse_function_type(n)
+    n.head == :tuple && all(is_assignment, n.args) && return parse_anonymouse_map_type(n)
+    n.head == :tuple && all(is_product, n.args) && return parse_anonymouse_product_type(n)
+    n.head == :curly && return parse_parametrized_type(n)
+    n.head == :block && return parse_anonymous_type(first(n.args))
+end
 
 function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
 
@@ -536,16 +592,30 @@ function parse_node(::Type{Param}, p::Union{Expr,Symbol,Number})
         return :(CombDiff.var($(QuoteNode(p)), UndeterminedPCTType()))
     end
 
+    if p.head == :parameters
+        return parse_anonymous_product_node(:(($p),))
+    end
+    if p.head == :tuple
+        return parse_anonymous_product_node(p)
+    end
+
     if p.head == Symbol("::")
         name, type = p.args
+
+
         type_params = []
-        if isa(type, Expr)
-            type_params = type.args[2:end]
-            type = type.args[1]
+        if isa(type, Symbol) || (isa(type, Expr) && type.head == :curly)
+            if isa(type, Expr)
+                type_params = type.args[2:end]
+                type = type.args[1]
+            end
+            type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
+            type = :(CombDiff.parametrize_type($(type), $(map(parse_node, type_params)...)))
+            isa(name, Symbol) && return :(CombDiff.var($(QuoteNode(name)), $(type)))
+
+        else
+            return :(CombDiff.var($(QuoteNode(name)), $(parse_anonymous_type(type))))
         end
-        type = type in base_domains ? :($(type)()) : :(_ctx[$(QuoteNode(type))])
-        type = :(CombDiff.parametrize_type($(type), $(map(parse_node, type_params)...)))
-        isa(name, Symbol) && return :(CombDiff.var($(QuoteNode(name)), $(type)))
     end
     if p.head == :call && p.args[1] == :∈
         param = p.args[2]
@@ -761,6 +831,24 @@ function statement_to_mut(statements::Vector, return_value::Union{Expr,Symbol})
     return :(CombDiff.mutate($(bound...), $(args...), $(return_value)))
 end
 
+function parse_group_index_node(n)
+    parameters = map(parse_node, n.args[1].args)
+    prod_type = parse_anonymous_product_node(n)
+    return :(
+        CombDiff.primitive_call(CombDiff.make_constructor($(prod_type)), $(parameters...))
+    )
+end
+
+function parse_anonymous_product_node(n::Expr)
+    parameters = map(parse_node, n.args[1].args)
+
+    return :(
+        let params = [$(parameters...)]
+            CombDiff.ProductType(:__anonymous, CombDiff.get_type.(params), CombDiff.name.(params))
+        end
+    )
+
+end
 
 function parse_pctvector_node(n::Expr)
     return :(CombDiff.pct_vec($(map(parse_node, n.args)...)))

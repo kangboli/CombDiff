@@ -31,6 +31,7 @@ free_and_dummy(v::T) where {T<:Var} = union!(Set{Var}([v]), get_free(get_type(v)
 free_and_dummy(c::Constructor) = get_free(get_type(c)), Set{Var}()
 
 get_free(d::Domain) = union(get_free(lower(d)), get_free(upper(d)))
+get_free(d::ProductType) = union(get_free.(get_content_type(d))...)
 get_free(::AbstractPCTType) = Set{Var}()
 
 function get_free(m::MapType)
@@ -151,7 +152,7 @@ Base.iterate(g::SymbolGenerator)::Tuple{Symbol,Int} = (base_symbol(g), 1)
 
 Base.iterate(g::SymbolGenerator, state)::Tuple{Symbol,Int} = (Symbol(string(base_symbol(g), "_", state)), state + 1)
 
-function new_symbol(nodes::Vararg{APN}; num=1, symbol=:_i)::Vector{Symbol}
+function new_symbol(nodes::Vararg; num=1, symbol=:_i)::Vector{Symbol}
     symbols = Vector{Symbol}()
     num == 0 && return symbols
     g = SymbolGenerator(symbol)
