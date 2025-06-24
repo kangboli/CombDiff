@@ -99,7 +99,7 @@ function serialize_product(s::Serialize)
 
     indices = args(p)
 
-    dims = [constant(1), accumulate(mul, type_length.(get_content_type(get_type(indices))))...]
+    dims = [constant(1), accumulate(mul, (t->mul(v_wrap(type_length(t))...)).(get_content_type(get_type(indices))))...]
 
     new_s = add(map((prefactor, c, a) -> mul(prefactor, subtract(strip_indexing(c, a), constant(1))), dims,
             map(t -> parametrize_type(N(), type_length(t)), get_content_type(get_type(p))),

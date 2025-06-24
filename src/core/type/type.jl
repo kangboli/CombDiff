@@ -77,6 +77,15 @@ function make_constructor(p::ProductType)
     Constructor(derive_constructor_type(p), get_typename(p))
 end
 
+function set_i(p::ProductType, i, new_item)
+    replace_item(j::Integer) = i == j ? new_item : get_content_type(p)[j]
+    return ProductType(
+        get_typename(p),
+        map(replace_item, 1:length(p)),
+        get_names(p),
+        meta(p)
+    )
+end
 
 """
     name(d)

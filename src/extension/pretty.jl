@@ -133,7 +133,7 @@ verbose(v::Var) = "$(pretty(v))::$(verbose(get_type(v)))"
 
 latex(c::Call) = "($(latex(mapp(c))))($(latex(args(c))))"
 
-verbose(c::Call) = "($(pretty(mapp(c))))($(pretty(args(c))))::$(pretty(get_type(c)))"
+verbose(c::Call) = "($(pretty(mapp(c))))($(verbose(args(c))))::$(pretty(get_type(c)))"
 
 function pretty(c::Conjugate)
 
@@ -330,7 +330,7 @@ function latex(p::PrimitiveCall)
     end
 end
 
-verbose(p::PrimitiveCall) = "$(print_color[:constructor](pretty(mapp(p))))($(pretty(args(p), false)))::$(pretty(get_type(p)))"
+verbose(p::PrimitiveCall) = "$(print_color[:constructor](pretty(mapp(p))))($(verbose(args(p), false)))::$(pretty(get_type(p)))"
 
 function pretty(p::PrimitiveCall)
     #= if isa(mapp(p), AbstractPullback) && last(args(p)) == constant(1)
@@ -345,7 +345,8 @@ function pretty(p::PrimitiveCall)
         @assert isa(first(args(p)), Constant)
         prod_type = get_type(mapp(p))
 
-        startswith(string(get_typename(get_type(mapp(p)))), "__") && return print_color[:product_type](string(get_names(prod_type)[get_body(first(args(p)))]))
+        startswith(string(get_typename(get_type(mapp(p)))), "__") &&
+            return print_color[:product_type](string(get_names(prod_type)[get_body(first(args(p)))]))
         return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
     end
 
