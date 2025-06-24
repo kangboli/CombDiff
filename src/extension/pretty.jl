@@ -90,12 +90,15 @@ function pretty(v::Var)
 
     v_type = get_type(v)
     if startswith(string(name(v)), "__")
+        var_str = print_color[:hidden](lstrip(var_str, '_'))
+    end
+    #= if startswith(string(name(v)), "__")
         if isa(v_type, ProductType)
             return "(;$(join(map((n, t) -> "$(string(n))" ,get_names(v_type), get_content_type(v_type)), ", ")))"
         else
             return print_color[:hidden](lstrip(var_str, '_'))
         end
-    end
+    end =#
 
     if isa(v_type, MapType)
         return print_color[:map](var_str)
@@ -346,7 +349,9 @@ function pretty(p::PrimitiveCall)
         prod_type = get_type(mapp(p))
 
         startswith(string(get_typename(get_type(mapp(p)))), "__") &&
-            return print_color[:product_type](string(get_names(prod_type)[get_body(first(args(p)))]))
+            return print_color[:product_type](
+            "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
+            )
         return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
     end
 

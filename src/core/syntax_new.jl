@@ -147,7 +147,7 @@ macro main(expr, f=:_, ctx=:(TypeContext()))
             context_types = typeof.(free_vals)
             converted = CombDiff.convert_pct_type.(free_vals)
             func = pct_map(map(var, free, converted)..., func)
-            reverse_inference(inference(func, _ctx)), free_vals
+            inference(reverse_inference(inference(func, _ctx))), free_vals
         end))
 end
 
@@ -186,7 +186,7 @@ macro mein(expr, f=:_, ctx=:(TypeContext()))
             if compiled === nothing
                 converted = CombDiff.convert_pct_type.(free_vals)
                 func = pct_map(map(var, free, converted)..., func)
-                compiled = eval(CombDiff.codegen(reverse_inference(inference(func, _ctx))))
+                compiled = eval(CombDiff.codegen(inference(reverse_inference(inference(func, _ctx)))))
                 CombDiff.function_dict[$(QuoteNode(expr))=>context_types] = compiled
             end
             Base.invokelatest(compiled, (free_vals...))

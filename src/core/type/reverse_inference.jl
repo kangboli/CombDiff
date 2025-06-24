@@ -7,7 +7,7 @@ function reverse_inference(n::APN)
     set_terms(n, map(reverse_inference, terms(n))...)
 end
 
-function reverse_inference(m::Map)
+function reverse_inference(m::T) where T <: Union{Map, Sum, Fold}
     new_bounds = []
     new_body = reverse_inference(get_body(m))
     for b in get_bound(m)
@@ -22,7 +22,7 @@ function reverse_inference(m::Map)
             push!(new_bounds, b)
         end
     end
-    return pct_map(new_bounds..., new_body)
+    return make_node(T, pct_vec(new_bounds...), new_body)
 end
 
 function reverse_inference(c::T) where {T<:AbstractCall}
@@ -91,8 +91,13 @@ function merge_type(::S, ::T) where {S<:AbstractPCTType,T<:AbstractPCTType}
     error("reverse inference failed. $(S) and $(T) cannot be matched")
 end
 
+function merge_type(a::T, ::T) where {T<:AbstractPCTType}
+    return a
+end
+
 function merge_type(s::T, t::T) where {T<:AbstractDomain}
     lower(s) == lower(t) && upper(s) == upper(t) || error("reverse inference failed. $(pretty(s)) and $(pretty(t)) cannot be matched")
+    return s
 end
 
 function merge_type(s::T, t::T) where {T<:AbstractVecType}

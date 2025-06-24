@@ -395,7 +395,7 @@ function blaserize_neighbors(a::Add)
     return result
 end
 
-function map_cancel_neighbors(m::Map)
+function map_cancel_neighbors(m::Union{CBI, Map})
     result = NeighborList()
     bounds = content(get_bound(m))
     if isa(get_body(m), AbstractCall)
@@ -414,7 +414,7 @@ end
 ->
 x ⋅ (i, j) -> A(i, j)
 """
-function map_out_neighbors(m::Map)
+function map_out_neighbors(m::Union{CBI, Map})
     result = NeighborList()
     bounds = content(get_bound(m))
     all(t -> tensorize(get_type(t)), bounds) || return result
@@ -435,7 +435,7 @@ function map_out_neighbors(m::Map)
     return result
 end
 
-function map_dist_neighbors(m::Map)
+function map_dist_neighbors(m::Union{CBI, Map})
     result = NeighborList()
     term = get_body(m)
     isa(term, Add) || return result
@@ -445,7 +445,7 @@ function map_dist_neighbors(m::Map)
     return result
 end
 
-function map_elementwise_prod(m::Map)
+function map_elementwise_prod(m::Union{CBI, Map})
     result = NeighborList()
     term = get_body(m)
     isa(term, Mul) || return result
@@ -458,7 +458,7 @@ function map_elementwise_prod(m::Map)
 end
 
 
-function blaserize_neighbors(m::Map)
+function blaserize_neighbors(m::Union{CBI, Map})
     result = NeighborList()
     append!(result, map_cancel_neighbors(m))
     append!(result, map_out_neighbors(m))

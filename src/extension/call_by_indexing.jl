@@ -12,7 +12,8 @@ function type_length(t::ElementType)
 end
 
 function type_length(t::ProductType)
-    return pct_vec(map(type_length, get_content_type(t))...)
+    #= return pct_vec(map(type_length, get_content_type(t))...) =#
+    return mul(map(type_length, get_content_type(t))...)
 end
 
 function call_by_indexing(bound::PCTVector, body::APN)
@@ -96,10 +97,11 @@ function serialize_product(s::Serialize)
     result = NeighborList()
     p = get_body(s)
     isa(get_type(p), ProductType) || return result
+    isa(p, AbstractCall) || return result
 
     indices = args(p)
 
-    dims = [constant(1), accumulate(mul, (t->mul(v_wrap(type_length(t))...)).(get_content_type(get_type(indices))))...]
+    dims = [constant(1), accumulate(mul, (t -> mul(v_wrap(type_length(t))...)).(get_content_type(get_type(indices))))...]
 
     new_s = add(map((prefactor, c, a) -> mul(prefactor, subtract(strip_indexing(c, a), constant(1))), dims,
             map(t -> parametrize_type(N(), type_length(t)), get_content_type(get_type(p))),
@@ -119,6 +121,13 @@ function serialization_canceling(s::Serialize)
     return result
 end
 
+function serialize_domain(s::Serialize)
+    result = NeighborList()
+    body = get_body(s)
+    isa(get_type(body), Domain) || return result
+    push!(result, subtract(add(body, lower(get_type(body))), constant(1)); dired=true, name="serialize_domain")
+    return result
+end
 """
 serialize{S}(index{S}(i)) = i
 """
@@ -126,6 +135,7 @@ function neighbors(s::Serialize; _...)
     result = NeighborList()
     append!(result, serialization_canceling(s))
     append!(result, serialize_product(s))
+    append!(result, serialize_domain(s))
     return result
 end
 
