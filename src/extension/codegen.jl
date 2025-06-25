@@ -1,4 +1,4 @@
-export codegen
+export codegen, remove_line_numbers
 
 function find_dimensions(v::Var, summand::APN, existing_dims=[])
     for t in terms(summand)
@@ -277,7 +277,8 @@ end
 function codegen(n::Let)
     assignments = [:($(codegen(b)) = $(codegen(a))) for (b, a) in zip(get_bound(n), args(n))]
     return :(
-        let $(assignments...)
+        begin
+            $(assignments...)
             $(codegen(get_body(n)))
         end
     )
@@ -372,6 +373,16 @@ function codegen(c::Constructor)
     )
 
     :($args -> $return_value)
+end
 
+
+remove_line_numbers(e::Any) = e
+function remove_line_numbers(expr::Expr)
+    #= expr.args = filter(a -> !isa(a, LineNumberNode), expr.args)
+    expr.args = map(purge_line_numbers, expr.args) =#
+    if expr.head == :macrocall
+        return expr
+    end
+    @set expr.args = [remove_line_numbers(a) for a in expr.args if !isa(a, LineNumberNode)]
 end
 

@@ -47,7 +47,7 @@ end
 
 macro nein(expr, f=:_, ctx=:(TypeContext()))
 
-    expr = purge_line_numbers(expr.args[1])
+    expr = purge_line_numbers!(expr.args[1])
     return_node = if f == :_
         :(content)
     else
@@ -78,7 +78,7 @@ end
 
 
 macro neintype(expr, f=:_, ctx=:(TypeContext()))
-    expr = purge_line_numbers(expr.args[1])
+    expr = purge_line_numbers!(expr.args[1])
     expr = :(@domain _tmp_domain $(expr))
 
     return esc(:(
@@ -90,7 +90,7 @@ end
 
 
 macro neinspace(expr, f=:_, ctx=:(TypeContext()))
-    expr = purge_line_numbers(expr.args[1])
+    expr = purge_line_numbers!(expr.args[1])
     expr = :(@space _tmp_space begin
         $(expr)
     end)
@@ -105,7 +105,7 @@ end
 
 macro neinshow(expr, f=:_, ctx=:(TypeContext()))
 
-    expr = purge_line_numbers(expr.args[1])
+    expr = purge_line_numbers!(expr.args[1])
     return_node = if f == :_
         :(content)
     else
@@ -126,7 +126,7 @@ end
 
 macro main(expr, f=:_, ctx=:(TypeContext()))
     expr = hasfield(typeof(expr), :head) && expr.head == :quote ? expr.args[1] : expr
-    expr = purge_line_numbers(expr)
+    expr = purge_line_numbers!(expr)
     node = parse_node(expr)
     if isa(node, MutatingStatement)
         node = statement_to_mut([node], lhs(node))
@@ -155,7 +155,7 @@ end
 """
 macro mein(expr, f=:_, ctx=:(TypeContext()))
     expr = hasfield(typeof(expr), :head) && expr.head == :quote ? expr.args[1] : expr
-    expr = purge_line_numbers(expr)
+    expr = purge_line_numbers!(expr)
     node = parse_node(expr)
     if isa(node, MutatingStatement)
         node = statement_to_mut([node], lhs(node))

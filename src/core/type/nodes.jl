@@ -341,7 +341,7 @@ mutable struct Sum <: Contraction
     bound::PCTVector
     body::APN
     function Sum(type, bound::PCTVector, summand::APN)
-        bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, N()) : t for t in content(bound)]...)
+        #= bound = set_content(bound, [get_type(t) == UndeterminedPCTType() ? set_type(t, N()) : t for t in content(bound)]...) =#
         signatures = Vector{AbstractSignatureTree}()
         new(type, signatures, bound, summand)
     end

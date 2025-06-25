@@ -1,6 +1,6 @@
 using REPL
 export parse_node,
-    purge_line_numbers,
+    purge_line_numbers!,
     @pit,
     @pct,
     activate_interactive_mode!,
@@ -84,7 +84,7 @@ function continuition(f::APN, new_body)
 end
 
 function pct_ast_transform(expr::Expr, repl=:cmd)
-    expr = purge_line_numbers(expr)
+    expr = purge_line_numbers!(expr)
     expr = purge_empty_exprs(expr)
     # @show expr
     # expr.args[2] = expr.args[2].args[1]
@@ -103,7 +103,7 @@ current_ast_transforms() = isdefined(Base, :active_repl_backend) ?
 
 function pct_ast_transform_pluto(expr::Expr)
     expr.head == :block && return expr
-    expr = purge_line_numbers(expr)
+    expr = purge_line_numbers!(expr)
     expr = purge_empty_exprs(expr)
 
     expr = Expr(:macrocall, Symbol("@pct"), :(CombDiff.interactive_context), expr)
@@ -166,11 +166,11 @@ end
 # There are line number nodes in Julia's AST. They get in the way and are of no 
 # use to us for now, so we are purging them from the start.
 
-purge_line_numbers(e::Any) = e
-function purge_line_numbers(expr::Expr)
+purge_line_numbers!(e::Any) = e
+function purge_line_numbers!(expr::Expr)
     #= expr.args = filter(a -> !isa(a, LineNumberNode), expr.args)
     expr.args = map(purge_line_numbers, expr.args) =#
-    expr.args = [purge_line_numbers(a) for a in expr.args if !isa(a, LineNumberNode)]
+    expr.args = [purge_line_numbers!(a) for a in expr.args if !isa(a, LineNumberNode)]
     return expr
 end
 purge_empty_exprs(e::Any) = e
@@ -213,7 +213,7 @@ end
 const univariate_symbols = [:log, :exp]
 
 function parse_node(n::Expr)
-    n = purge_line_numbers(n)
+    n = purge_line_numbers!(n)
     n.head == Symbol(:quote) && return parse_quantum_field_node(n)
     n.head == :. && return parse_escape_node(n)
     if n.head == :macrocall
@@ -363,7 +363,7 @@ end
 get_expr(n::MapTypeNode) = n.expr
 
 function parse_maptype_node(s::Expr)
-    s = purge_line_numbers(s)
+    s = purge_line_numbers!(s)
     @assert s.args[1] == Symbol("@space")
     name = s.args[2]
     type_params = nothing

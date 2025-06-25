@@ -55,7 +55,7 @@ verbose(t::APN) = pretty(t)
 
 function verbose(d::Domain)
     name = haskey(meta(d), :name) ? meta(d)[:name] : ""
-    "$(name)[$(verbose(lower(d))), $(verbose(upper(d)))]"
+    "$(name)[$(pretty(lower(d))), $(pretty(upper(d)))]"
 end
 
 function pretty(m::AbstractMap, typed=false)
@@ -294,9 +294,7 @@ function latex(m::Add)
 end
 
 function verbose(a::Add)
-    "(+\n" *
-    indent("$(join(pretty.(content(get_body(a))), ",\n"))") *
-    "\n)::$(pretty(get_type(a)))"
+    return "($(join(map(t->pretty(t), content(get_body(a))), "+")))::$(pretty(get_type(a)))"
 end
 
 function pretty(p::ParametricVar)
@@ -350,7 +348,7 @@ function pretty(p::PrimitiveCall)
 
         startswith(string(get_typename(get_type(mapp(p)))), "__") &&
             return print_color[:product_type](
-            "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
+                "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
             )
         return "$(pretty(mapp(p))).$(get_names(prod_type)[get_body(first(args(p)))])"
     end
@@ -501,7 +499,11 @@ function pretty(d::ParametricMapType)
 end
 
 function pretty(m::MapType)
-    "[$(pretty(get_bound_type(m)))->$(pretty(get_body_type(m)))]"
+    if cbi_applicable(m) && all(t->lower(t) == constant(1), get_bound_type(m))
+        "$(pretty(get_body_type(m))){$(join(pretty.(map(upper, get_bound_type(m))), ","))}"
+    else
+        "[$(pretty(get_bound_type(m)))->$(pretty(get_body_type(m)))]"
+    end
 end
 
 function pretty(v::AbstractVecType)
