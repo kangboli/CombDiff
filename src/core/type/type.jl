@@ -69,6 +69,10 @@ ProductType(typename, content, names) = ProductType(typename, content, names, Di
 get_names(p::ProductType) = p.names
 get_typename(p::ProductType) = p.typename
 
+function product_type_from_vec(v::Vector)
+    return ProductType(:__anonymous, get_type.(v), name.(v))
+end
+
 function derive_constructor_type(p::ProductType)
     return MapType(VecType(get_content_type(p)), p)
 end

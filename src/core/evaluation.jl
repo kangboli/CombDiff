@@ -117,8 +117,7 @@ function fast_rename!(n::Var, old::Var, new::Symbol)::Var
     return n
 end
 
-fast_rename!(n::Constant, ::Var, ::Symbol)::Constant = n
-fast_rename!(n::FieldOperators, ::Var, ::Symbol) = n
+fast_rename!(n::TerminalNode, ::Var, ::Symbol) = n
 
 
 """
@@ -294,7 +293,7 @@ end
 function reconstruct(n::PrimitiveCall, old::APN, new::APN, replace_dummy::Bool)
     new_args = map(t -> all_subst(t, old, new), content(args(n)))
     new_map = all_subst(mapp(n), old, new, replace_dummy)
-    return primitive_call(new_map, new_args...)
+    return call(new_map, new_args...)
 end
 
 #= function reconstruct(n::PrimitiveCall, old::APN, new::Map, replace_dummy::Bool)

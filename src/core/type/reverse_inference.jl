@@ -36,7 +36,6 @@ function reverse_inference(c::T) where {T<:AbstractCall}
                 push!(new_args, a)
             end
         end
-        #= println.(verbose.(new_args)) =#
     elseif isa(c_mapp, Constructor) && !is_undetermined_type(get_type(c))
         for (a, t) in zip(args(c), get_content_type(get_type(c)))
             if is_undetermined_type(get_type(a))
@@ -54,6 +53,8 @@ function reverse_inference(c::T) where {T<:AbstractCall}
             new_type = set_i(get_type(c_mapp), get_body(first(new_args)), get_type(c))
             c_mapp = set_type(c_mapp, new_type)
         end
+    else
+        error("reverse inference failed")
     end
 
     #= return make_node(T, c_mapp, pct_vec(map(reverse_inference, new_args)...)) =#

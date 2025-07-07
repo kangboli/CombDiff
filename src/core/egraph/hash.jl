@@ -22,6 +22,8 @@ function trunc_hash(n::T, h::UInt, level=3) where {T<:APN}
     return result + reduce(xor, [trunc_hash(t, h, level - 1) for t in terms(n)])
 end
 
+trunc_hash(s::Symbol, h::UInt, ::Int) = hash(s, h)
+
 Base.:(==)(t_1::T, t_2::T) where {T<:ElementType} = true
 trunc_hash(::T, h::UInt, ::Int) where {T<:ElementType} = T.hash
 trunc_hash(n::Constant, h::UInt, ::Int) = hash(get_body(n), h)

@@ -235,12 +235,12 @@ end
 
 grad(n::APN) = make_node(Grad, n)
 
-#= struct Jacobian <: APN
+struct Jacobian <: APN
     type::AbstractPCTType
     body::APN
 end
 
-jacobian(n::APN) = make_node(Jacobian, n) =#
+jacobian(n::APN) = make_node(Jacobian, n)
 
 abstract type AbstractCall <: APN end
 
@@ -527,13 +527,14 @@ function conjugate(n::PrimitiveCall)
 end
 
 function primitive_call(mapp::APN, args::Vararg)
+    isa(mapp, Map) && error("!!!")
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 
 abstract type FieldOperators <: TerminalNode end
 
 
-function call(mapp::Union{Conjugate,Var,PrimitivePullback,PrimitiveCall,FieldOperators,Fold}, args::Vararg)
+function call(mapp::Union{Conjugate,TerminalNode,PrimitivePullback,PrimitiveCall,Fold}, args::Vararg)
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 

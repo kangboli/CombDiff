@@ -243,7 +243,7 @@ function parse_node(n::Expr)
         func == :∘ && return parse_composite_node(n)
         func == :▷ && return parse_reverse_composite_node(n)
         (func == :∇ || func == :grad) && return parse_grad_node(n)
-        #= (func == :𝒥 || func == :jacobian) && return parse_jacobian_node(n) =#
+        (func == :𝒥 || func == :jacobian) && return parse_jacobian_node(n)
         func == :vac_exp && return parse_vac_exp_node(n)
         func in univariate_symbols && return parse_univariate_node(n)
         (func == :pullback || func == :𝒫) && return parse_pullback_node(n)
@@ -324,9 +324,9 @@ function parse_grad_node(n::Expr)
     #= :(CombDiff.propagate_k(CombDiff.pullback($(parse_node(n.args[2]))))) =#
 end
 
-#= function parse_jacobian_node(n)
+function parse_jacobian_node(n)
     :(CombDiff.jacobian($(parse_node(n.args[2]))))
-end =#
+end
 
 function parse_pushforward_node(n)
     :(CombDiff.pushforward($(parse_node(n.args[2]))))
@@ -892,8 +892,12 @@ function convert_pct_type(t::DataType)
     return MapType(VecType(fill(N(), D)), output_type)
 end
 
-function convert_pct_type(::T) where {T<:Union{Number,AbstractArray}}
+function convert_pct_type(::T) where {T <: Number}
     return convert_pct_type(T)
+end
+
+function convert_pct_type(t::T) where {T<:AbstractArray}
+    return parametrize_type(convert_pct_type(T), constant.(size(t))...)
 end
 
 

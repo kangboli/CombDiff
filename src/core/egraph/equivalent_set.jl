@@ -326,7 +326,7 @@ neighbor_registry[AbstractCall] = [
     let_out_call,
     delta_splat_call,
     meta_prop_neighbors,
-    bypass_eval,
+    #= bypass_eval, =#
 ]
 
 function neighbors(c::AbstractCall; settings=default_settings())

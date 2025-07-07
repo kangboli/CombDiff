@@ -581,7 +581,7 @@ function decompose(z::APN, ov::Map)::PComp
         new_bounds = set_i(new_bounds, i, var(first(new_symbol(new_bounds, ov, z; symbol=Symbol("_$(name(new_bounds[i]))")))))
     end
     #= new_bounds = map(var, new_symbol(z, ov; num=length(get_bound(ov))), get_type(get_bound(ov))) =#
-    ov = pct_map(new_bounds..., evaluate(call(ov, new_bounds...)))
+    ov = pct_map(new_bounds..., ecall(ov, new_bounds...))
 
     bs, fb = get_bound(ov), get_body(ov)
     comp(z, Fibration(bs, decompose(z, fb), MapType(v_wrap(get_type(z)), get_type(ov))))

@@ -438,7 +438,7 @@ function partial_inference(::Type{FixedPoint}, body::APN)
     return v_unwrap(get_bound_type(get_type(body)))
 end
 
-#= function partial_inference(::Type{Jacobian}, body::APN)
+function partial_inference(::Type{Jacobian}, body::APN)
     maptype = get_type(body)
     maptype == UndeterminedPCTType() && return UndeterminedPCTType()
     if isa(maptype, MapType)
@@ -454,7 +454,7 @@ end
             MapType(VecType([input_type]), MapType(VecType(repeat(in_bound, 2)), get_body_type(input_type))))
         return
     end
-end =#
+end
 
 function partial_inference(::Type{T}, mapp) where {T<:AbstractPushforward}
     if isa(get_type(mapp), MapType)

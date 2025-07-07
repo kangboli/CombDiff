@@ -49,8 +49,13 @@ function eval_pullback(g::Grad)
     return evaluate(propagate_k(eval_pullback(pullback(get_body(g)))))
 end
 
-#= """
+"""
 𝒥f(x) = (i, j) -> 𝒫(f)(x, t -> δ(i, t, 1))(j)
+𝒫(f)(x, k)(i) = sum_j 𝒥f(x)(j, i) k(j)
+𝒫(f)(x, k)(i) = sum_j 𝒥f(x)(j, i) (j->δ(j, t, 1))(j)
+𝒫(f)(x, (j->δ(j, t, 1)))(i) = sum_j 𝒥f(x)(j, i) δ(j, t, 1)
+𝒫(f)(x, (j->δ(j, t, 1)))(i) = 𝒥f(x)(t, i) 
+𝒫(f)(x, (t->δ(t, j, 1)))(i) = 𝒥f(x)(j, i) 
 """
 function eval_pullback(g::Jacobian)
 
@@ -60,13 +65,12 @@ function eval_pullback(g::Jacobian)
     i_vars = map(var, new_symbol(g; num=length(bound_types), symbol=:_i), get_content_type(bound_types))
     j_vars = map(var, new_symbol(g, i_vars...; num=length(bound_types), symbol=:_j), get_content_type(bound_types))
     t_vars = map(var, new_symbol(g, i_vars..., j_vars...; num=length(bound_types), symbol=:_t), get_content_type(bound_types))
-
-    return pct_map(bound, pct_map(i_vars..., j_vars...,
-        ecall(ecall(pullback(get_body(g)), bound,
-                pct_map(t_vars..., delta(
-                    i_vars..., t_vars..., constant(1)))
-            ), j_vars...)))
-end =#
+    inner_pullback = eval_pullback(pullback(get_body(g)))
+    result = pct_map(bound, pct_map(i_vars..., j_vars...,
+        ecall(ecall(inner_pullback, bound,
+                pct_map(t_vars..., delta(i_vars..., t_vars..., constant(1)))), j_vars...)))
+    return simplify(result)
+end
 
 """
 ℱ (g) = (x, h) -> 𝒫 (k -> 𝒫 g(x, k))(x, h)
@@ -75,13 +79,19 @@ function eval_pullback(p::Pushforward)
     g = get_body(p)
     xs, ts = get_bound(g), v_wrap(get_body(g))
 
-    hs = map(var, new_symbol(p; num=length(xs), symbol=:_h), get_type.(xs))
+    dxs = []
+    for (n, t) in zip(name.(xs), get_type.(xs))
+        dx = var(first(new_symbol(p, dxs...; num=1, symbol=Symbol("δ_$(n)"))), t)
+        push!(dxs, dx)
+    end
     ks = map(var, new_symbol(p; num=length(ts), symbol=:_k), get_type.(ts))
 
-    return pct_map(xs..., hs...,
-        ecall(eval_pullback(pullback(
-                pct_map(ks..., ecall(eval_pullback(pullback(g)), xs..., ks...))
-            )), xs..., hs...)
+    inner_pullback = eval_pullback(pullback(
+        pct_map(ks..., ecall(eval_pullback(pullback(g)), xs..., ks...))
+    ))
+
+    return pct_map(xs..., dxs...,
+        ecall(inner_pullback, ks..., dxs...)
     )
 
 end
@@ -126,7 +136,7 @@ function eval_pullback_full(n::APN)
     return eval_all(n)
 end
 
-function dropp(p::Pullback)
+function dropp(p::Union{Pullback, Grad})
     m = get_body(p)
     return dropp(m)
 end

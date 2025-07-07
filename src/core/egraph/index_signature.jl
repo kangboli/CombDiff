@@ -64,7 +64,7 @@ function SignatureTree(index::S, v::T, ::Vector{R}) where {S<:Var,T<:Var,R<:Var}
     return SignatureTree(T, name(index) == name(v) ? nothing : v, Vector{SignatureTree}())
 end
 
-function SignatureTree(::S, c::Constant, ::Vector{R}) where {S<:Var,R<:Var}
+function SignatureTree(::S, c::Union{Constant, Constructor}, ::Vector{R}) where {S<:Var,R<:Var}
     return SignatureTree(Constant, c, Vector{SignatureTree}())
 end
 

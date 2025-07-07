@@ -79,7 +79,7 @@ end
 
 function verbose(m::Map)
     #= range_str(range::PCTVector) = isempty(range) ? "" : " ∈ ($(pretty(range)))" =#
-    params = map(v -> "$(verbose(v)))", content(get_bound(m)))
+    params = map(v -> "$(verbose(v))", content(get_bound(m)))
     "($(join(params, ", ")))->\n" *
     "$(indent(verbose(get_body(m))))\n" *
     "::$(verbose(get_type(m)))"
@@ -370,10 +370,9 @@ end
 
 function latex(v::PCTVector, paren=false)
     terms = (t -> isa(t, PCTVector) ? latex(t, true) : latex(t)).(content(v))
-    # if any(t->length(t) > 50, terms) && length(terms) > 1
-    #     return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
-    # else
-    # end
+    if any(t -> length(t) > 50, terms) && length(terms) > 1
+        return "\\begin{bmatrix} $(join(terms, "\\\\")) \\end{bmatrix}"
+    end
     result = join(terms, ", ")
     return paren ? "\\left($(result)\\right)" : result
 end
@@ -499,7 +498,7 @@ function pretty(d::ParametricMapType)
 end
 
 function pretty(m::MapType)
-    if cbi_applicable(m) && all(t->lower(t) == constant(1), get_bound_type(m))
+    if cbi_applicable(m) && all(t -> lower(t) == constant(1), get_bound_type(m))
         "$(pretty(get_body_type(m))){$(join(pretty.(map(upper, get_bound_type(m))), ","))}"
     else
         "[$(pretty(get_bound_type(m)))->$(pretty(get_body_type(m)))]"
@@ -594,14 +593,22 @@ function pretty(g::Grad)
     "grad($(pretty(get_body(g))))"
 end
 
+function latex(g::Grad)
+    "\\nabla($(latex(get_body(g))))"
+end
+
 function pretty(f::FixedPoint)
     "fixed($(pretty(get_body(f))))"
 end
 
-#= function pretty(f::Jacobian)
+function pretty(f::Jacobian)
     "jacobian($(pretty(get_body(f))))"
-end =#
+end
 
 function pretty(p::Pushforward)
     "pushforward($(pretty(get_body(p))))"
+end
+
+function verbose(p::Pushforward)
+    "pushforward($(verbose(get_body(p))))"
 end
