@@ -7,7 +7,7 @@ function reverse_inference(n::APN)
     set_terms(n, map(reverse_inference, terms(n))...)
 end
 
-function reverse_inference(m::T) where T <: Union{Map, Sum, Fold}
+function reverse_inference(m::T) where {T<:Union{Map,Sum,Fold}}
     new_bounds = []
     new_body = reverse_inference(get_body(m))
     for b in get_bound(m)
@@ -25,9 +25,25 @@ function reverse_inference(m::T) where T <: Union{Map, Sum, Fold}
     return make_node(T, pct_vec(new_bounds...), new_body)
 end
 
+function reverse_inference(l::AbstractLet)
+    call_to_let(reverse_inference(let_to_call(l)))
+end
+
 function reverse_inference(c::T) where {T<:AbstractCall}
-    new_args = []
+
     c_mapp = mapp(c)
+    #= c = invoke(reverse_inference, Tuple{APN}, c) =#
+    new_args = map(reverse_inference, args(c))
+    if isa(c_mapp, Map)
+        c_mapp = inference(pct_map(
+            map(set_type, get_bound(c_mapp), get_type.(new_args))...,
+            get_body(c_mapp)))
+        c_mapp = reverse_inference(c_mapp)
+    end
+
+    c = make_node(T, c_mapp, new_args)
+
+    new_args = []
     if !is_undetermined_type(get_type(c_mapp))
         for (a, t) in zip(args(c), get_bound_type(get_type(c_mapp)))
             if is_undetermined_type(get_type(a))
@@ -54,22 +70,21 @@ function reverse_inference(c::T) where {T<:AbstractCall}
             c_mapp = set_type(c_mapp, new_type)
         end
     else
-        error("reverse inference failed")
+        new_args = args(c)
+        #= error("reverse inference failed: $(pretty(c_mapp)):$(pretty(get_type(c_mapp))) on $(pretty(args(c)))") =#
     end
 
     #= return make_node(T, c_mapp, pct_vec(map(reverse_inference, new_args)...)) =#
     new_call = make_node(T, c_mapp, pct_vec(new_args...))
+    return new_call
     #= new_call = make_node(T, c_mapp, pct_vec(map(reverse_inference, new_args)...)) =#
-    result = invoke(reverse_inference, Tuple{APN}, new_call)
-    #= println("====")
-    println(verbose(c))
-    println(verbose(c_mapp))
-    println(verbose(new_call))
-    println(verbose(result))
-    println("====") =#
-    return result
+    #= result = invoke(reverse_inference, Tuple{APN}, new_call)
+    return result =#
 end
 
+#= function retrieve_type_from_usage(r::Copy, s::APN)
+    return retrieve_type_from_usage(get_body(r), s)
+end =#
 function retrieve_type_from_usage(r::Var, s::Var)
     return name(r) == name(s) ? [get_type(s)] : []
 end

@@ -134,7 +134,7 @@ macro main(expr, f=:_, ctx=:(TypeContext()))
     return_node = f == :_ ? node : :(continuition($(f), $(node)))
 
     return esc(:(
-        begin
+        let
             _ctx = $(ctx)
 
             func = $(return_node)

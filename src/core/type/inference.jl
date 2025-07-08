@@ -102,7 +102,7 @@ end =#
 
 inference(n::Any) = n
 
-function check_parametric_type_capture!(bounds, body, context)
+function check_parametric_type_capture!(bounds, body, context::TypeContext)
     free = get_free(inference(body, context))
 
     for t in free
@@ -155,13 +155,16 @@ end
 
 
 function inference(v::Var, context::TypeContext)
+    is_undetermined_type(get_type(v)) || return v
     new_v = find_var_by_name(context, name(v))
     if new_v !== nothing
         return set_type(new_v, inference(get_type(new_v), context))
-    else
+    elseif haskey(get_name_to_type(context), name(v))
         constructor_type = first(get_name_to_type(context)[name(v)])
         #= return set_type(v, inference(derive_constructor_type(constructor_type), context)) =#
         return make_constructor(constructor_type)
+    else
+        return v
     end
 end
 

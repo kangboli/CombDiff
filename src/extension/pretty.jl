@@ -451,7 +451,7 @@ function pretty(c::Copy)
 end
 
 function latex(c::Copy)
-    "\\$(latex(get_body(c)))"
+    "$(latex(get_body(c)))"
 end
 
 

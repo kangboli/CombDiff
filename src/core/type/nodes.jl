@@ -153,7 +153,7 @@ function pct_map(terms::Vararg)
     body = last(terms)
     new_terms = []
     for t in terms[1:end-1]
-        if isa(t, ProductType) 
+        if isa(t, ProductType)
             name = popfirst!(p_names)
             push!(new_terms, var(name, t))
             for n in get_names(t)
@@ -527,7 +527,6 @@ function conjugate(n::PrimitiveCall)
 end
 
 function primitive_call(mapp::APN, args::Vararg)
-    isa(mapp, Map) && error("!!!")
     make_node(PrimitiveCall, mapp, make_node(PCTVector, args...))
 end
 

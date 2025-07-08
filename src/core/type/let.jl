@@ -19,7 +19,7 @@ end
 
 is_combined(m::AbstractWithMemory) = is_combined(get_body(m))
 
-is_combined(l::Let) = !isa(get_body(l), Let) 
+is_combined(l::Let) = !isa(get_body(l), Let)
 
 combine_let(n::AbstractWithMemory) = with_memory(get_memory(n), combine_let(get_body(n)))
 
@@ -33,6 +33,7 @@ let_to_call(n::APN) = n
 
 function let_to_call(l::Let)
     is_split(l) || return let_to_call(split_let(l))
+    all(t -> isa(t, Copy), get_bound(l)) && return primitive_call(pct_map(get_body.(get_bound(l))..., let_to_call(get_body(l))), args(l)...)
     call(pct_map(get_bound(l)..., let_to_call(get_body(l))), args(l)...)
 end
 
@@ -41,6 +42,11 @@ call_to_let(n::APN) = n
 call_to_let(n::AbstractWithMemory) = with_memory(get_memory(n), call_to_let(get_body(n)))
 
 function call_to_let(c::PrimitiveCall)
+    m = mapp(c)
+    return combine_let(pct_let(pct_copy.(get_bound(m))..., args(c)..., call_to_let(get_body(m))))
+end
+
+function call_to_let(c::Call)
     m = mapp(c)
     return combine_let(pct_let(get_bound(m)..., args(c)..., call_to_let(get_body(m))))
 end
