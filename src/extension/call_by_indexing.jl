@@ -202,7 +202,7 @@ function map_cbi(m::Map; settings=default_settings())
     return result
 end
 
-push!(neighbor_registry[Map], map_cbi)
+push!(neighbor_registry[Map],  map_cbi)
 
 
 function to_cbi(n::APN)
@@ -233,7 +233,7 @@ function call_get_data(c::AbstractCall)
     return result
 end
 
-push!(neighbor_registry[AbstractCall], call_get_data)
+push!(neighbor_registry[AbstractCall], :cbi => call_get_data)
 
 """
 sum(((;a, b))->t((;a, b)))
@@ -257,7 +257,7 @@ function sum_cbi(s::Sum)
     return result
 end
 
-push!(neighbor_registry[Sum], sum_cbi)
+push!(neighbor_registry[Sum], :cbi=>sum_cbi)
 
 """
 Given a linear index, find the fields of the corresponding struct.
@@ -281,7 +281,7 @@ function indexing_get_field_neighbor(c::AbstractCall)
     return result
 end
 
-push!(neighbor_registry[AbstractCall], indexing_get_field_neighbor)
+push!(neighbor_registry[AbstractCall], :cbi => indexing_get_field_neighbor)
 
 
 function codegen(c::CBI)

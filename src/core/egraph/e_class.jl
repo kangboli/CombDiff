@@ -300,11 +300,11 @@ function e_class_reduction(::Type{Mul}, term::PCTVector)
         return repack(add([mul(constant(-1), t) for t in get_body(last(args))]...))
     end
 
-    #= i = findfirst(t -> isa(t, AbstractDelta), args)
+    i = findfirst(t -> isa(t, AbstractDelta), args)
     if i !== nothing
         t = args[i]
         return repack(make_node(typeof(t), upper(t), lower(t), mul(get_body(t), args[1:end.!=i]...)))
-    end =#
+    end
 
     return Mul, [pct_vec(args...)], partial_inference(Mul, pct_vec(args...))
 end

@@ -162,6 +162,10 @@ function escalate(element_types::Vararg)
     any(t -> type_based(t, R()), element_types) && return R()
     any(t -> type_based(t, I()), element_types) && return I()
     any(t -> type_based(t, N()), element_types) && return N()
+    if any(t -> isa(t, FermionicState), element_types)
+        @assert all(t -> isa(t, FermionicState), element_types)
+        return FermionicState()
+    end
     return UndeterminedPCTType()
 end
 

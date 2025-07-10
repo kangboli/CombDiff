@@ -30,11 +30,10 @@ function reverse_inference(l::AbstractLet)
 end
 
 function reverse_inference(c::T) where {T<:AbstractCall}
-
     c_mapp = mapp(c)
     #= c = invoke(reverse_inference, Tuple{APN}, c) =#
     new_args = map(reverse_inference, args(c))
-    if isa(c_mapp, Map)
+    if isa(c_mapp, Map) && !is_undetermined_type(get_type(c_mapp))
         c_mapp = inference(pct_map(
             map(set_type, get_bound(c_mapp), get_type.(new_args))...,
             get_body(c_mapp)))

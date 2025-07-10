@@ -261,7 +261,11 @@ struct Call <: AbstractCall
 end
 
 function call(mapp::APN, args::Vararg)
-    length(args) > 0 && all(t -> isa(t, Copy), get_bound(mapp)) && return make_node(PrimitiveCall, mapp, pct_vec(args...))
+    if length(args) > 0
+        if isa(mapp, AbstractPullback) || all(t -> isa(t, Copy), get_bound(mapp))
+            return make_node(PrimitiveCall, mapp, pct_vec(args...))
+        end
+    end
     make_node(Call, mapp, pct_vec(args...))
 end
 
@@ -608,6 +612,11 @@ is_field_op(::FermiScalar) = true
 
 function subtract(a::APN, b::APN)
     return add(a, mul(constant(-1), b))
+end
+
+function subtract(a::APN, b::Add)
+    foldl(subtract, get_body(b); init=a)
+    #= return add(a, [mul(constant(-1), t) for t in get_body(b)]...) =#
 end
 
 struct IntDiv <: APN

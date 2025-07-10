@@ -41,6 +41,7 @@ end
 parametrize_type(t::AbstractPCTType) = t
 
 parametrize_type(::N, arg) = Domain(N(), constant(1), arg, Dict(:name => :N))
+parametrize_type(::I, arg) = Domain(N(), arg, CombDiff.infty(), Dict(:name => :I))
 
 parametrize_type(::T, lower, upper) where {T<:ElementType} = Domain(T(), lower, upper, Dict(:name => Symbol(string(T))))
 

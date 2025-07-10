@@ -38,6 +38,7 @@ const Settings = Dict{Symbol,Any}
 
 
 default_settings() = Settings(
+    :default => true,
     :clench_sum => false,
     :clench_delta => false,
     :shift => false,

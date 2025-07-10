@@ -136,7 +136,7 @@ verbose(v::Var) = "$(pretty(v))::$(verbose(get_type(v)))"
 
 latex(c::Call) = "($(latex(mapp(c))))($(latex(args(c))))"
 
-verbose(c::Call) = "($(pretty(mapp(c))))($(verbose(args(c))))::$(pretty(get_type(c)))"
+verbose(c::Call) = "($(verbose(mapp(c))))($(verbose(args(c))))::$(pretty(get_type(c)))"
 
 function pretty(c::Conjugate)
 
@@ -276,7 +276,7 @@ end
 
 function verbose(m::Mul)
     "(*\n" *
-    indent("$(join(pretty.(content(get_body(m))), ",\n"))") *
+    indent("$(join(verbose.(content(get_body(m))), ",\n"))") *
     "\n)::$(pretty(get_type(m)))"
 end
 
@@ -294,7 +294,7 @@ function latex(m::Add)
 end
 
 function verbose(a::Add)
-    return "($(join(map(t->pretty(t), content(get_body(a))), "+")))::$(pretty(get_type(a)))"
+    return "($(join(map(t->verbose(t), content(get_body(a))), "+")))::$(pretty(get_type(a)))"
 end
 
 function pretty(p::ParametricVar)
@@ -429,9 +429,16 @@ function latex(l::Let, paren=true)
 end
 
 
+function verbose(c::Composition)
+    isempty(content(get_body(c))) && return ":I"
+    join(map(f -> verbose(f), content(get_body(c))), "∘")
+end
 function pretty(c::Composition)
     isempty(content(get_body(c))) && return ":I"
     join(map(f -> pretty(f), content(get_body(c))), "∘")
+end
+function verbose(c::RevComposition)
+    join(map(f -> verbose(f), reverse(content(get_body(c)))), " ▷\n")
 end
 
 function pretty(c::RevComposition)
@@ -514,6 +521,10 @@ pretty(::T) where {T<:ElementType} = string(T)
 pretty(f::FermiScalar) = ":I($(pretty(get_body(f))))"
 latex(f::FermiScalar) = "\\mathbf{I}($(latex(get_body(f))))"
 
+function verbose(v::VacExp)
+    "⟨$(verbose(get_body(v)))⟩"
+end
+
 function pretty(v::VacExp)
     "⟨$(pretty(get_body(v)))⟩"
 end
@@ -561,6 +572,8 @@ end
 function verbose(t::MultiType)
     "multi"
 end
+
+verbose(s::FermionicState) = pretty(s)
 
 function pretty(s::FermionicState)
     "ℋ"

@@ -106,6 +106,7 @@ function check_parametric_type_capture!(bounds, body, context::TypeContext)
     free = get_free(inference(body, context))
 
     for t in free
+        haskey(context.name_to_variable, name(t)) && !isempty(context.name_to_variable[name(t)]) || continue
         t_type = get_type(get_var(context, name(t)))
         t_free = [get_free(t_type)...]
         i = findfirst(x -> name(x) in name.(bounds), t_free)
@@ -115,9 +116,14 @@ end
 
 
 is_undetermined_type(t::AbstractPCTType) = false
+is_undetermined_type(t::MultiType) = true
 
 is_undetermined_type(t::UndeterminedPCTType) = true
 is_undetermined_type(t::MapType) = any(is_undetermined_type, [get_bound_type(t)..., get_body_type(t)])
+
+function is_undetermined_type(t::Domain)
+    return is_undetermined_type(get_type(upper(t))) || is_undetermined_type(get_type(lower(t)))
+end
 
 function is_undetermined_type(t::AbstractVecType)
     return any(is_undetermined_type, get_content_type(t))

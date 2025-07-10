@@ -320,20 +320,20 @@ for (indices, op) in symmetries(get_type(mapp(c)))
 end =#
 
 neighbor_registry[AbstractCall] = [
-    delta_out_pullback_neighbors,
-    delta_out_linear,
-    let_out_pullback,
-    let_out_call,
-    delta_splat_call,
-    meta_prop_neighbors,
+    :default => delta_out_pullback_neighbors,
+    :default => delta_out_linear,
+    :default => let_out_pullback,
+    :default => let_out_call,
+    :default => delta_splat_call,
+    :default => meta_prop_neighbors,
     #= bypass_eval, =#
 ]
 
 function neighbors(c::AbstractCall; settings=default_settings())
     result = NeighborList()
 
-    for edge in neighbor_registry[AbstractCall]
-        append!(result, edge(c))
+    for (cond, edge) in neighbor_registry[AbstractCall]
+        settings[cond] && append!(result, edge(c))
     end
 
     append!(result, sub_neighbors(c; settings=settings))
@@ -835,11 +835,20 @@ function contract_delta_neighbors(s::Sum)
         end
         new_summand = subst(get_body(d), v, replacement)
         if isa(get_type(v), ElementType)
-            new_indicator = indicator(other, upper(get_type(v)), lower(get_type(v)), other, new_summand)
-            new_sum = pct_sum(indices..., new_indicator)
-        else
-            new_sum = pct_sum(indices..., new_summand)
+            #= println(verbose(lower(get_type(v))))
+            println(verbose(lower(get_type(other))))
+            println(lower(get_type(v)) != lower(get_type(other)))
+            println(verbose(upper(get_type(v))))
+            println(verbose(upper(get_type(other))))
+            println(upper(get_type(v)) != upper(get_type(other))) =#
+            if lower(get_type(v)) != lower(get_type(other))
+                new_summand = indicator(lower(get_type(v)), other, new_summand)
+            end
+            if upper(get_type(other)) != upper(get_type(v))
+                new_summand = indicator(other, upper(get_type(v)), new_summand)
+            end
         end
+        new_sum = pct_sum(indices..., new_summand)
 
         push!(result, new_sum; dired=true, name="contract_delta")
     end
@@ -1295,8 +1304,8 @@ function neighbors(s::Sum; settings=default_settings())
         append!(result, sum_mul_neighbors(s))
         append!(result, sub_neighbors(s; settings=custom_settings(:gcd => false, :expand_mul => true; preset=settings)))
         append!(result, sum_eliminate_dead_bound(s))
-        for edge in neighbor_registry[Sum]
-            append!(result, edge(s))
+        for (cond, edge) in neighbor_registry[Sum]
+            settings[cond] && append!(result, edge(s))
         end
     end
 
@@ -1365,7 +1374,7 @@ end
 
 function neighbors(d::Delta; settings=default_settings())
     result = NeighborList()
-    
+
     append!(result, sub_neighbors(d; settings=settings))
     #= neighbor_list = neighbors(get_body(d); settings=settings)
 

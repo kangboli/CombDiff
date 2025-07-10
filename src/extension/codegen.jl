@@ -188,7 +188,7 @@ function codegen(c::PrimitiveCall)
 
     isa(maptype, MultiType) || length(get_bound_type(maptype)) == length(args(c)) ||
         error("$(pretty(mapp(c))) takes $(length(get_bound_type(maptype))) inputs, but $(length(args(c))) are given.")
-    if all(t -> isa(get_type(t), ElementType) && (base(get_type(t)) == N() || base(get_type(t)) == I()), args(c))
+    if all(t -> isa(get_type(t), ElementType) && (base(get_type(t)) == N() || base(get_type(t)) == I()), args(c)) && !isa(maptype, MultiType)
         offsets = lower.(get_content_type(get_bound_type(get_type(mapp(c)))))
         new_args = map((t, o) -> first(simplify(add(subtract(t, o), constant(1)); settings=custom_settings(:expand_mul => true, :gcd => false, :logging => false))), content(args(c)), offsets)
         if all(x -> x == 1, get_body.(offsets))
